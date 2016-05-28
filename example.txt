@@ -1,0 +1,119 @@
+function fac(a) {
+  if (a == 1) return 1
+  return a * fac(a - 1);
+}
+
+=>
+
+function fac(a) {
+  if (=(a, int.$create1)) return int.$create1;
+}
+
+#define ObjectFlags int
+#define OBJ_LEXIMMUTABLE 0x1
+// immutable objects are also lex immutable
+#define OBJ_IMMUTABLE 0x3 
+
+struct object {
+  struct object *parent;
+  ObjectFlags flags;
+  int refs;
+  struct table tbl;
+}
+
+sys {
+  int
+  bool
+  function
+  const_ints {
+    int0
+    int1
+    int5
+    etc.
+  }
+  = <- function
+  + <- function
+  - <- function
+  * <- function
+}
+
+fac(%0):
+[
+  null: [
+    get_root %2
+    access %3 = %2 . 'const_ints'
+    access %4 = %3 . 'int1'
+    get_context %5
+    access %6 = %5 . '='
+    call %7 = %6 ( %0 %4 )
+    testbr %7 'if_body' 'past_if'
+  ]
+  'if_body': [
+    return %4
+  ]
+  'past_if': [
+    get_context %8
+    access %9 = %8 . '-'
+    call %10 = %9 ( %0 %4 )
+    access %11 = %8 . 'fac'
+    call %12 = %11 ( %10 )
+    access %13 = %8 . '*'
+    call %14 = %13 ( %0 %12 )
+    return %14
+  ]
+]
+
+fac(%0):
+[
+  [
+    get_root %2
+    access %3 = %2 . 'const_ints'
+    access %4 = %3 . 'int1'
+    get_context %5
+    access %6 = %5 . '='
+    call %7 = %6 ( %0 %4 )
+    testbr %7 1 2
+  ],
+  [
+    return %4
+  ],
+  [
+    get_context %8
+    access %9 = %8 . '-'
+    call %10 = %9 ( %0 %4 )
+    access %11 = %8 . 'fac'
+    call %12 = %11 ( %10 )
+    access %13 = %8 . '*'
+    call %14 = %13 ( %0 %12 )
+    return %14
+  ]
+]
+
+instructions:
+
+statements:
+
+get_root [var]
+get_context [var]
+access [var] = [var] . [key]
+call [var] = [function] ( [arg]* )
+
+block enders:
+
+return [var]
+br [block]
+testbr [var] [trueblock] [falseblock]
+
+typedef enum {
+  GetRoot
+  Access
+  Lookup
+  Call
+  Return
+  Br
+  TestBr
+} InstrType;
+
+struct Instr {
+  InstrType type;
+}
