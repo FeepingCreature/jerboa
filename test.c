@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <assert.h>
 
 #include "object.h"
@@ -13,10 +14,6 @@
 
 int main(int argc, char **argv) {
   Object *root = create_root();
-  Object *const_ints = alloc_object(NULL);
-  object_set(const_ints, "int0", alloc_int(root, 0));
-  object_set(const_ints, "int1", alloc_int(root, 1));
-  object_set(root, "const_ints", const_ints);
   
   UserFunction *ack_fn = malloc(sizeof(UserFunction));
   ack_fn->arity = 2;
@@ -25,19 +22,17 @@ int main(int argc, char **argv) {
   ack_fn->body.blocks_len = 5;
   ack_fn->body.blocks_ptr = malloc(sizeof(InstrBlock) * 5);
   InstrBlock *blocks_ptr = ack_fn->body.blocks_ptr;
-  blocks_ptr[0].instrs_len = 7;
-  blocks_ptr[0].instrs_ptr = malloc(sizeof(Instr*) * 7);
-  blocks_ptr[0].instrs_ptr[0] = (Instr*) alloc(GetRootInstr, {{INSTR_GET_ROOT}, 2});
-  blocks_ptr[0].instrs_ptr[1] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 3, 2, "const_ints"});
-  blocks_ptr[0].instrs_ptr[2] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 4, 3, "int0"});
-  blocks_ptr[0].instrs_ptr[3] = (Instr*) alloc(GetContextInstr, {{INSTR_GET_CONTEXT}, 5});
-  blocks_ptr[0].instrs_ptr[4] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 6, 5, "="});
-  blocks_ptr[0].instrs_ptr[5] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 7, 6, (int[]) {0, 4}, 2});
-  blocks_ptr[0].instrs_ptr[6] = (Instr*) alloc(TestBranchInstr, {{INSTR_TESTBR}, 7, 1, 2});
+  blocks_ptr[0].instrs_len = 5;
+  blocks_ptr[0].instrs_ptr = malloc(sizeof(Instr*) * 5);
+  blocks_ptr[0].instrs_ptr[0] = (Instr*) alloc(AllocIntObjectInstr, {{INSTR_ALLOC_INT_OBJECT}, 4, 0});
+  blocks_ptr[0].instrs_ptr[1] = (Instr*) alloc(GetContextInstr, {{INSTR_GET_CONTEXT}, 5});
+  blocks_ptr[0].instrs_ptr[2] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 6, 5, "="});
+  blocks_ptr[0].instrs_ptr[3] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 7, 6, (int[]) {0, 4}, 2});
+  blocks_ptr[0].instrs_ptr[4] = (Instr*) alloc(TestBranchInstr, {{INSTR_TESTBR}, 7, 1, 2});
   blocks_ptr[1].instrs_len = 4;
   blocks_ptr[1].instrs_ptr = malloc(sizeof(Instr*) * 4);
   blocks_ptr[1].instrs_ptr[0] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 8, 5, "+"});
-  blocks_ptr[1].instrs_ptr[1] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 9, 3, "int1"});
+  blocks_ptr[1].instrs_ptr[1] = (Instr*) alloc(AllocIntObjectInstr, {{INSTR_ALLOC_INT_OBJECT}, 9, 1});
   blocks_ptr[1].instrs_ptr[2] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 10, 8, (int[]) {1, 9}, 2});
   blocks_ptr[1].instrs_ptr[3] = (Instr*) alloc(ReturnInstr, {{INSTR_RETURN}, 10});
   blocks_ptr[2].instrs_len = 2;
@@ -47,7 +42,7 @@ int main(int argc, char **argv) {
   blocks_ptr[3].instrs_len = 6;
   blocks_ptr[3].instrs_ptr = malloc(sizeof(Instr*) * 6);
   blocks_ptr[3].instrs_ptr[0] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 12, 5, "-"});
-  blocks_ptr[3].instrs_ptr[1] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 13, 3, "int1"});
+  blocks_ptr[3].instrs_ptr[1] = (Instr*) alloc(AllocIntObjectInstr, {{INSTR_ALLOC_INT_OBJECT}, 13, 1});
   blocks_ptr[3].instrs_ptr[2] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 14, 12, (int[]) {0, 13}, 2});
   blocks_ptr[3].instrs_ptr[3] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 15, 5, "ack"});
   blocks_ptr[3].instrs_ptr[4] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 16, 15, (int[]) {14, 13}, 2});
@@ -55,7 +50,7 @@ int main(int argc, char **argv) {
   blocks_ptr[4].instrs_len = 8;
   blocks_ptr[4].instrs_ptr = malloc(sizeof(Instr*) * 8);
   blocks_ptr[4].instrs_ptr[0] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 17, 5, "-"});
-  blocks_ptr[4].instrs_ptr[1] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 18, 3, "int1"});
+  blocks_ptr[4].instrs_ptr[1] = (Instr*) alloc(AllocIntObjectInstr, {{INSTR_ALLOC_INT_OBJECT}, 18, 1});
   blocks_ptr[4].instrs_ptr[2] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 19, 17, (int[]) {0, 18}, 2});
   blocks_ptr[4].instrs_ptr[3] = (Instr*) alloc(CallInstr, {{INSTR_CALL}, 20, 17, (int[]) {1, 18}, 2});
   blocks_ptr[4].instrs_ptr[4] = (Instr*) alloc(AccessInstr, {{INSTR_ACCESS}, 21, 5, "ack"});

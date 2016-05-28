@@ -4,7 +4,10 @@
 typedef enum {
   INSTR_GET_ROOT,
   INSTR_GET_CONTEXT,
+  INSTR_ALLOC_OBJECT,
+  INSTR_ALLOC_INT_OBJECT,
   INSTR_ACCESS,
+  INSTR_ASSIGN,
   INSTR_CALL,
   INSTR_RETURN,
   INSTR_BR,
@@ -27,9 +30,26 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  int target_slot, parent_slot;
+} AllocObjectInstr;
+
+typedef struct {
+  Instr base;
+  int target_slot;
+  int value;
+} AllocIntObjectInstr;
+
+typedef struct {
+  Instr base;
   int target_slot, obj_slot;
   char *key;
 } AccessInstr;
+
+typedef struct {
+  Instr base;
+  int obj_slot, value_slot;
+  char *key;
+} AssignInstr;
 
 typedef struct {
   Instr base;

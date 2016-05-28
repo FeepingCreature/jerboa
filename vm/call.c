@@ -42,6 +42,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         char *key = access_instr->key;
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         assert(obj_slot < num_slots);
+        // TODO object_get
         Object *obj = slots[obj_slot];
         while (obj) {
           Object *value = table_lookup(&obj->tbl, key);
@@ -52,7 +53,29 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
           obj = obj->parent;
         }
         // missing object/missing key == null
-      } break; 
+      } break;
+      case INSTR_ASSIGN: {
+        AssignInstr *assign_instr = (AssignInstr*) instr;
+        int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
+        char *key = assign_instr->key;
+        assert(obj_slot < num_slots);
+        assert(value_slot < num_slots);
+        Object *obj = slots[obj_slot];
+        object_set(obj, key, slots[value_slot]);
+      } break;
+      case INSTR_ALLOC_OBJECT:{
+        AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
+        int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
+        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(parent_slot < num_slots);
+        slots[target_slot] = alloc_object(slots[parent_slot]);
+      } break;
+      case INSTR_ALLOC_INT_OBJECT:{
+        AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
+        int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
+        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        slots[target_slot] = alloc_int(context, value);
+      } break;
       case INSTR_CALL: {
         CallInstr *call_instr = (CallInstr*) instr;
         int target_slot = call_instr->target_slot, function_slot = call_instr->function_slot;
@@ -119,6 +142,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         block = &fn->body.blocks_ptr[target_blk];
         instr_offs = 0;
       } break;
+      default: assert(false); break;
     }
   }
 }
