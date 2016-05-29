@@ -3,6 +3,12 @@
 
 #include "vm/builder.h"
 
+// if 'key' is null, base is the value
+typedef struct {
+  int base;
+  char *key;
+} RefValue;
+
 void eat_filler(char **textp);
 
 bool eat_string(char **textp, char *keyword);
@@ -17,15 +23,19 @@ bool parse_int(char **textp, int *outp);
 
 void parser_error(char *location, char *format, ...) __attribute__ ((noreturn));
 
-int parse_expr(char **textp, FunctionBuilder *builder, int level);
+int ref_access(FunctionBuilder *builder, RefValue rv);
 
-int parse_expr_base(char **textp, FunctionBuilder *builder);
+void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value);
 
-bool parse_cont_call(char **textp, FunctionBuilder *builder, int *expr);
+RefValue parse_expr(char **textp, FunctionBuilder *builder, int level);
 
-int parse_expr_base_tail(char **textp, FunctionBuilder *builder);
+RefValue parse_expr_base(char **textp, FunctionBuilder *builder);
 
-int parse_expr(char **textp, FunctionBuilder *builder, int level);
+bool parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr);
+
+RefValue parse_expr_base_tail(char **textp, FunctionBuilder *builder);
+
+RefValue parse_expr(char **textp, FunctionBuilder *builder, int level);
 
 void parse_block(char **textp, FunctionBuilder *builder);
 

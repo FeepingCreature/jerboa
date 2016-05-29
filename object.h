@@ -46,6 +46,8 @@ Object *table_lookup(Table *tbl, char *key);
 
 void table_set(Table *tbl, char *key, Object *value);
 
+void object_set_existing(Object *obj, char *key, Object *value);
+
 void object_set(Object *obj, char *key, Object *value);
 
 typedef Object* (*VMFunctionPointer)(Object *context, Object *fn, Object **args_ptr, int args_len);

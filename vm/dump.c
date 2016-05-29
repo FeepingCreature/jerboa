@@ -44,6 +44,10 @@ void dump_fn(UserFunction *fn) {
           fprintf(stderr, "    assign: %i . '%s' = %i\n",
                   ((AssignInstr*) instr)->obj_slot, ((AssignInstr*) instr)->key, ((AssignInstr*) instr)->value_slot);
           break;
+        case INSTR_ASSIGN_EXISTING:
+          fprintf(stderr, "    assign_existing: %i . '%s' = %i\n",
+                  ((AssignExistingInstr*) instr)->obj_slot, ((AssignExistingInstr*) instr)->key, ((AssignExistingInstr*) instr)->value_slot);
+          break;
         case INSTR_CALL:
           fprintf(stderr, "    call: %i = %i ( ",
                   ((CallInstr*) instr)->target_slot, ((CallInstr*) instr)->function_slot);

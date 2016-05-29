@@ -36,7 +36,7 @@ void table_set(Table *tbl, char *key, Object *value) {
 }
 
 // change a property in-place
-void object_change_or_set(Object *obj, char *key, Object *value) {
+void object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
@@ -48,20 +48,17 @@ void object_change_or_set(Object *obj, char *key, Object *value) {
     }
     current = current->parent;
   }
-  assert(!(obj->flags & OBJ_CLOSED));
-  TableEntry *freeptr;
-  Object **ptr = table_lookup_ref_alloc(&obj->tbl, key, &freeptr);
-  assert(ptr == NULL);
-  freeptr->name = key;
-  freeptr->value = value;
+  assert(false);
 }
 
 void object_set(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
-  assert(!(obj->flags & OBJ_CLOSED));
   TableEntry *freeptr;
   Object **ptr = table_lookup_ref_alloc(&obj->tbl, key, &freeptr);
-  if (!ptr) {
+  if (ptr) {
+    assert(!(obj->flags & OBJ_IMMUTABLE));
+  } else {
+    assert(!(obj->flags & OBJ_CLOSED));
     freeptr->name = key;
     ptr = &freeptr->value;
   }

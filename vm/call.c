@@ -65,6 +65,16 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         object_set(obj, key, slots[value_slot]);
         // fprintf(stderr, "> obj set '%s'\n", key);
       } break;
+      case INSTR_ASSIGN_EXISTING: {
+        AssignExistingInstr *assign_existing_instr = (AssignExistingInstr*) instr;
+        int obj_slot = assign_existing_instr->obj_slot, value_slot = assign_existing_instr->value_slot;
+        char *key = assign_existing_instr->key;
+        assert(obj_slot < num_slots);
+        assert(value_slot < num_slots);
+        Object *obj = slots[obj_slot];
+        object_set_existing(obj, key, slots[value_slot]);
+        // fprintf(stderr, "> obj set '%s'\n", key);
+      } break;
       case INSTR_ALLOC_OBJECT:{
         AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
         int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;

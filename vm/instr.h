@@ -10,6 +10,7 @@ typedef enum {
   INSTR_CLOSE_OBJECT,
   INSTR_ACCESS,
   INSTR_ASSIGN,
+  INSTR_ASSIGN_EXISTING,
   INSTR_CALL,
   INSTR_RETURN,
   INSTR_BR,
@@ -19,7 +20,6 @@ typedef enum {
 typedef struct {
   InstrType type;
 } Instr;
-
 
 typedef struct {
   Instr** instrs_ptr; int instrs_len;
@@ -35,7 +35,6 @@ typedef struct {
   char *name;
   FunctionBody body;
 } UserFunction;
-
 
 typedef struct {
   Instr base;
@@ -80,6 +79,12 @@ typedef struct {
   int obj_slot, value_slot;
   char *key;
 } AssignInstr;
+
+typedef struct {
+  Instr base;
+  int obj_slot, value_slot;
+  char *key;
+} AssignExistingInstr;
 
 typedef struct {
   Instr base;

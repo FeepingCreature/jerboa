@@ -21,6 +21,8 @@ int addinstr_access(FunctionBuilder *builder, int obj_slot, char *ident_name);
 
 void addinstr_assign(FunctionBuilder *builder, int obj, char *name, int slot);
 
+void addinstr_assign_existing(FunctionBuilder *builder, int obj, char *name, int slot);
+
 void addinstr_close_object(FunctionBuilder *builder, int obj);
 
 int addinstr_get_context(FunctionBuilder *builder);

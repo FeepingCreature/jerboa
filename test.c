@@ -16,7 +16,8 @@ int main(int argc, char **argv) {
   
   char *text =
     "var ack = function(m, n) {"
-    "   var np = n + 1, nm = n - 1, mm = m - 1;"
+    "   var np = n + 1, nm = n - 1, mm;"
+    "   mm = m - 1;"
     "   if (m == 0) return np;"
     "   if (n == 0) return ack(mm, 1);"
     "   return ack(mm, ack(m, nm));"

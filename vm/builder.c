@@ -35,6 +35,15 @@ void addinstr_assign(FunctionBuilder *builder, int obj, char *name, int slot) {
   addinstr(builder, (Instr*) instr);
 }
 
+void addinstr_assign_existing(FunctionBuilder *builder, int obj, char *name, int slot) {
+  AssignExistingInstr *instr = malloc(sizeof(AssignExistingInstr));
+  instr->base.type = INSTR_ASSIGN_EXISTING;
+  instr->obj_slot = obj;
+  instr->value_slot = slot;
+  instr->key = name;
+  addinstr(builder, (Instr*) instr);
+}
+
 void addinstr_close_object(FunctionBuilder *builder, int obj) {
   CloseObjectInstr *instr = malloc(sizeof(CloseObjectInstr));
   instr->base.type = INSTR_CLOSE_OBJECT;
