@@ -277,12 +277,23 @@ void parse_vardecl(char **textp, FunctionBuilder *builder) {
   builder->scope = addinstr_alloc_object(builder, builder->scope);
   
   char *varname = parse_identifier(textp);
-  if (!eat_string(textp, "=")) parser_error(*textp, "'=' expected");
-  
-  int value = parse_expr(textp, builder, 0);
-  if (!eat_string(textp, ";")) parser_error(*textp, "';' expected to close 'var' decl");
+  int value;
+  if (!eat_string(textp, "=")) {
+    value = builder->slot_base++; // null slot
+  } else {
+    value = parse_expr(textp, builder, 0);
+  }
   
   addinstr_assign(builder, builder->scope, varname, value);
+  addinstr_close_object(builder, builder->scope);
+  
+  // var a, b;
+  if (eat_string(textp, ",")) {
+    parse_vardecl(textp, builder);
+    return;
+  }
+  
+  if (!eat_string(textp, ";")) parser_error(*textp, "';' expected to close 'var' decl");
 }
 
 void parse_statement(char **textp, FunctionBuilder *builder) {
