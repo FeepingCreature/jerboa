@@ -6,6 +6,7 @@ typedef enum {
   INSTR_GET_CONTEXT,
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
+  INSTR_CLOSE_OBJECT,
   INSTR_ACCESS,
   INSTR_ASSIGN,
   INSTR_CALL,
@@ -38,6 +39,11 @@ typedef struct {
   int target_slot;
   int value;
 } AllocIntObjectInstr;
+
+typedef struct {
+  Instr base;
+  int slot;
+} CloseObjectInstr;
 
 typedef struct {
   Instr base;

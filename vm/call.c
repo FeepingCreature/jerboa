@@ -76,6 +76,14 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         slots[target_slot] = alloc_int(context, value);
       } break;
+      case INSTR_CLOSE_OBJECT:{
+        CloseObjectInstr *close_object_instr = (CloseObjectInstr*) instr;
+        int slot = close_object_instr->slot;
+        assert(slot < num_slots);
+        Object *obj = slots[slot];
+        assert(!(obj->flags & OBJ_CLOSED));
+        obj->flags |= OBJ_CLOSED;
+      } break;
       case INSTR_CALL: {
         CallInstr *call_instr = (CallInstr*) instr;
         int target_slot = call_instr->target_slot, function_slot = call_instr->function_slot;
