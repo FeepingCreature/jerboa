@@ -52,6 +52,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
           }
           obj = obj->parent;
         }
+        if (slots[target_slot] == NULL) fprintf(stderr, "> lookup yielded null: '%s'\n", key);
         // missing object/missing key == null
       } break;
       case INSTR_ASSIGN: {
@@ -62,6 +63,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(value_slot < num_slots);
         Object *obj = slots[obj_slot];
         object_set(obj, key, slots[value_slot]);
+        // fprintf(stderr, "> obj set '%s'\n", key);
       } break;
       case INSTR_ALLOC_OBJECT:{
         AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
@@ -75,6 +77,13 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         slots[target_slot] = alloc_int(context, value);
+      } break;
+      case INSTR_ALLOC_CLOSURE_OBJECT:{
+        AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
+        int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
+        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(context_slot < num_slots);
+        slots[target_slot] = alloc_closure_fn(slots[context_slot], alloc_closure_obj_instr->fn);
       } break;
       case INSTR_CLOSE_OBJECT:{
         CloseObjectInstr *close_object_instr = (CloseObjectInstr*) instr;
@@ -155,18 +164,20 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
   }
 }
 
-Object *user_function_handler(Object *context, Object *fn, Object **args_ptr, int args_len) {
-  UserFunctionObject *fn_obj = (UserFunctionObject*) fn;
-  return call_function(context, &fn_obj->vmfun, args_ptr, args_len);
+Object *closure_handler(Object *calling_context, Object *fn, Object **args_ptr, int args_len) {
+  // discard calling context (lexical scoping!)
+  ClosureObject *fn_obj = (ClosureObject*) fn;
+  return call_function(fn_obj->context, &fn_obj->vmfun, args_ptr, args_len);
 }
 
-Object *alloc_user_fn(Object *context, UserFunction *fn) {
+Object *alloc_closure_fn(Object *context, UserFunction *fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *fn_base = table_lookup(&root->tbl, "function");
-  UserFunctionObject *obj = calloc(sizeof(UserFunctionObject), 1);
+  ClosureObject *obj = calloc(sizeof(ClosureObject), 1);
   obj->base.base.parent = fn_base;
-  obj->base.fn_ptr = user_function_handler;
+  obj->base.fn_ptr = closure_handler;
+  obj->context = context;
   obj->vmfun = *fn;
   return (Object*) obj;
 }

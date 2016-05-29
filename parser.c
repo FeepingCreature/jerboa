@@ -16,13 +16,17 @@ static bool starts_with(char **textp, char *cmp) {
   return true;
 }
 
-void eat_whitespace(char **textp) {
+static void eat_whitespace(char **textp) {
   while ((*textp)[0] == ' ') (*textp)++;
+}
+
+void eat_filler(char **textp) {
+  eat_whitespace(textp);
 }
 
 bool eat_string(char **textp, char *keyword) {
   char *text = *textp;
-  eat_whitespace(&text);
+  eat_filler(&text);
   if (starts_with(&text, keyword)) {
     *textp = text;
     return true;
@@ -30,25 +34,41 @@ bool eat_string(char **textp, char *keyword) {
   return false;
 }
 
-char *parse_identifier(char **textp) {
+char *parse_identifier_all(char **textp) {
   char *text = *textp;
-  eat_whitespace(&text);
+  eat_filler(&text);
   char *start = text;
   if (text[0] && ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z') || text[0] == '_')) text++;
   else return NULL;
   while (text[0] && ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z') || (text[0] >= '0' && text[0] <= '9') || text[0] == '_')) text++;
   
-  *textp = text;
   int len = text - start;
   char *res = malloc(len + 1);
   memcpy(res, start, len);
   res[len] = 0;
+  
+  *textp = text;
+  return res;
+}
+
+char *parse_identifier(char **textp) {
+  char *text = *textp;
+  char *res = parse_identifier_all(&text);
+  if (res == NULL) return res;
+  
+  if (strncmp(res, "function", 8) == 0) {
+    // reservdd identifier
+    free(res);
+    return NULL;
+  }
+  
+  *textp = text;
   return res;
 }
 
 bool parse_int(char **textp, int *outp) {
   char *text = *textp;
-  eat_whitespace(&text);
+  eat_filler(&text);
   char *start = text;
   while (text[0] && text[0] >= '0' && text[0] <= '9') text++;
   if (text == start) return false;
@@ -65,7 +85,7 @@ bool parse_int(char **textp, int *outp) {
 
 bool eat_keyword(char **textp, char *keyword) {
   char *text = *textp;
-  char *cmp = parse_identifier(&text);
+  char *cmp = parse_identifier_all(&text);
   if (!cmp || strcmp(cmp, keyword) != 0) return false;
   *textp = text;
   return true;
@@ -106,20 +126,25 @@ int parse_expr_base(char **textp, FunctionBuilder *builder) {
   int value;
   if (parse_int(&text, &value)) {
     *textp = text;
-    
-    int ctxslot = addinstr_get_context(builder);
-    return addinstr_alloc_int_object(builder, ctxslot, value);
+    return addinstr_alloc_int_object(builder, builder->scope, value);
   }
   
   if (eat_string(&text, "(")) {
     int res = parse_expr(&text, builder, 0);
-    if (!eat_string(&text, ")")) parser_error(text, "expected closing paren");
+    if (!eat_string(&text, ")")) parser_error(text, "'()' expression expected closing paren");
     
     *textp = text;
     return res;
   }
   
-  parser_error(text, "expected identifier, number or paren expression");
+  if (eat_keyword(&text, "function")) {
+    UserFunction *fn = parse_function_expr(&text);
+    int res = addinstr_alloc_closure_object(builder, builder->scope, fn);
+    *textp = text;
+    return res;
+  }
+  
+  parser_error(text, "expected identifier, number, function or paren expression");
 }
 
 bool parse_cont_call(char **textp, FunctionBuilder *builder, int *expr) {
@@ -166,15 +191,13 @@ int parse_expr(char **textp, FunctionBuilder *builder, int level) {
   while (true) {
     if (eat_string(&text, "*")) {
       int arg2 = parse_expr(&text, builder, 3);
-      int ctxslot = addinstr_get_context(builder);
-      int mulfn = addinstr_access(builder, ctxslot, "*");
+      int mulfn = addinstr_access(builder, builder->scope, "*");
       expr = addinstr_call2(builder, mulfn, expr, arg2);
       continue;
     }
     if (eat_string(&text, "/")) {
       int arg2 = parse_expr(&text, builder, 3);
-      int ctxslot = addinstr_get_context(builder);
-      int divfn = addinstr_access(builder, ctxslot, "/");
+      int divfn = addinstr_access(builder, builder->scope, "/");
       expr = addinstr_call2(builder, divfn, expr, arg2);
       continue;
     }
@@ -186,15 +209,13 @@ int parse_expr(char **textp, FunctionBuilder *builder, int level) {
   while (true) {
     if (eat_string(&text, "+")) {
       int arg2 = parse_expr(&text, builder, 2);
-      int ctxslot = addinstr_get_context(builder);
-      int plusfn = addinstr_access(builder, ctxslot, "+");
+      int plusfn = addinstr_access(builder, builder->scope, "+");
       expr = addinstr_call2(builder, plusfn, expr, arg2);
       continue;
     }
     if (eat_string(&text, "-")) {
       int arg2 = parse_expr(&text, builder, 2);
-      int ctxslot = addinstr_get_context(builder);
-      int minusfn = addinstr_access(builder, ctxslot, "-");
+      int minusfn = addinstr_access(builder, builder->scope, "-");
       expr = addinstr_call2(builder, minusfn, expr, arg2);
       continue;
     }
@@ -206,8 +227,7 @@ int parse_expr(char **textp, FunctionBuilder *builder, int level) {
   while (true) {
     if (eat_string(&text, "==")) {
       int arg2 = parse_expr(&text, builder, 2);
-      int ctxslot = addinstr_get_context(builder);
-      int equalfn = addinstr_access(builder, ctxslot, "=");
+      int equalfn = addinstr_access(builder, builder->scope, "=");
       expr = addinstr_call2(builder, equalfn, expr, arg2);
       continue;
     }
@@ -250,6 +270,21 @@ void parse_return(char **textp, FunctionBuilder *builder) {
   addinstr_return(builder, value);
 }
 
+void parse_vardecl(char **textp, FunctionBuilder *builder) {
+  // allocate the new scope immediately, so that the variable
+  // is in scope for the value expression.
+  // (this is important for recursion, ie. var foo = function() { foo(); }; )
+  builder->scope = addinstr_alloc_object(builder, builder->scope);
+  
+  char *varname = parse_identifier(textp);
+  if (!eat_string(textp, "=")) parser_error(*textp, "'=' expected");
+  
+  int value = parse_expr(textp, builder, 0);
+  if (!eat_string(textp, ";")) parser_error(*textp, "';' expected to close 'var' decl");
+  
+  addinstr_assign(builder, builder->scope, varname, value);
+}
+
 void parse_statement(char **textp, FunctionBuilder *builder) {
   char *text = *textp;
   if (eat_keyword(&text, "if")) {
@@ -260,6 +295,11 @@ void parse_statement(char **textp, FunctionBuilder *builder) {
   if (eat_keyword(&text, "return")) {
     *textp = text;
     parse_return(textp, builder);
+    return;
+  }
+  if (eat_keyword(&text, "var")) {
+    *textp = text;
+    parse_vardecl(textp, builder);
     return;
   }
   parser_error(text, "unknown statement");
@@ -287,9 +327,8 @@ void parse_block(char **textp, FunctionBuilder *builder) {
   builder->scope = scope_backup;
 }
 
-UserFunction *parse_function(char **textp) {
+UserFunction *parse_function_expr(char **textp) {
   char *text = *textp;
-  if (!eat_keyword(&text, "function")) return NULL;
   char *fun_name = parse_identifier(&text);
   /*
   ┌────────┐  ┌─────┐
@@ -336,5 +375,22 @@ UserFunction *parse_function(char **textp) {
   
   parse_block(textp, builder);
   
+  return build_function(builder);
+}
+
+UserFunction *parse_module(char **textp) {
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->slot_base = 0;
+  builder->name = NULL;
+  
+  new_block(builder);
+  builder->scope = addinstr_get_context(builder);
+  
+  while (true) {
+    eat_filler(textp);
+    if ((*textp)[0] == 0) break;
+    parse_statement(textp, builder);
+  }
+  addinstr_return(builder, builder->scope);
   return build_function(builder);
 }

@@ -5,8 +5,8 @@
 
 Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int args_len);
 
-Object *user_function_handler(Object *context, Object *fn, Object **args_ptr, int args_len);
+Object *closure_handler(Object *calling_context, Object *fn, Object **args_ptr, int args_len);
 
-Object *alloc_user_fn(Object *context, UserFunction *fn);
+Object *alloc_closure_fn(Object *context, UserFunction *fn);
 
 #endif

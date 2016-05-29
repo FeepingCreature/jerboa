@@ -68,6 +68,16 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value) 
   return instr->target_slot;
 }
 
+int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFunction *fn) {
+  AllocClosureObjectInstr *instr = malloc(sizeof(AllocClosureObjectInstr));
+  instr->base.type = INSTR_ALLOC_CLOSURE_OBJECT;
+  instr->target_slot = builder->slot_base++;
+  instr->context_slot = ctxslot;
+  instr->fn = fn;
+  addinstr(builder, (Instr*) instr);
+  return instr->target_slot;
+}
+
 int addinstr_call(FunctionBuilder *builder, int fn, int *args_ptr, int args_len) {
   CallInstr *instr = malloc(sizeof(CallInstr));
   instr->base.type = INSTR_CALL;

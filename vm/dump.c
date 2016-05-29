@@ -3,6 +3,8 @@
 #include <stdio.h>
 
 void dump_fn(UserFunction *fn) {
+  UserFunction **other_fns_ptr = NULL; int other_fns_len = 0;
+  
   FunctionBody *body = &fn->body;
   fprintf(stderr, "function %s (%i), %i slots [\n", fn->name, fn->arity, fn->slots);
   for (int i = 0; i < body->blocks_len; ++i) {
@@ -24,6 +26,12 @@ void dump_fn(UserFunction *fn) {
         case INSTR_ALLOC_INT_OBJECT:
           fprintf(stderr, "    alloc_int_object: %i = new int(%i)\n",
                   ((AllocIntObjectInstr*) instr)->target_slot, ((AllocIntObjectInstr*) instr)->value);
+          break;
+        case INSTR_ALLOC_CLOSURE_OBJECT:
+          fprintf(stderr, "    alloc_closure_object: %i = new function(%i), dumped later\n",
+                  ((AllocClosureObjectInstr*) instr)->target_slot, ((AllocClosureObjectInstr*) instr)->context_slot);
+          other_fns_ptr = realloc(other_fns_ptr, sizeof(UserFunction*) * ++other_fns_len);
+          other_fns_ptr[other_fns_len - 1] = ((AllocClosureObjectInstr*) instr)->fn;
           break;
         case INSTR_CLOSE_OBJECT:
           fprintf(stderr, "    close_object: %i\n", ((CloseObjectInstr*) instr)->slot);
@@ -61,4 +69,9 @@ void dump_fn(UserFunction *fn) {
     fprintf(stderr, "  ]\n");
   }
   fprintf(stderr, "]\n");
+  
+  for (int i = 0; i < other_fns_len; ++i) {
+    fprintf(stderr, " ---\n");
+    dump_fn(other_fns_ptr[i]);
+  }
 }

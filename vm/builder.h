@@ -29,6 +29,8 @@ int addinstr_alloc_object(FunctionBuilder *builder, int parent);
 
 int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value);
 
+int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFunction *fn);
+
 int addinstr_call(FunctionBuilder *builder, int fn, int *args_ptr, int args_len);
 
 int addinstr_call2(FunctionBuilder *builder, int fn, int arg0, int arg1);

@@ -3,11 +3,13 @@
 
 #include "vm/builder.h"
 
-void eat_whitespace(char **textp);
+void eat_filler(char **textp);
 
 bool eat_string(char **textp, char *keyword);
 
 bool eat_keyword(char **textp, char *keyword);
+
+char *parse_identifier_all(char **textp);
 
 char *parse_identifier(char **textp);
 
@@ -35,6 +37,8 @@ void parse_statement(char **textp, FunctionBuilder *builder);
 
 void parse_block(char **textp, FunctionBuilder *builder);
 
-UserFunction *parse_function(char **textp);
+UserFunction *parse_function_expr(char **textp);
+
+UserFunction *parse_module(char **textp);
 
 #endif

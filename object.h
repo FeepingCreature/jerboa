@@ -51,21 +51,15 @@ void object_set(Object *obj, char *key, Object *value);
 typedef Object* (*VMFunctionPointer)(Object *context, Object *fn, Object **args_ptr, int args_len);
 
 typedef struct {
-  int arity; // first n slots are reserved for parameters
-  int slots;
-  char *name;
-  FunctionBody body;
-} UserFunction;
-
-typedef struct {
   Object base;
   VMFunctionPointer fn_ptr;
 } FunctionObject;
 
 typedef struct {
   FunctionObject base;
+  Object *context;
   UserFunction vmfun;
-} UserFunctionObject;
+} ClosureObject;
 
 typedef struct {
   Object base;

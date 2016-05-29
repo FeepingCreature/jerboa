@@ -6,6 +6,7 @@ typedef enum {
   INSTR_GET_CONTEXT,
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
+  INSTR_ALLOC_CLOSURE_OBJECT,
   INSTR_CLOSE_OBJECT,
   INSTR_ACCESS,
   INSTR_ASSIGN,
@@ -18,6 +19,23 @@ typedef enum {
 typedef struct {
   InstrType type;
 } Instr;
+
+
+typedef struct {
+  Instr** instrs_ptr; int instrs_len;
+} InstrBlock;
+
+typedef struct {
+  InstrBlock* blocks_ptr; int blocks_len;
+} FunctionBody;
+
+typedef struct {
+  int arity; // first n slots are reserved for parameters
+  int slots;
+  char *name;
+  FunctionBody body;
+} UserFunction;
+
 
 typedef struct {
   Instr base;
@@ -39,6 +57,12 @@ typedef struct {
   int target_slot;
   int value;
 } AllocIntObjectInstr;
+
+typedef struct {
+  Instr base;
+  int target_slot, context_slot;
+  UserFunction *fn;
+} AllocClosureObjectInstr;
 
 typedef struct {
   Instr base;
@@ -78,13 +102,5 @@ typedef struct {
   int test_slot;
   int true_blk, false_blk;
 } TestBranchInstr;
-
-typedef struct {
-  Instr** instrs_ptr; int instrs_len;
-} InstrBlock;
-
-typedef struct {
-  InstrBlock* blocks_ptr; int blocks_len;
-} FunctionBody;
 
 #endif
