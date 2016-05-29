@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
   object_set(root, "ack", ack);
   */
   
-  Object *ack = table_lookup(&root->tbl, "ack");
+  Object *ack = object_lookup(root, "ack");
   
   Object **args_ptr = malloc(sizeof(Object*) * 2);
   args_ptr[0] = alloc_int(root, 3);

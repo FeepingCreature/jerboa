@@ -9,7 +9,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
   
   assert(args_len == fn->arity);
   for (int i = 0; i < args_len; ++i) {
-    slots[i] = args_ptr[i];
+    slots[i] = obj_claimed(args_ptr[i]);
   }
   
   assert(fn->body.blocks_len > 0);
@@ -28,32 +28,27 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         Object *root = context;
         while (root->parent) root = root->parent;
         assert(slot < num_slots && slots[slot] == NULL);
-        slots[get_root_instr->slot] = root;
+        slots[get_root_instr->slot] = obj_claimed(root);
       } break;
       case INSTR_GET_CONTEXT:{
         GetContextInstr *get_context_instr = (GetContextInstr*) instr;
         int slot = get_context_instr->slot;
         assert(slot < num_slots && slots[slot] == NULL);
-        slots[slot] = context;
+        slots[slot] = obj_claimed(context);
       } break;
       case INSTR_ACCESS: {
         AccessInstr *access_instr = (AccessInstr*) instr;
         int target_slot = access_instr->target_slot, obj_slot = access_instr->obj_slot;
         char *key = access_instr->key;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        
         assert(obj_slot < num_slots);
-        // TODO object_get
         Object *obj = slots[obj_slot];
-        while (obj) {
-          Object *value = table_lookup(&obj->tbl, key);
-          if (value) {
-            slots[target_slot] = value;
-            break;
-          }
-          obj = obj->parent;
-        }
-        if (slots[target_slot] == NULL) fprintf(stderr, "> lookup yielded null: '%s'\n", key);
-        // missing object/missing key == null
+        
+        Object *value = object_lookup(obj, key);
+        if (value == NULL) fprintf(stderr, "> lookup yielded null: '%s'\n", key);
+        
+        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        slots[target_slot] = obj_claimed(value);
       } break;
       case INSTR_ASSIGN: {
         AssignInstr *assign_instr = (AssignInstr*) instr;
@@ -80,20 +75,23 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         assert(parent_slot < num_slots);
-        slots[target_slot] = alloc_object(slots[parent_slot]);
+        Object *obj = alloc_object(slots[parent_slot]);
+        slots[target_slot] = obj_claimed(obj);
       } break;
       case INSTR_ALLOC_INT_OBJECT:{
         AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
         int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
         assert(target_slot < num_slots && slots[target_slot] == NULL);
-        slots[target_slot] = alloc_int(context, value);
+        Object *obj = alloc_int(context, value);
+        slots[target_slot] = obj_claimed(obj);
       } break;
       case INSTR_ALLOC_CLOSURE_OBJECT:{
         AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
         int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         assert(context_slot < num_slots);
-        slots[target_slot] = alloc_closure_fn(slots[context_slot], alloc_closure_obj_instr->fn);
+        Object *obj = alloc_closure_fn(slots[context_slot], alloc_closure_obj_instr->fn);
+        slots[target_slot] = obj_claimed(obj);
       } break;
       case INSTR_CLOSE_OBJECT:{
         CloseObjectInstr *close_object_instr = (CloseObjectInstr*) instr;
@@ -113,7 +111,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         Object *root = context;
         while (root->parent) root = root->parent;
         // validate function type
-        Object *function_base = table_lookup(&root->tbl, "function");
+        Object *function_base = object_lookup(root, "function");
         Object *fn_type = fn_obj->parent;
         while (fn_type->parent) fn_type = fn_type->parent;
         assert(fn_type == function_base);
@@ -126,7 +124,9 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
           args[i] = slots[argslot];
         }
         // and call
-        slots[target_slot] = fn->fn_ptr(context, fn_obj, args, args_length);
+        Object *obj = fn->fn_ptr(context, fn_obj, args, args_length);
+        // already claimed via call/return
+        slots[target_slot] = obj;
         free(args);
       } break;
       case INSTR_RETURN: {
@@ -134,6 +134,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         int ret_slot = ret_instr->ret_slot;
         assert(ret_slot < num_slots);
         Object *res = slots[ret_slot];
+        obj_claim(res);
+        for (int i = 0; i < num_slots; ++i) {
+          obj_free(slots[i]);
+        }
         free(slots);
         return res;
       }
@@ -153,8 +157,8 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         
         Object *root = context;
         while (root->parent) root = root->parent;
-        Object *bool_base = table_lookup(&root->tbl, "bool");
-        Object *int_base = table_lookup(&root->tbl, "int");
+        Object *bool_base = object_lookup(root, "bool");
+        Object *int_base = object_lookup(root, "int");
         
         int test = 0;
         if (test_value && test_value->parent == bool_base) {
@@ -183,10 +187,11 @@ Object *closure_handler(Object *calling_context, Object *fn, Object **args_ptr, 
 Object *alloc_closure_fn(Object *context, UserFunction *fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *fn_base = table_lookup(&root->tbl, "function");
+  Object *fn_base = object_lookup(root, "function");
   ClosureObject *obj = calloc(sizeof(ClosureObject), 1);
   obj->base.base.parent = fn_base;
   obj->base.fn_ptr = closure_handler;
+  // TODO store in table so gets correctly refcounted
   obj->context = context;
   obj->vmfun = *fn;
   return (Object*) obj;

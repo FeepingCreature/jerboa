@@ -33,18 +33,25 @@ typedef struct _Table {
   TableEntry entry;
 } Table;
 
+#define OBJ_KEEP_IDS 0
+
 typedef struct _Object {
   Object *parent;
   ObjectFlags flags;
-  // int refs;
+#if OBJ_KEEP_IDS
+  int id;
+#endif
+  int refs;
   Table tbl;
 } Object;
 
-Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_ptr);
+void obj_claim(Object*);
 
-Object *table_lookup(Table *tbl, char *key);
+Object *obj_claimed(Object*);
 
-void table_set(Table *tbl, char *key, Object *value);
+void obj_free(Object*);
+
+Object *object_lookup(Object *obj, char *key);
 
 void object_set_existing(Object *obj, char *key, Object *value);
 
