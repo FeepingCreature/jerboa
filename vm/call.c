@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+int cyclecount = 0;
+
 Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
   int num_slots = fn->slots;
   
@@ -20,6 +22,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       fprintf(stderr, "Interpreter error: reached end of block without branch instruction!\n");
       exit(1);
     }
+    cyclecount ++;
     Instr *instr = block->instrs_ptr[instr_offs++];
     switch (instr->type) {
       case INSTR_GET_ROOT:{

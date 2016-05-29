@@ -43,6 +43,10 @@ void parse_if(char **textp, FunctionBuilder *builder);
 
 void parse_return(char **textp, FunctionBuilder *builder);
 
+void parse_vardecl(char **textp, FunctionBuilder *builder);
+
+void parse_fundecl(char **textp, FunctionBuilder *builder);
+
 void parse_statement(char **textp, FunctionBuilder *builder);
 
 void parse_block(char **textp, FunctionBuilder *builder);

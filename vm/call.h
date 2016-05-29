@@ -3,6 +3,8 @@
 
 #include "object.h"
 
+int cyclecount;
+
 Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int args_len);
 
 Object *closure_handler(Object *calling_context, Object *fn, Object **args_ptr, int args_len);

@@ -15,26 +15,18 @@ int main(int argc, char **argv) {
   Object *root = create_root();
   
   char *text =
-    "var ack = function(m, n) {"
+    "function ack(m, n) {"
     "   var np = n + 1, nm = n - 1, mm;"
     "   mm = m - 1;"
     "   if (m == 0) return np;"
     "   if (n == 0) return ack(mm, 1);"
     "   return ack(mm, ack(m, nm));"
-    "};";
+    "}";
   
   UserFunction *module = parse_module(&text);
   dump_fn(module);
   
   root = call_function(root, module, NULL, 0);
-  
-  /*
-  UserFunction *ack_fn = parse_function(&text);
-  dump_fn(ack_fn);
-  
-  Object *ack = alloc_user_fn(root, ack_fn);
-  object_set(root, "ack", ack);
-  */
   
   Object *ack = object_lookup(root, "ack");
   
@@ -44,5 +36,6 @@ int main(int argc, char **argv) {
   Object *res = closure_handler(root, ack, args_ptr, 2);
   IntObject *res_int = (IntObject*) res;
   printf("ack(3, 7) = %i\n", res_int->value);
+  printf("(%i cycles)\n", cyclecount);
   return 0;
 }

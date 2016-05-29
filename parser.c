@@ -313,6 +313,16 @@ void parse_vardecl(char **textp, FunctionBuilder *builder) {
   if (!eat_string(textp, ";")) parser_error(*textp, "';' expected to close 'var' decl");
 }
 
+void parse_fundecl(char **textp, FunctionBuilder *builder) {
+  // alloc scope for fun var
+  builder->scope = addinstr_alloc_object(builder, builder->scope);
+  
+  UserFunction *fn = parse_function_expr(textp);
+  int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
+  addinstr_assign(builder, builder->scope, fn->name, slot);
+  addinstr_close_object(builder, builder->scope);
+}
+
 void parse_statement(char **textp, FunctionBuilder *builder) {
   char *text = *textp;
   if (eat_keyword(&text, "if")) {
@@ -328,6 +338,11 @@ void parse_statement(char **textp, FunctionBuilder *builder) {
   if (eat_keyword(&text, "var")) {
     *textp = text;
     parse_vardecl(textp, builder);
+    return;
+  }
+  if (eat_keyword(&text, "function")) {
+    *textp = text;
+    parse_fundecl(textp, builder);
     return;
   }
   {
