@@ -8,6 +8,7 @@
 #include "object.h"
 #include "vm/call.h"
 #include "vm/runtime.h"
+#include "vm/dump.h"
 #include "parser.h"
 
 int main(int argc, char **argv) {
@@ -21,6 +22,7 @@ int main(int argc, char **argv) {
     "}";
   
   UserFunction *ack_fn = parse_function(&text);
+  dump_fn(ack_fn);
   
   Object *ack = alloc_user_fn(root, ack_fn);
   object_set(root, "ack", ack);
