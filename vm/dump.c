@@ -27,6 +27,10 @@ void dump_fn(UserFunction *fn) {
           fprintf(stderr, "    alloc_int_object: %i = new int(%i)\n",
                   ((AllocIntObjectInstr*) instr)->target_slot, ((AllocIntObjectInstr*) instr)->value);
           break;
+        case INSTR_ALLOC_FLOAT_OBJECT:
+          fprintf(stderr, "    alloc_float_object: %i = new float(%f)\n",
+                  ((AllocFloatObjectInstr*) instr)->target_slot, ((AllocFloatObjectInstr*) instr)->value);
+          break;
         case INSTR_ALLOC_CLOSURE_OBJECT:
           fprintf(stderr, "    alloc_closure_object: %i = new function(%i), dumped later\n",
                   ((AllocClosureObjectInstr*) instr)->target_slot, ((AllocClosureObjectInstr*) instr)->context_slot);

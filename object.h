@@ -80,9 +80,16 @@ typedef struct {
   bool value;
 } BoolObject;
 
+typedef struct {
+  Object base;
+  float value;
+} FloatObject;
+
 Object *alloc_object(Object *parent);
 
 Object *alloc_int(Object *context, int value);
+
+Object *alloc_float(Object *context, float value);
 
 Object *alloc_bool(Object *context, int value);
 

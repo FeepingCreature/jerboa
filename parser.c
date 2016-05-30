@@ -70,6 +70,7 @@ bool parse_int(char **textp, int *outp) {
   char *text = *textp;
   eat_filler(&text);
   char *start = text;
+  if (text[0] && text[0] == '-') text++;
   while (text[0] && text[0] >= '0' && text[0] <= '9') text++;
   if (text == start) return false;
   
@@ -79,6 +80,27 @@ bool parse_int(char **textp, int *outp) {
   memcpy(res, start, len);
   res[len] = 0;
   *outp = atoi(res);
+  free(res);
+  return true;
+}
+
+bool parse_float(char **textp, float *outp) {
+  char *text = *textp;
+  eat_filler(&text);
+  char *start = text;
+  if (text[0] && text[0] == '-') text++;
+  while (text[0] && text[0] >= '0' && text[0] <= '9') text++;
+  // has to be at least a . in there, or else it's an int
+  if (!text[0] || text[0] != '.') return false;
+  text++;
+  while (text[0] && text[0] >= '0' && text[0] <= '9') text++;
+  
+  *textp = text;
+  int len = text - start;
+  char *res = malloc(len + 1);
+  memcpy(res, start, len);
+  res[len] = 0;
+  *outp = atof(res);
   free(res);
   return true;
 }
@@ -140,10 +162,17 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
     return get_scope(builder, ident_name);
   }
   
-  int value;
-  if (parse_int(&text, &value)) {
+  float f_value;
+  if (parse_float(&text, &f_value)) {
     *textp = text;
-    int slot = addinstr_alloc_int_object(builder, builder->scope, value);
+    int slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
+    return (RefValue) {slot, NULL};
+  }
+  
+  int i_value;
+  if (parse_int(&text, &i_value)) {
+    *textp = text;
+    int slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
     return (RefValue) {slot, NULL};
   }
   
@@ -249,6 +278,10 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
     int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
     int equalfn = addinstr_access(builder, builder->scope, "=");
     expr = (RefValue) { addinstr_call2(builder, equalfn, ref_access(builder, expr), arg2), NULL };
+  } else if (eat_string(&text, "<")) {
+    int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
+    int smallerfn = addinstr_access(builder, builder->scope, "<");
+    expr = (RefValue) { addinstr_call2(builder, smallerfn, ref_access(builder, expr), arg2), NULL };
   }
   
   *textp = text;

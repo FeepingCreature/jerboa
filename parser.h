@@ -21,6 +21,8 @@ char *parse_identifier(char **textp);
 
 bool parse_int(char **textp, int *outp);
 
+bool parse_float(char **textp, float *outp);
+
 void parser_error(char *location, char *format, ...) __attribute__ ((noreturn));
 
 int ref_access(FunctionBuilder *builder, RefValue rv);

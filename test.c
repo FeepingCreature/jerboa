@@ -16,10 +16,10 @@ int main(int argc, char **argv) {
   
   char *text =
     "function ack(m, n) {"
-    "   var np = n + 1, nm = n - 1, mm;"
-    "   mm = m - 1;"
-    "   if (m == 0) return np;"
-    "   if (n == 0) return ack(mm, 1);"
+    "   var np = n + 1., nm = n - 1., mm;"
+    "   mm = m - 1.;"
+    "   if (m < 0.5) return np;"
+    "   if (n < 0.5) return ack(mm, 1.);"
     "   return ack(mm, ack(m, nm));"
     "}";
   
@@ -31,11 +31,18 @@ int main(int argc, char **argv) {
   Object *ack = object_lookup(root, "ack");
   
   Object **args_ptr = malloc(sizeof(Object*) * 2);
-  args_ptr[0] = alloc_int(root, 3);
-  args_ptr[1] = alloc_int(root, 7);
+  args_ptr[0] = alloc_float(root, 3);
+  args_ptr[1] = alloc_float(root, 7);
   Object *res = closure_handler(root, ack, args_ptr, 2);
-  IntObject *res_int = (IntObject*) res;
-  printf("ack(3, 7) = %i\n", res_int->value);
+  
+  Object *int_base = object_lookup(root, "int");
+  if (res->parent == int_base) {
+    IntObject *res_int = (IntObject*) res;
+    printf("ack(3., 7.) = %i\n", res_int->value);
+  } else {
+    FloatObject *res_float = (FloatObject*) res;
+    printf("ack(3., 7.) = %f\n", res_float->value);
+  }
   printf("(%i cycles)\n", cyclecount);
   return 0;
 }

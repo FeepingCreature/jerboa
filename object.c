@@ -150,6 +150,22 @@ Object *alloc_bool(Object *context, int value) {
   return (Object*) obj;
 }
 
+Object *alloc_float(Object *context, float value) {
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *float_base = object_lookup(root, "float");
+  FloatObject *obj = calloc(sizeof(FloatObject), 1);
+  obj->base.parent = obj_claimed(float_base);
+#if OBJ_KEEP_IDS
+  obj->base.id = idcounter++;
+#if DEBUG_MEM
+  fprintf(stderr, "alloc object %i\n", obj->base.id);
+#endif
+#endif
+  obj->value = value;
+  return (Object*) obj;
+}
+
 Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
