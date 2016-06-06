@@ -50,7 +50,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         Object *obj = slots[obj_slot];
         
         Object *value = object_lookup(obj, key);
-        if (value == NULL) fprintf(stderr, "> lookup yielded null: '%s'\n", key);
+        if (value == NULL) {
+          fprintf(stderr, "> lookup yielded null: '%s'\n", key);
+          assert(false);
+        }
         
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         slots[target_slot] = value;
@@ -62,6 +65,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(obj_slot < num_slots);
         assert(value_slot < num_slots);
         Object *obj = slots[obj_slot];
+        if (obj == NULL) {
+          fprintf(stderr, "> assignment to null object");
+          assert(false);
+        }
         object_set(obj, key, slots[value_slot]);
         // fprintf(stderr, "> obj set '%s'\n", key);
       } break;

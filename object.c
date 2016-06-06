@@ -32,7 +32,6 @@ Object *table_lookup(Table *tbl, char *key) {
   return *ptr;
 }
 
-// missing object/missing key == null
 Object *object_lookup(Object *obj, char *key) {
   while (obj) {
     Object *value = table_lookup(&obj->tbl, key);
