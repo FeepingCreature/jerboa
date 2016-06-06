@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     "   return ack(mm, ack(m, nm));"
     "}"
     // "print(\"ack(3, 7) = \"+ack(3, 7));";
-    "print(3, 7);";
+    "print(3, \", \", 7);";
   
   UserFunction *module = parse_module(&text);
   dump_fn(module);

@@ -33,6 +33,8 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value);
 
 int addinstr_alloc_float_object(FunctionBuilder *builder, int ctxslot, float value);
 
+int addinstr_alloc_string_object(FunctionBuilder *builder, int ctxslot, char *value);
+
 int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFunction *fn);
 
 int addinstr_call(FunctionBuilder *builder, int fn, int *args_ptr, int args_len);

@@ -105,6 +105,24 @@ bool parse_float(char **textp, float *outp) {
   return true;
 }
 
+bool parse_string(char **textp, char **outp) {
+  char *text = *textp;
+  eat_filler(&text);
+  char *start = text;
+  if (text[0] != '"') return false;
+  text++;
+  while (text[0] != '"') text++; // TODO escape
+  text++;
+  
+  *textp = text;
+  int len = text - start;
+  char *res = malloc(len - 2 + 1);
+  memcpy(res, start + 1, len - 2);
+  res[len - 2] = 0;
+  *outp = res;
+  return true;
+}
+
 bool eat_keyword(char **textp, char *keyword) {
   char *text = *textp;
   char *cmp = parse_identifier_all(&text);
@@ -175,6 +193,14 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
     *textp = text;
     if (!builder) return (RefValue) {0, NULL};
     int slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
+    return (RefValue) {slot, NULL};
+  }
+  
+  char *t_value;
+  if (parse_string(&text, &t_value)) {
+    *textp = text;
+    if (!builder) return (RefValue) {0, NULL};
+    int slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
     return (RefValue) {slot, NULL};
   }
   

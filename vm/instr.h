@@ -7,6 +7,7 @@ typedef enum {
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
   INSTR_ALLOC_FLOAT_OBJECT,
+  INSTR_ALLOC_STRING_OBJECT,
   INSTR_ALLOC_CLOSURE_OBJECT,
   INSTR_CLOSE_OBJECT,
   INSTR_ACCESS,
@@ -63,6 +64,12 @@ typedef struct {
   int target_slot;
   float value;
 } AllocFloatObjectInstr;
+
+typedef struct {
+  Instr base;
+  int target_slot;
+  char *value;
+} AllocStringObjectInstr;
 
 typedef struct {
   Instr base;

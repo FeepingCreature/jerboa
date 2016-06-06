@@ -93,11 +93,18 @@ typedef struct {
   float value;
 } FloatObject;
 
+typedef struct {
+  Object base;
+  char *value;
+} StringObject;
+
 Object *alloc_object(Object *parent);
 
 Object *alloc_int(Object *context, int value);
 
 Object *alloc_float(Object *context, float value);
+
+Object *alloc_string(Object *context, char *value);
 
 Object *alloc_bool(Object *context, int value);
 

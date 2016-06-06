@@ -185,6 +185,23 @@ Object *alloc_float(Object *context, float value) {
   return (Object*) obj;
 }
 
+Object *alloc_string(Object *context, char *value) {
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *string_base = object_lookup(root, "string");
+  StringObject *obj = alloc_object_internal(sizeof(StringObject));
+  obj->base.parent = string_base;
+  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
+#if OBJ_KEEP_IDS
+  obj->base.id = idcounter++;
+#if DEBUG_MEM
+  fprintf(stderr, "alloc object %i\n", obj->base.id);
+#endif
+#endif
+  obj->value = value;
+  return (Object*) obj;
+}
+
 Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *root = context;
   while (root->parent) root = root->parent;

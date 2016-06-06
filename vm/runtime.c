@@ -150,6 +150,7 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int");
   Object *float_base = object_lookup(root, "float");
+  Object *string_base = object_lookup(root, "string");
   
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
@@ -159,6 +160,10 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
     }
     if (arg->parent == float_base) {
       printf("%f", ((FloatObject*)arg)->value);
+      continue;
+    }
+    if (arg->parent == string_base) {
+      printf("%s", ((StringObject*)arg)->value);
       continue;
     }
     assert(false);
@@ -172,6 +177,7 @@ Object *create_root() {
   object_set(root, "int", alloc_object(NULL));
   object_set(root, "bool", alloc_object(NULL));
   object_set(root, "float", alloc_object(NULL));
+  object_set(root, "string", alloc_object(NULL));
   Object *function_obj = alloc_object(NULL);
   Object *closure_obj = alloc_object(function_obj);
   object_set(closure_obj, "gc_mark", alloc_fn(root, closure_mark_fn));

@@ -97,6 +97,13 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         Object *obj = alloc_float(context, value);
         slots[target_slot] = obj;
       } break;
+      case INSTR_ALLOC_STRING_OBJECT:{
+        AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) instr;
+        int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
+        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        Object *obj = alloc_string(context, value);
+        slots[target_slot] = obj;
+      } break;
       case INSTR_ALLOC_CLOSURE_OBJECT:{
         AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
         int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
