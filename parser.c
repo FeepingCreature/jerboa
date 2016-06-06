@@ -152,6 +152,11 @@ int ref_access(FunctionBuilder *builder, RefValue rv) {
   return rv.base;
 }
 
+void ref_assign(FunctionBuilder *builder, RefValue rv, int value) {
+  assert(rv.key);
+  addinstr_assign(builder, rv.base, rv.key, value);
+}
+
 void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value) {
   assert(rv.key);
   addinstr_assign_existing(builder, rv.base, rv.key, value);
@@ -169,8 +174,8 @@ void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value) {
 RefValue parse_expr(char **textp, FunctionBuilder *builder, int level);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
-  if (!builder) return (RefValue) {0, name};
-  return (RefValue) {builder->scope, name};
+  if (!builder) return (RefValue) {0, name, true};
+  return (RefValue) {builder->scope, name, true};
 }
 
 static bool parse_object_literal(char **textp, FunctionBuilder *builder, RefValue *rv_p) {
@@ -197,7 +202,7 @@ static bool parse_object_literal(char **textp, FunctionBuilder *builder, RefValu
     parser_error(text, "expected commad or closing bracket");
   }
   *textp = text;
-  *rv_p = (RefValue) {obj_slot, NULL};
+  *rv_p = (RefValue) {obj_slot, NULL, false};
   return true;
 }
 
@@ -212,25 +217,25 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   float f_value;
   if (parse_float(&text, &f_value)) {
     *textp = text;
-    if (!builder) return (RefValue) {0, NULL};
+    if (!builder) return (RefValue) {0, NULL, false};
     int slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
-    return (RefValue) {slot, NULL};
+    return (RefValue) {slot, NULL, false};
   }
   
   int i_value;
   if (parse_int(&text, &i_value)) {
     *textp = text;
-    if (!builder) return (RefValue) {0, NULL};
+    if (!builder) return (RefValue) {0, NULL, false};
     int slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
-    return (RefValue) {slot, NULL};
+    return (RefValue) {slot, NULL, false};
   }
   
   char *t_value;
   if (parse_string(&text, &t_value)) {
     *textp = text;
-    if (!builder) return (RefValue) {0, NULL};
+    if (!builder) return (RefValue) {0, NULL, false};
     int slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
-    return (RefValue) {slot, NULL};
+    return (RefValue) {slot, NULL, false};
   }
   
   RefValue rv;
@@ -249,10 +254,10 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   
   if (eat_keyword(&text, "function")) {
     UserFunction *fn = parse_function_expr(&text);
-    if (!builder) return (RefValue) {0, NULL};
+    if (!builder) return (RefValue) {0, NULL, false};
     int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
     *textp = text;
-    return (RefValue) {slot, NULL};
+    return (RefValue) {slot, NULL, false};
   }
   
   parser_error(text, "expected expression");
@@ -260,7 +265,7 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
 
 bool parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr) {
   char *text = *textp;
-  if (!(eat_string(&text, "("))) return false;
+  if (!eat_string(&text, "(")) return false;
   
   *textp = text;
   int *args_ptr = NULL; int args_len = 0;
@@ -279,8 +284,20 @@ bool parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr) {
   
   *expr = (RefValue) {
     addinstr_call(builder, ref_access(builder, *expr), args_ptr, args_len),
-    NULL
+    NULL,
+    false
   };
+  return true;
+}
+
+bool parse_prop_access(char **textp, FunctionBuilder *builder, RefValue *expr) {
+  char *text = *textp;
+  if (!eat_string(&text, ".")) return false;
+  
+  char *keyname = parse_identifier(&text);
+  *textp = text;
+  
+  *expr = (RefValue) {ref_access(builder, *expr), keyname, false};
   return true;
 }
 
@@ -289,6 +306,7 @@ RefValue parse_expr_base(char **textp, FunctionBuilder *builder) {
   
   while (true) {
     if (parse_cont_call(textp, builder, &expr)) continue;
+    if (parse_prop_access(textp, builder, &expr)) continue;
     break;
   }
   return expr;
@@ -311,14 +329,14 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 3));
       if (!builder) continue;
       int mulfn = addinstr_access(builder, builder->scope, "*");
-      expr = (RefValue) { addinstr_call2(builder, mulfn, ref_access(builder, expr), arg2), NULL };
+      expr = (RefValue) { addinstr_call2(builder, mulfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
     if (eat_string(&text, "/")) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 3));
       if (!builder) continue;
       int divfn = addinstr_access(builder, builder->scope, "/");
-      expr = (RefValue) { addinstr_call2(builder, divfn, ref_access(builder, expr), arg2), NULL };
+      expr = (RefValue) { addinstr_call2(builder, divfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
     break;
@@ -331,14 +349,14 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 2));
       if (!builder) continue;
       int plusfn = addinstr_access(builder, builder->scope, "+");
-      expr = (RefValue) { addinstr_call2(builder, plusfn, ref_access(builder, expr), arg2), NULL };
+      expr = (RefValue) { addinstr_call2(builder, plusfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
     if (eat_string(&text, "-")) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 2));
       if (!builder) continue;
       int minusfn = addinstr_access(builder, builder->scope, "-");
-      expr = (RefValue) { addinstr_call2(builder, minusfn, ref_access(builder, expr), arg2), NULL };
+      expr = (RefValue) { addinstr_call2(builder, minusfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
     break;
@@ -350,13 +368,13 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
     int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
     if (builder) {
       int equalfn = addinstr_access(builder, builder->scope, "=");
-      expr = (RefValue) { addinstr_call2(builder, equalfn, ref_access(builder, expr), arg2), NULL };
+      expr = (RefValue) { addinstr_call2(builder, equalfn, ref_access(builder, expr), arg2), NULL, false };
     }
   } else if (eat_string(&text, "<")) {
     int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
     if (builder) {
       int smallerfn = addinstr_access(builder, builder->scope, "<");
-      expr = (RefValue) { addinstr_call2(builder, smallerfn, ref_access(builder, expr), arg2), NULL };
+      expr = (RefValue) { addinstr_call2(builder, smallerfn, ref_access(builder, expr), arg2), NULL, false };
     }
   }
   
@@ -463,7 +481,11 @@ void parse_statement(char **textp, FunctionBuilder *builder) {
       if (!eat_string(&text, "=")) assert(false); // Internal inconsistency
       
       int value = ref_access(builder, parse_expr(&text, builder, 0));
-      ref_assign_existing(builder, target, value);
+      if (target.is_variable) {
+        ref_assign_existing(builder, target, value);
+      } else {
+        ref_assign(builder, target, value);
+      }
       
       if (!eat_string(&text, ";")) parser_error(text, "';' expected to close assignment");
       *textp = text;

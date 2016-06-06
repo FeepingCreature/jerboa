@@ -86,6 +86,7 @@ void object_set_existing(Object *obj, char *key, Object *value) {
     }
     current = current->parent;
   }
+  fprintf(stderr, "key '%s' not found in object\n", key);
   assert(false);
 }
 

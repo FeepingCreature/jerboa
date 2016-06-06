@@ -7,6 +7,7 @@
 typedef struct {
   int base;
   char *key;
+  bool is_variable;
 } RefValue;
 
 void eat_filler(char **textp);

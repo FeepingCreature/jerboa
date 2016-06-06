@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
   
   char *text =
     "var obj = {a: 5};"
+    "obj.b = 7;"
+    "print(\"debug: \"+obj.a+\", \"+obj.b);"
     "function ack(m, n) {"
     "   var np = n + 1, nm = n - 1, mm;"
     "   mm = m - 1;"
@@ -26,8 +28,8 @@ int main(int argc, char **argv) {
     "   if (n == 0) return ack(mm, 1);"
     "   return ack(mm, ack(m, nm));"
     "}"
-    // "print(\"ack(3, 7) = \"+ack(3, 7));";
-    "print(\"ack(3, 7) = \"+ack(3, 7));";
+    "print(\"ack(3, 7) = \"+ack(3, 7));"
+    ;
   
   UserFunction *module = parse_module(&text);
   dump_fn(module);
