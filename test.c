@@ -18,6 +18,7 @@ int main(int argc, char **argv) {
   void *entry = gc_add_roots(&root, 1);
   
   char *text =
+    "var obj = {a: 5};"
     "function ack(m, n) {"
     "   var np = n + 1, nm = n - 1, mm;"
     "   mm = m - 1;"
