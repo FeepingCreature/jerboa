@@ -5,9 +5,11 @@
 
 int cyclecount;
 
-Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int args_len);
+Object *call_function( Object* context, UserFunction* fn, Object** args_ptr, int args_len );
 
-Object *closure_handler(Object *calling_context, Object *fn, Object **args_ptr, int args_len);
+Object *function_handler( Object* calling_context, Object* thisptr, Object* fn, Object** args_ptr, int args_len );
+
+Object *method_handler( Object* calling_context, Object* thisptr, Object* fn, Object** args_ptr, int args_len );
 
 Object *alloc_closure_fn(Object *context, UserFunction *fn);
 

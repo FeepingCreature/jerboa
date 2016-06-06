@@ -1,6 +1,11 @@
 #include "object.h"
 
+#include <stdio.h>
 #define DEBUG_MEM 0
+
+Object *last_obj_allocated = NULL;
+int num_obj_allocated = 0;
+int next_gc_run = 10000;
 
 Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_ptr) {
   if (tbl->entry.name == NULL) {
@@ -27,39 +32,6 @@ Object *table_lookup(Table *tbl, char *key) {
   return *ptr;
 }
 
-#include <stdio.h>
-void obj_claim(Object *obj) {
-  // if (obj) fprintf(stderr, "[+] %i to %i\n", obj->id, obj->refs + 1);
-  if (obj) { obj->refs ++; }
-}
-
-Object *obj_claimed(Object *obj) {
-  obj_claim(obj);
-  return obj;
-}
-
-void obj_free(Object *obj) {
-  // if (obj) fprintf(stderr, "[-] %i to %i\n", obj->id, obj->refs - 1);
-  if (obj && obj->refs == 0) abort();
-  if (obj && --obj->refs == 0) {
-#if DEBUG_MEM
-    fprintf(stderr, "free object %i\n", obj->id);
-#endif
-    obj_free(obj->parent);
-    TableEntry *entry = &obj->tbl.entry;
-    bool start = true;
-    while (entry) {
-      obj_free(entry->value);
-      
-      TableEntry *next_entry = entry->next;
-      if (start) start = false;
-      else free(entry);
-      entry = next_entry;
-    }
-    free(obj);
-  }
-}
-
 // missing object/missing key == null
 Object *object_lookup(Object *obj, char *key) {
   while (obj) {
@@ -70,6 +42,38 @@ Object *object_lookup(Object *obj, char *key) {
   return NULL;
 }
 
+void obj_mark(Object *obj) {
+  if (!obj) return;
+  
+  if (obj->flags & OBJ_GC_MARK) return; // break cycles
+  
+  obj->flags |= OBJ_GC_MARK;
+  
+  obj_mark(obj->parent);
+  
+  TableEntry *entry = &obj->tbl.entry;
+  while (entry) {
+    obj_mark(entry->value);
+    entry = entry->next;
+  }
+  
+  Object *mark_fn = object_lookup(obj, "gc_mark");
+  if (mark_fn) {
+    FunctionObject *mark_fn_fnobj = (FunctionObject*) mark_fn;
+    mark_fn_fnobj->fn_ptr(NULL, obj, mark_fn, NULL, 0);
+  }
+}
+
+void obj_free(Object *obj) {
+  TableEntry *entry = obj->tbl.entry.next;
+  while (entry) {
+    TableEntry *next = entry->next;
+    free(entry);
+    entry = next;
+  }
+  free(obj);
+}
+
 // change a property in-place
 void object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
@@ -78,8 +82,7 @@ void object_set_existing(Object *obj, char *key, Object *value) {
     Object **ptr = table_lookup_ref_alloc(&current->tbl, key, NULL);
     if (ptr != NULL) {
       assert(!(current->flags & OBJ_IMMUTABLE));
-      obj_free(*ptr);
-      *ptr = obj_claimed(value);
+      *ptr = value;
       return;
     }
     current = current->parent;
@@ -93,22 +96,35 @@ void object_set(Object *obj, char *key, Object *value) {
   Object **ptr = table_lookup_ref_alloc(&obj->tbl, key, &freeptr);
   if (ptr) {
     assert(!(obj->flags & OBJ_IMMUTABLE));
-    obj_free(*ptr);
   } else {
     assert(!(obj->flags & OBJ_CLOSED));
     freeptr->name = key;
     ptr = &freeptr->value;
   }
-  *ptr = obj_claimed(value);
+  *ptr = value;
 }
 
 #if OBJ_KEEP_IDS
 int idcounter = 0;
 #endif
 
+static void *alloc_object_internal(int size) {
+  if (num_obj_allocated > next_gc_run) {
+    gc_run();
+    next_gc_run = (int) (num_obj_allocated * 1.2); // run gc after 20% growth
+  }
+  
+  Object *res = (Object*) calloc(size, 1);
+  res->prev = last_obj_allocated;
+  last_obj_allocated = res;
+  num_obj_allocated ++;
+  return res;
+}
+
 Object *alloc_object(Object *parent) {
-  Object *obj = calloc(sizeof(Object), 1);
-  obj->parent = obj_claimed(parent);
+  Object *obj = alloc_object_internal(sizeof(Object));
+  if (parent) assert(!(parent->flags & OBJ_PRIMITIVE));
+  obj->parent = parent;
 #if OBJ_KEEP_IDS
   obj->id = idcounter++;
 #if DEBUG_MEM
@@ -122,8 +138,9 @@ Object *alloc_int(Object *context, int value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int");
-  IntObject *obj = calloc(sizeof(IntObject), 1);
-  obj->base.parent = obj_claimed(int_base);
+  IntObject *obj = alloc_object_internal(sizeof(IntObject));
+  obj->base.parent = int_base;
+  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -138,8 +155,9 @@ Object *alloc_bool(Object *context, int value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *bool_base = object_lookup(root, "bool");
-  BoolObject *obj = calloc(sizeof(BoolObject), 1);
-  obj->base.parent = obj_claimed(bool_base);
+  BoolObject *obj = alloc_object_internal(sizeof(BoolObject));
+  obj->base.parent = bool_base;
+  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -154,8 +172,9 @@ Object *alloc_float(Object *context, float value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *float_base = object_lookup(root, "float");
-  FloatObject *obj = calloc(sizeof(FloatObject), 1);
-  obj->base.parent = obj_claimed(float_base);
+  FloatObject *obj = alloc_object_internal(sizeof(FloatObject));
+  obj->base.parent = float_base;
+  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -170,8 +189,9 @@ Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *fn_base = object_lookup(root, "function");
-  FunctionObject *obj = calloc(sizeof(FunctionObject), 1);
-  obj->base.parent = obj_claimed(fn_base);
+  FunctionObject *obj = alloc_object_internal(sizeof(FunctionObject));
+  obj->base.parent = fn_base;
+  obj->base.flags |= OBJ_PRIMITIVE;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM

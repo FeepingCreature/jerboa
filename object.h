@@ -11,7 +11,10 @@
 typedef enum {
   OBJ_NONE = 0,
   OBJ_CLOSED = 0x1, // no entries can be added or removed
-  OBJ_IMMUTABLE = 0x2 // no entries' values can be changed
+  OBJ_IMMUTABLE = 0x2, // no entries' values can be changed
+  OBJ_PRIMITIVE = 0x4, // cannot be inherited from
+                       // ie. 5, "foo", anything with attached native data
+  OBJ_GC_MARK = 0x8    // reachable in the "gc mark" phase
 } ObjectFlags;
 
 struct _Object;
@@ -41,15 +44,14 @@ typedef struct _Object {
 #if OBJ_KEEP_IDS
   int id;
 #endif
-  int refs;
+  Object *prev; // for gc
   Table tbl;
 } Object;
 
-void obj_claim(Object*);
-
-Object *obj_claimed(Object*);
-
-void obj_free(Object*);
+// TODO VM state struct
+Object *last_obj_allocated;
+int num_obj_allocated;
+int next_gc_run;
 
 Object *object_lookup(Object *obj, char *key);
 
@@ -57,7 +59,13 @@ void object_set_existing(Object *obj, char *key, Object *value);
 
 void object_set(Object *obj, char *key, Object *value);
 
-typedef Object* (*VMFunctionPointer)(Object *context, Object *fn, Object **args_ptr, int args_len);
+void obj_mark(Object *obj);
+
+void obj_free(Object *obj);
+
+void gc_run(); // defined here so we can call it in alloc
+
+typedef Object* (*VMFunctionPointer)(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
 typedef struct {
   Object base;

@@ -6,6 +6,7 @@
 #include <assert.h>
 
 #include "object.h"
+#include "gc.h"
 #include "vm/call.h"
 #include "vm/runtime.h"
 #include "vm/dump.h"
@@ -13,6 +14,8 @@
 
 int main(int argc, char **argv) {
   Object *root = create_root();
+  
+  void *entry = gc_add_roots(&root, 1);
   
   char *text =
     "function ack(m, n) {"
@@ -33,7 +36,7 @@ int main(int argc, char **argv) {
   Object **args_ptr = malloc(sizeof(Object*) * 2);
   args_ptr[0] = alloc_float(root, 3);
   args_ptr[1] = alloc_float(root, 7);
-  Object *res = closure_handler(root, ack, args_ptr, 2);
+  Object *res = function_handler(root, NULL, ack, args_ptr, 2);
   
   Object *int_base = object_lookup(root, "int");
   if (res->parent == int_base) {
@@ -44,5 +47,9 @@ int main(int argc, char **argv) {
     printf("ack(3., 7.) = %f\n", res_float->value);
   }
   printf("(%i cycles)\n", cyclecount);
+  
+  gc_remove_roots(entry);
+  gc_run();
+  
   return 0;
 }
