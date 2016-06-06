@@ -24,28 +24,15 @@ int main(int argc, char **argv) {
     "   if (m < 0.5) return np;"
     "   if (n < 0.5) return ack(mm, 1.);"
     "   return ack(mm, ack(m, nm));"
-    "}";
+    "}"
+    // "print(\"ack(3, 7) = \"+ack(3, 7));";
+    "print(3, 7);";
   
   UserFunction *module = parse_module(&text);
   dump_fn(module);
   
   root = call_function(root, module, NULL, 0);
   
-  Object *ack = object_lookup(root, "ack");
-  
-  Object **args_ptr = malloc(sizeof(Object*) * 2);
-  args_ptr[0] = alloc_float(root, 3);
-  args_ptr[1] = alloc_float(root, 7);
-  Object *res = function_handler(root, NULL, ack, args_ptr, 2);
-  
-  Object *int_base = object_lookup(root, "int");
-  if (res->parent == int_base) {
-    IntObject *res_int = (IntObject*) res;
-    printf("ack(3., 7.) = %i\n", res_int->value);
-  } else {
-    FloatObject *res_float = (FloatObject*) res;
-    printf("ack(3., 7.) = %f\n", res_float->value);
-  }
   printf("(%i cycles)\n", cyclecount);
   
   gc_remove_roots(entry);

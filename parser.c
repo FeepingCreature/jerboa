@@ -165,6 +165,7 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   float f_value;
   if (parse_float(&text, &f_value)) {
     *textp = text;
+    if (!builder) return (RefValue) {0, NULL};
     int slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
     return (RefValue) {slot, NULL};
   }
@@ -172,6 +173,7 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   int i_value;
   if (parse_int(&text, &i_value)) {
     *textp = text;
+    if (!builder) return (RefValue) {0, NULL};
     int slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
     return (RefValue) {slot, NULL};
   }
@@ -186,12 +188,13 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   
   if (eat_keyword(&text, "function")) {
     UserFunction *fn = parse_function_expr(&text);
+    if (!builder) return (RefValue) {0, NULL};
     int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
     *textp = text;
     return (RefValue) {slot, NULL};
   }
   
-  parser_error(text, "expected identifier, number, function or paren expression");
+  parser_error(text, "expected expression");
 }
 
 bool parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr) {
@@ -203,11 +206,15 @@ bool parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr) {
   
   while (!eat_string(textp, ")")) {
     if (args_len && !eat_string(textp, ",")) parser_error(*textp, "comma expected");
-    int slot = ref_access(builder, parse_expr(textp, builder, 0));
+    RefValue arg = parse_expr(textp, builder, 0);
+    int slot = 0;
+    if (builder) slot = ref_access(builder, arg);
     
     args_ptr = realloc(args_ptr, sizeof(int) * ++args_len);
     args_ptr[args_len - 1] = slot;
   }
+  
+  if (!builder) return true;
   
   *expr = (RefValue) {
     addinstr_call(builder, ref_access(builder, *expr), args_ptr, args_len),
@@ -393,6 +400,13 @@ void parse_statement(char **textp, FunctionBuilder *builder) {
       *textp = text;
       return;
     }
+  }
+  {
+    // expr as statement
+    parse_expr_base(&text, builder);
+    if (!eat_string(&text, ";")) parser_error(text, "';' expected to terminate expression");
+    *textp = text;
+    return;
   }
   parser_error(text, "unknown statement");
 }
