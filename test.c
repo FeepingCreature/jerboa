@@ -19,14 +19,14 @@ int main(int argc, char **argv) {
   
   char *text =
     "function ack(m, n) {"
-    "   var np = n + 1., nm = n - 1., mm;"
-    "   mm = m - 1.;"
-    "   if (m < 0.5) return np;"
-    "   if (n < 0.5) return ack(mm, 1.);"
+    "   var np = n + 1, nm = n - 1, mm;"
+    "   mm = m - 1;"
+    "   if (m == 0) return np;"
+    "   if (n == 0) return ack(mm, 1);"
     "   return ack(mm, ack(m, nm));"
     "}"
     // "print(\"ack(3, 7) = \"+ack(3, 7));";
-    "print(3, \", \", 7);";
+    "print(\"ack(3, 7) = \"+ack(3, 7));";
   
   UserFunction *module = parse_module(&text);
   dump_fn(module);

@@ -189,7 +189,9 @@ Object *alloc_string(Object *context, char *value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *string_base = object_lookup(root, "string");
-  StringObject *obj = alloc_object_internal(sizeof(StringObject));
+  int len = strlen(value);
+  // allocate the string as part of the object, so that it gets freed with the object
+  StringObject *obj = alloc_object_internal(sizeof(StringObject) + len + 1);
   obj->base.parent = string_base;
   obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
@@ -198,7 +200,8 @@ Object *alloc_string(Object *context, char *value) {
   fprintf(stderr, "alloc object %i\n", obj->base.id);
 #endif
 #endif
-  obj->value = value;
+  obj->value = ((char*) obj) + sizeof(StringObject);
+  strncpy(obj->value, value, len + 1);
   return (Object*) obj;
 }
 

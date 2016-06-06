@@ -1,5 +1,19 @@
 #include "vm/runtime.h"
 
+#include <stdio.h>
+#include <stdarg.h>
+
+static void asprintf(char **outp, char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  int len = vsnprintf(NULL, 0, fmt, ap);
+  *outp = malloc(len + 1);
+  va_end(ap);
+  va_start(ap, fmt);
+  vsnprintf(*outp, len + 1, fmt, ap);
+  va_end(ap);
+}
+
 static Object *equals_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 2);
   Object *root = context;
@@ -52,6 +66,7 @@ static Object *add_fn(Object *context, Object *thisptr, Object *fn, Object **arg
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int");
   Object *float_base = object_lookup(root, "float");
+  Object *string_base = object_lookup(root, "string");
   
   Object *obj1 = args_ptr[0], *obj2 = args_ptr[1];
   if (obj1->parent == int_base && obj2->parent == int_base) {
@@ -65,6 +80,24 @@ static Object *add_fn(Object *context, Object *thisptr, Object *fn, Object **arg
     if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
     else v2 = ((IntObject*) obj2)->value;
     return alloc_float(context, v1 + v2);
+  }
+  if (obj1->parent == string_base || obj2->parent == string_base) {
+    char *str1, *str2;
+    if (obj1->parent == string_base) asprintf(&str1, "%s", ((StringObject*) obj1)->value);
+    else if (obj1->parent == float_base) asprintf(&str1, "%f", ((FloatObject*) obj1)->value);
+    else if (obj1->parent == int_base) asprintf(&str1, "%i", ((IntObject*) obj1)->value);
+    else assert(false);
+    if (obj2->parent == string_base) asprintf(&str2, "%s", ((StringObject*) obj2)->value);
+    else if (obj2->parent == float_base) asprintf(&str2, "%f", ((FloatObject*) obj2)->value);
+    else if (obj2->parent == int_base) asprintf(&str2, "%i", ((IntObject*) obj2)->value);
+    else assert(false);
+    char *str3;
+    asprintf(&str3, "%s%s", str1, str2);
+    free(str1);
+    free(str2);
+    Object *res = alloc_string(context, str3);
+    free(str3);
+    return res;
   }
   assert(false);
 }
@@ -144,7 +177,6 @@ static Object *closure_mark_fn(Object *context, Object *thisptr, Object *fn, Obj
   return NULL;
 }
 
-#include <stdio.h>
 static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   Object *root = context;
   while (root->parent) root = root->parent;
