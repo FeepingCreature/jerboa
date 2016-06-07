@@ -276,6 +276,7 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
+  Object *bool_base = object_lookup(root, "bool", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
   Object *string_base = object_lookup(root, "string", NULL);
   
@@ -283,6 +284,11 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
     Object *arg = args_ptr[i];
     if (arg->parent == int_base) {
       printf("%i", ((IntObject*)arg)->value);
+      continue;
+    }
+    if (arg->parent == bool_base) {
+      if (((BoolObject*)arg)->value) printf("true");
+      else printf("false");
       continue;
     }
     if (arg->parent == float_base) {

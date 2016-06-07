@@ -10,7 +10,7 @@
 #include "vm/call.h"
 #include "vm/runtime.h"
 #include "vm/dump.h"
-#include "parser.h"
+#include "language.h"
 
 int main(int argc, char **argv) {
   Object *root = create_root();

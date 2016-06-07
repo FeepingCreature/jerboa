@@ -1,6 +1,8 @@
 #ifndef VM_INSTR_H
 #define VM_INSTR_H
 
+#include <stdbool.h>
+
 typedef enum {
   INSTR_GET_ROOT,
   INSTR_GET_CONTEXT,
