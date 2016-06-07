@@ -99,7 +99,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int target_slot, function_slot;
+  int target_slot, function_slot, this_slot;
   int *args_ptr; int args_length;
 } CallInstr;
 

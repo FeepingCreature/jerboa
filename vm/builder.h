@@ -37,9 +37,11 @@ int addinstr_alloc_string_object(FunctionBuilder *builder, int ctxslot, char *va
 
 int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFunction *fn);
 
-int addinstr_call(FunctionBuilder *builder, int fn, int *args_ptr, int args_len);
+int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len);
 
-int addinstr_call2(FunctionBuilder *builder, int fn, int arg0, int arg1);
+int addinstr_call1(FunctionBuilder *builder, int fn, int this_slot, int arg0);
+
+int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, int arg1);
 
 void addinstr_test_branch(FunctionBuilder *builder, int test, int **truebranch, int **falsebranch);
 

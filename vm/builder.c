@@ -105,11 +105,12 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFun
   return instr->target_slot;
 }
 
-int addinstr_call(FunctionBuilder *builder, int fn, int *args_ptr, int args_len) {
+int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
   CallInstr *instr = malloc(sizeof(CallInstr));
   instr->base.type = INSTR_CALL;
   instr->target_slot = builder->slot_base++;
   instr->function_slot = fn;
+  instr->this_slot = this_slot;
   instr->args_length = args_len;
   instr->args_ptr = args_ptr;
   
@@ -117,11 +118,18 @@ int addinstr_call(FunctionBuilder *builder, int fn, int *args_ptr, int args_len)
   return instr->target_slot;
 }
 
-int addinstr_call2(FunctionBuilder *builder, int fn, int arg0, int arg1) {
+
+int addinstr_call1(FunctionBuilder *builder, int fn, int this_slot, int arg0) {
+  int *args = malloc(sizeof(int) * 1);
+  args[0] = arg0;
+  return addinstr_call(builder, fn, this_slot, args, 1);
+}
+
+int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, int arg1) {
   int *args = malloc(sizeof(int) * 2);
   args[0] = arg0;
   args[1] = arg1;
-  return addinstr_call(builder, fn, args, 2);
+  return addinstr_call(builder, fn, this_slot, args, 2);
 }
 
 void addinstr_test_branch(FunctionBuilder *builder, int test, int **truebranch, int **falsebranch) {

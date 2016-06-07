@@ -57,8 +57,8 @@ void dump_fn(UserFunction *fn) {
                   ((AssignExistingInstr*) instr)->obj_slot, ((AssignExistingInstr*) instr)->key_slot, ((AssignExistingInstr*) instr)->value_slot);
           break;
         case INSTR_CALL:
-          fprintf(stderr, "    call: %i = %i ( ",
-                  ((CallInstr*) instr)->target_slot, ((CallInstr*) instr)->function_slot);
+          fprintf(stderr, "    call: %i = %i . %i ( ",
+                  ((CallInstr*) instr)->target_slot, ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);
           for (int i = 0; i < ((CallInstr*) instr)->args_length; ++i) {
             if (i) fprintf(stderr, ", ");
             fprintf(stderr, "%i", ((CallInstr*) instr)->args_ptr[i]);

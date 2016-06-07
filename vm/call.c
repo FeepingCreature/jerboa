@@ -141,9 +141,11 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_CALL: {
         CallInstr *call_instr = (CallInstr*) instr;
         int target_slot = call_instr->target_slot, function_slot = call_instr->function_slot;
-        int args_length = call_instr->args_length;
+        int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
         assert(target_slot < num_slots && slots[target_slot] == NULL);
         assert(function_slot < num_slots);
+        assert(this_slot < num_slots);
+        Object *this_obj = slots[this_slot];
         Object *fn_obj = slots[function_slot];
         Object *root = context;
         while (root->parent) root = root->parent;
@@ -161,8 +163,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
           assert(argslot < num_slots);
           args[i] = slots[argslot];
         }
-        // and call
-        Object *obj = fn->fn_ptr(context, NULL, fn_obj, args, args_length);
+        Object *obj = fn->fn_ptr(context, this_obj, fn_obj, args, args_length);
         slots[target_slot] = obj;
         free(args);
       } break;
