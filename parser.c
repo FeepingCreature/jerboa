@@ -56,7 +56,7 @@ char *parse_identifier(char **textp) {
   char *res = parse_identifier_all(&text);
   if (res == NULL) return res;
   
-  if (strncmp(res, "function", 8) == 0 || strncmp(res, "method", 6) == 0) {
+  if (strncmp(res, "function", 8) == 0 || strncmp(res, "method", 6) == 0 || strncmp(res, "new", 3) == 0) {
     // reserved identifier
     free(res);
     return NULL;
@@ -184,6 +184,24 @@ static RefValue get_scope(FunctionBuilder *builder, char *name) {
   return (RefValue) {builder->scope, name_slot, REFMODE_VARIABLE};
 }
 
+static void parse_object_literal_body(char **textp, FunctionBuilder *builder, int obj_slot) {
+  while (!eat_string(textp, "}")) {
+    char *key_name = parse_identifier(textp);
+    if (!eat_string(textp, ":")) parser_error(*textp, "object literal expects 'name: value'");
+    
+    RefValue value = parse_expr(textp, builder, 0);
+    if (builder) {
+      int key_slot = addinstr_alloc_string_object(builder, builder->scope, key_name);
+      int value_slot = ref_access(builder, value);
+      addinstr_assign(builder, obj_slot, key_slot, value_slot);
+    }
+    
+    if (eat_string(textp, ",")) continue;
+    if (eat_string(textp, "}")) break;
+    parser_error(*textp, "expected commad or closing bracket");
+  }
+}
+
 static bool parse_object_literal(char **textp, FunctionBuilder *builder, RefValue *rv_p) {
   char *text = *textp;
   eat_filler(&text);
@@ -192,24 +210,11 @@ static bool parse_object_literal(char **textp, FunctionBuilder *builder, RefValu
   
   int obj_slot = 0;
   if (builder) obj_slot = addinstr_alloc_object(builder, builder->slot_base++ /*null slot*/);
-  
-  while (!eat_string(&text, "}")) {
-    char *key_name = parse_identifier(&text);
-    if (!eat_string(&text, ":")) parser_error(text, "object literal expects 'name: value'");
-    
-    RefValue value = parse_expr(&text, builder, 0);
-    if (builder) {
-      int key_slot = addinstr_alloc_string_object(builder, builder->scope, key_name);
-      int value_slot = ref_access(builder, value);
-      addinstr_assign(builder, obj_slot, key_slot, value_slot);
-    }
-    
-    if (eat_string(&text, ",")) continue;
-    if (eat_string(&text, "}")) break;
-    parser_error(text, "expected commad or closing bracket");
-  }
   *textp = text;
   *rv_p = (RefValue) {obj_slot, -1, REFMODE_NONE};
+  
+  parse_object_literal_body(textp, builder, obj_slot);
+  
   return true;
 }
 
@@ -267,6 +272,19 @@ RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
     int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
     *textp = text;
     return (RefValue) {slot, -1, REFMODE_NONE};
+  }
+  
+  if (eat_keyword(&text, "new")) {
+    RefValue parent_var = parse_expr(&text, builder, 0);
+    int parent_slot = ref_access(builder, parent_var);
+    int obj_slot = 0;
+    if (builder) obj_slot = addinstr_alloc_object(builder, parent_slot);
+    
+    *textp = text;
+    if (eat_string(textp, "{")) {
+      parse_object_literal_body(textp, builder, obj_slot);
+    }
+    return (RefValue) {obj_slot, -1, REFMODE_NONE};
   }
   
   parser_error(text, "expected expression");
@@ -479,7 +497,7 @@ void parse_if(char **textp, FunctionBuilder *builder) {
   addinstr_branch(builder, &end_blk);
   
   *false_blk = new_block(builder);
-  if (eat_string(&text, "else")) {
+  if (eat_keyword(&text, "else")) {
     parse_block(&text, builder);
     addinstr_branch(builder, &end_blk);
     *end_blk = new_block(builder);
