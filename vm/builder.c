@@ -16,31 +16,31 @@ static void addinstr(FunctionBuilder *builder, Instr *instr) {
   block->instrs_ptr[block->instrs_len - 1] = instr;
 }
 
-int addinstr_access(FunctionBuilder *builder, int obj_slot, char *ident_name) {
+int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
   AccessInstr *instr = malloc(sizeof(AccessInstr));
   instr->base.type = INSTR_ACCESS;
   instr->target_slot = builder->slot_base++;
   instr->obj_slot = obj_slot;
-  instr->key = ident_name;
+  instr->key_slot = key_slot;
   addinstr(builder, (Instr*) instr);
   return instr->target_slot;
 }
 
-void addinstr_assign(FunctionBuilder *builder, int obj, char *name, int slot) {
+void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot) {
   AssignInstr *instr = malloc(sizeof(AssignInstr));
   instr->base.type = INSTR_ASSIGN;
   instr->obj_slot = obj;
   instr->value_slot = slot;
-  instr->key = name;
+  instr->key_slot = key_slot;
   addinstr(builder, (Instr*) instr);
 }
 
-void addinstr_assign_existing(FunctionBuilder *builder, int obj, char *name, int slot) {
+void addinstr_assign_existing(FunctionBuilder *builder, int obj, int key_slot, int slot) {
   AssignExistingInstr *instr = malloc(sizeof(AssignExistingInstr));
   instr->base.type = INSTR_ASSIGN_EXISTING;
   instr->obj_slot = obj;
   instr->value_slot = slot;
-  instr->key = name;
+  instr->key_slot = key_slot;
   addinstr(builder, (Instr*) instr);
 }
 

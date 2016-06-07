@@ -45,16 +45,16 @@ void dump_fn(UserFunction *fn) {
           fprintf(stderr, "    close_object: %i\n", ((CloseObjectInstr*) instr)->slot);
           break;
         case INSTR_ACCESS:
-          fprintf(stderr, "    access: %i = %i . '%s'\n",
-                  ((AccessInstr*) instr)->target_slot, ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key);
+          fprintf(stderr, "    access: %i = %i . %i\n",
+                  ((AccessInstr*) instr)->target_slot, ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key_slot);
           break;
         case INSTR_ASSIGN:
-          fprintf(stderr, "    assign: %i . '%s' = %i\n",
-                  ((AssignInstr*) instr)->obj_slot, ((AssignInstr*) instr)->key, ((AssignInstr*) instr)->value_slot);
+          fprintf(stderr, "    assign: %i . %i = %i\n",
+                  ((AssignInstr*) instr)->obj_slot, ((AssignInstr*) instr)->key_slot, ((AssignInstr*) instr)->value_slot);
           break;
         case INSTR_ASSIGN_EXISTING:
-          fprintf(stderr, "    assign_existing: %i . '%s' = %i\n",
-                  ((AssignExistingInstr*) instr)->obj_slot, ((AssignExistingInstr*) instr)->key, ((AssignExistingInstr*) instr)->value_slot);
+          fprintf(stderr, "    assign_existing: %i . %i = %i\n",
+                  ((AssignExistingInstr*) instr)->obj_slot, ((AssignExistingInstr*) instr)->key_slot, ((AssignExistingInstr*) instr)->value_slot);
           break;
         case INSTR_CALL:
           fprintf(stderr, "    call: %i = %i ( ",

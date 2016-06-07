@@ -84,20 +84,17 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int target_slot, obj_slot;
-  char *key;
+  int target_slot, obj_slot, key_slot;
 } AccessInstr;
 
 typedef struct {
   Instr base;
-  int obj_slot, value_slot;
-  char *key;
+  int obj_slot, value_slot, key_slot;
 } AssignInstr;
 
 typedef struct {
   Instr base;
-  int obj_slot, value_slot;
-  char *key;
+  int obj_slot, value_slot, key_slot;
 } AssignExistingInstr;
 
 typedef struct {

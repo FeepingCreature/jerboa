@@ -147,19 +147,22 @@ void parser_error(char *location, char *format, ...) __attribute__ ((noreturn));
 int ref_access(FunctionBuilder *builder, RefValue rv) {
   if (!builder) return 0; // happens when speculatively parsing
   if (rv.key) {
-    return addinstr_access(builder, rv.base, rv.key);
+    int key_slot = addinstr_alloc_string_object(builder, builder->scope, rv.key);
+    return addinstr_access(builder, rv.base, key_slot);
   }
   return rv.base;
 }
 
 void ref_assign(FunctionBuilder *builder, RefValue rv, int value) {
   assert(rv.key);
-  addinstr_assign(builder, rv.base, rv.key, value);
+  int key_slot = addinstr_alloc_string_object(builder, builder->scope, rv.key);
+  addinstr_assign(builder, rv.base, key_slot, value);
 }
 
 void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value) {
   assert(rv.key);
-  addinstr_assign_existing(builder, rv.base, rv.key, value);
+  int key_slot = addinstr_alloc_string_object(builder, builder->scope, rv.key);
+  addinstr_assign_existing(builder, rv.base, key_slot, value);
 }
 
 /*
@@ -193,8 +196,9 @@ static bool parse_object_literal(char **textp, FunctionBuilder *builder, RefValu
     
     RefValue value = parse_expr(&text, builder, 0);
     if (builder) {
+      int key_slot = addinstr_alloc_string_object(builder, builder->scope, key_name);
       int value_slot = ref_access(builder, value);
-      addinstr_assign(builder, obj_slot, key_name, value_slot);
+      addinstr_assign(builder, obj_slot, key_slot, value_slot);
     }
     
     if (eat_string(&text, ",")) continue;
@@ -328,14 +332,14 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
     if (eat_string(&text, "*")) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 3));
       if (!builder) continue;
-      int mulfn = addinstr_access(builder, builder->scope, "*");
+      int mulfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "*"));
       expr = (RefValue) { addinstr_call2(builder, mulfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
     if (eat_string(&text, "/")) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 3));
       if (!builder) continue;
-      int divfn = addinstr_access(builder, builder->scope, "/");
+      int divfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "/"));
       expr = (RefValue) { addinstr_call2(builder, divfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
@@ -348,14 +352,14 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
     if (eat_string(&text, "+")) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 2));
       if (!builder) continue;
-      int plusfn = addinstr_access(builder, builder->scope, "+");
+      int plusfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "+"));
       expr = (RefValue) { addinstr_call2(builder, plusfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
     if (eat_string(&text, "-")) {
       int arg2 = ref_access(builder, parse_expr(&text, builder, 2));
       if (!builder) continue;
-      int minusfn = addinstr_access(builder, builder->scope, "-");
+      int minusfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "-"));
       expr = (RefValue) { addinstr_call2(builder, minusfn, ref_access(builder, expr), arg2), NULL, false };
       continue;
     }
@@ -367,13 +371,13 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
   if (eat_string(&text, "==")) {
     int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
     if (builder) {
-      int equalfn = addinstr_access(builder, builder->scope, "=");
+      int equalfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "="));
       expr = (RefValue) { addinstr_call2(builder, equalfn, ref_access(builder, expr), arg2), NULL, false };
     }
   } else if (eat_string(&text, "<")) {
     int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
     if (builder) {
-      int smallerfn = addinstr_access(builder, builder->scope, "<");
+      int smallerfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "<"));
       expr = (RefValue) { addinstr_call2(builder, smallerfn, ref_access(builder, expr), arg2), NULL, false };
     }
   }
@@ -421,14 +425,14 @@ void parse_vardecl(char **textp, FunctionBuilder *builder) {
   builder->scope = addinstr_alloc_object(builder, builder->scope);
   
   char *varname = parse_identifier(textp);
-  int value;
+  int value, varname_slot = addinstr_alloc_string_object(builder, builder->scope, varname);
   if (!eat_string(textp, "=")) {
     value = builder->slot_base++; // null slot
   } else {
     value = ref_access(builder, parse_expr(textp, builder, 0));
   }
   
-  addinstr_assign(builder, builder->scope, varname, value);
+  addinstr_assign(builder, builder->scope, varname_slot, value);
   addinstr_close_object(builder, builder->scope);
   
   // var a, b;
@@ -445,8 +449,9 @@ void parse_fundecl(char **textp, FunctionBuilder *builder) {
   builder->scope = addinstr_alloc_object(builder, builder->scope);
   
   UserFunction *fn = parse_function_expr(textp);
+  int name_slot = addinstr_alloc_string_object(builder, builder->scope, fn->name);
   int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
-  addinstr_assign(builder, builder->scope, fn->name, slot);
+  addinstr_assign(builder, builder->scope, name_slot, slot);
   addinstr_close_object(builder, builder->scope);
 }
 
@@ -566,7 +571,8 @@ UserFunction *parse_function_expr(char **textp) {
   int ctxslot = addinstr_get_context(builder);
   builder->scope = addinstr_alloc_object(builder, ctxslot);
   for (int i = 0; i < arg_list_len; ++i) {
-    addinstr_assign(builder, builder->scope, arg_list_ptr[i], i);
+    int argname_slot = addinstr_alloc_string_object(builder, builder->scope, arg_list_ptr[i]);
+    addinstr_assign(builder, builder->scope, argname_slot, i);
   }
   addinstr_close_object(builder, builder->scope);
   

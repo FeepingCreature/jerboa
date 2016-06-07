@@ -44,7 +44,11 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_ACCESS: {
         AccessInstr *access_instr = (AccessInstr*) instr;
         int target_slot = access_instr->target_slot, obj_slot = access_instr->obj_slot;
-        char *key = access_instr->key;
+        int key_slot = access_instr->key_slot;
+        
+        assert(key_slot < num_slots && slots[key_slot]);
+        // TODO assert object type
+        char *key = ((StringObject*) slots[key_slot])->value;
         
         assert(obj_slot < num_slots);
         Object *obj = slots[obj_slot];
@@ -61,9 +65,13 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_ASSIGN: {
         AssignInstr *assign_instr = (AssignInstr*) instr;
         int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
-        char *key = assign_instr->key;
+        int key_slot = assign_instr->key_slot;
         assert(obj_slot < num_slots);
         assert(value_slot < num_slots);
+        assert(key_slot < num_slots && slots[key_slot]);
+        // TODO assert object type
+        char *key = ((StringObject*) slots[key_slot])->value;
+        
         Object *obj = slots[obj_slot];
         if (obj == NULL) {
           fprintf(stderr, "> assignment to null object");
@@ -75,9 +83,12 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_ASSIGN_EXISTING: {
         AssignExistingInstr *assign_existing_instr = (AssignExistingInstr*) instr;
         int obj_slot = assign_existing_instr->obj_slot, value_slot = assign_existing_instr->value_slot;
-        char *key = assign_existing_instr->key;
+        int key_slot = assign_existing_instr->key_slot;
         assert(obj_slot < num_slots);
         assert(value_slot < num_slots);
+        assert(key_slot < num_slots && slots[key_slot]);
+        // TODO assert object type
+        char *key = ((StringObject*) slots[key_slot])->value;
         Object *obj = slots[obj_slot];
         object_set_existing(obj, key, slots[value_slot]);
         // fprintf(stderr, "> obj set '%s'\n", key);
