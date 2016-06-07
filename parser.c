@@ -376,18 +376,64 @@ RefValue parse_expr(char **textp, FunctionBuilder *builder, int level) {
   
   if (level > 0) { *textp = text; return expr; }
   
+  bool negate_expr = false;
+  
   if (eat_string(&text, "==")) {
-    int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
+    int rhs_value = ref_access(builder, parse_expr(&text, builder, 1));
     if (builder) {
-      int equalfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "="));
-      expr = (RefValue) { addinstr_call2(builder, equalfn, builder->slot_base++, ref_access(builder, expr), arg2), NULL, false };
+      int lhs_value = ref_access(builder, expr);
+      int equalfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "=="));
+      expr = (RefValue) { addinstr_call1(builder, equalfn, lhs_value, rhs_value), NULL, false };
     }
-  } else if (eat_string(&text, "<")) {
-    int arg2 = ref_access(builder, parse_expr(&text, builder, 1));
+  } else if (eat_string(&text, "!=")) {
+    int rhs_value = ref_access(builder, parse_expr(&text, builder, 1));
     if (builder) {
-      int smallerfn = addinstr_access(builder, builder->scope, addinstr_alloc_string_object(builder, builder->scope, "<"));
-      expr = (RefValue) { addinstr_call2(builder, smallerfn, builder->slot_base++, ref_access(builder, expr), arg2), NULL, false };
+      int lhs_value = ref_access(builder, expr);
+      int equalfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "=="));
+      expr = (RefValue) { addinstr_call1(builder, equalfn, lhs_value, rhs_value), NULL, false };
+      negate_expr = true;
     }
+  } else {
+    if (eat_string(&text, "!")) {
+      negate_expr = true;
+    }
+    if (eat_string(&text, "<=")) {
+      int rhs_value = ref_access(builder, parse_expr(&text, builder, 1));
+      if (builder) {
+        int lhs_value = ref_access(builder, expr);
+        int lefn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "<="));
+        expr = (RefValue) { addinstr_call1(builder, lefn, lhs_value, rhs_value), NULL, false };
+      }
+    } else if (eat_string(&text, ">=")) {
+      int rhs_value = ref_access(builder, parse_expr(&text, builder, 1));
+      if (builder) {
+        int lhs_value = ref_access(builder, expr);
+        int gefn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, ">="));
+        expr = (RefValue) { addinstr_call1(builder, gefn, lhs_value, rhs_value), NULL, false };
+      }
+    } else if (eat_string(&text, "<")) {
+      int rhs_value = ref_access(builder, parse_expr(&text, builder, 1));
+      if (builder) {
+        int lhs_value = ref_access(builder, expr);
+        int ltfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "<"));
+        expr = (RefValue) { addinstr_call1(builder, ltfn, lhs_value, rhs_value), NULL, false };
+      }
+    } else if (eat_string(&text, ">")) {
+      int rhs_value = ref_access(builder, parse_expr(&text, builder, 1));
+      if (builder) {
+        int lhs_value = ref_access(builder, expr);
+        int gtfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, ">"));
+        expr = (RefValue) { addinstr_call1(builder, gtfn, lhs_value, rhs_value), NULL, false };
+      }
+    } else if (negate_expr) {
+      parser_error(text, "expected comparison operator");
+    }
+  }
+  
+  if (negate_expr && builder) {
+    int lhs_value = ref_access(builder, expr);
+    int notfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "!"));
+    expr = (RefValue) { addinstr_call0(builder, notfn, lhs_value), NULL, false };
   }
   
   *textp = text;

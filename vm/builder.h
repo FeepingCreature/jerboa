@@ -39,6 +39,8 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFun
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len);
 
+int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot);
+
 int addinstr_call1(FunctionBuilder *builder, int fn, int this_slot, int arg0);
 
 int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, int arg1);

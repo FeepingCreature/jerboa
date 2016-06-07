@@ -118,6 +118,9 @@ int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr
   return instr->target_slot;
 }
 
+int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot) {
+  return addinstr_call(builder, fn, this_slot, NULL, 0);
+}
 
 int addinstr_call1(FunctionBuilder *builder, int fn, int this_slot, int arg0) {
   int *args = malloc(sizeof(int) * 1);
