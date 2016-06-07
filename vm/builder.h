@@ -12,16 +12,22 @@ typedef struct {
   int scope;
   int slot_base;
   
+  bool block_terminated;
+  
   FunctionBody body;
 } FunctionBuilder;
 
 int new_block(FunctionBuilder *builder);
+
+void terminate(FunctionBuilder *builder);
 
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot);
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot);
 
 void addinstr_assign_existing(FunctionBuilder *builder, int obj, int key_slot, int slot);
+
+void addinstr_assign_shadowing(FunctionBuilder *builder, int obj, int key_slot, int slot);
 
 void addinstr_close_object(FunctionBuilder *builder, int obj);
 

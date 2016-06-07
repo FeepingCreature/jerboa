@@ -17,11 +17,11 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
   }
   
   assert(fn->body.blocks_len > 0);
-  InstrBlock *block = &fn->body.blocks_ptr[0];
+  InstrBlock *block = fn->body.blocks_ptr;
   int instr_offs = 0;
   while (true) {
     if (!(instr_offs < block->instrs_len)) {
-      fprintf(stderr, "Interpreter error: reached end of block without branch instruction!\n");
+      fprintf(stderr, "Interpreter error: reached end of block without branch instruction! (%li)\n", block - fn->body.blocks_ptr);
       exit(1);
     }
     cyclecount ++;
@@ -53,9 +53,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(obj_slot < num_slots);
         Object *obj = slots[obj_slot];
         
-        Object *value = object_lookup(obj, key);
-        if (value == NULL) {
-          fprintf(stderr, "> lookup yielded null: '%s'\n", key);
+        bool object_found;
+        Object *value = object_lookup(obj, key, &object_found);
+        if (!object_found) {
+          fprintf(stderr, "> identifier not found: '%s'\n", key);
           assert(false);
         }
         
@@ -91,6 +92,19 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         char *key = ((StringObject*) slots[key_slot])->value;
         Object *obj = slots[obj_slot];
         object_set_existing(obj, key, slots[value_slot]);
+        // fprintf(stderr, "> obj set '%s'\n", key);
+      } break;
+      case INSTR_ASSIGN_SHADOWING: {
+        AssignShadowingInstr *assign_shadowing_instr = (AssignShadowingInstr*) instr;
+        int obj_slot = assign_shadowing_instr->obj_slot, value_slot = assign_shadowing_instr->value_slot;
+        int key_slot = assign_shadowing_instr->key_slot;
+        assert(obj_slot < num_slots);
+        assert(value_slot < num_slots);
+        assert(key_slot < num_slots && slots[key_slot]);
+        // TODO assert object type
+        char *key = ((StringObject*) slots[key_slot])->value;
+        Object *obj = slots[obj_slot];
+        object_set_shadowing(obj, key, slots[value_slot]);
         // fprintf(stderr, "> obj set '%s'\n", key);
       } break;
       case INSTR_ALLOC_OBJECT:{
@@ -150,8 +164,8 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         Object *root = context;
         while (root->parent) root = root->parent;
         // validate function type
-        Object *function_base = object_lookup(root, "function");
-        Object *closure_base = object_lookup(root, "closure");
+        Object *function_base = object_lookup(root, "function", NULL);
+        Object *closure_base = object_lookup(root, "closure", NULL);
         Object *fn_type = fn_obj->parent;
         while (fn_type->parent) fn_type = fn_type->parent;
         assert(fn_type == function_base || fn_type == closure_base);
@@ -192,8 +206,8 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         
         Object *root = context;
         while (root->parent) root = root->parent;
-        Object *bool_base = object_lookup(root, "bool");
-        Object *int_base = object_lookup(root, "int");
+        Object *bool_base = object_lookup(root, "bool", NULL);
+        Object *int_base = object_lookup(root, "int", NULL);
         
         int test = 0;
         if (test_value && test_value->parent == bool_base) {
@@ -230,10 +244,11 @@ Object *method_handler(Object *calling_context, Object *thisptr, Object *fn, Obj
 Object *alloc_closure_fn(Object *context, UserFunction *fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *cl_base = object_lookup(root, "closure");
+  Object *cl_base = object_lookup(root, "closure", NULL);
   ClosureObject *obj = calloc(sizeof(ClosureObject), 1);
   obj->base.base.parent = cl_base;
-  obj->base.fn_ptr = function_handler;
+  if (fn->is_method) obj->base.fn_ptr = method_handler;
+  else obj->base.fn_ptr = function_handler;
   obj->context = context;
   obj->vmfun = *fn;
   return (Object*) obj;

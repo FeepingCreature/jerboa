@@ -56,6 +56,10 @@ void dump_fn(UserFunction *fn) {
           fprintf(stderr, "    assign_existing: %i . %i = %i\n",
                   ((AssignExistingInstr*) instr)->obj_slot, ((AssignExistingInstr*) instr)->key_slot, ((AssignExistingInstr*) instr)->value_slot);
           break;
+        case INSTR_ASSIGN_SHADOWING:
+          fprintf(stderr, "    assign_shadowing: %i . %i = %i\n",
+                  ((AssignShadowingInstr*) instr)->obj_slot, ((AssignShadowingInstr*) instr)->key_slot, ((AssignShadowingInstr*) instr)->value_slot);
+          break;
         case INSTR_CALL:
           fprintf(stderr, "    call: %i = %i . %i ( ",
                   ((CallInstr*) instr)->target_slot, ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);

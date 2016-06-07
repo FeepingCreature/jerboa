@@ -53,9 +53,11 @@ Object *last_obj_allocated;
 int num_obj_allocated;
 int next_gc_run;
 
-Object *object_lookup(Object *obj, char *key);
+Object *object_lookup(Object *obj, char *key, bool *key_found);
 
 void object_set_existing(Object *obj, char *key, Object *value);
+
+void object_set_shadowing(Object *obj, char *key, Object *value);
 
 void object_set(Object *obj, char *key, Object *value);
 

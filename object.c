@@ -26,18 +26,21 @@ Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_p
   return NULL;
 }
 
-Object *table_lookup(Table *tbl, char *key) {
+Object *table_lookup(Table *tbl, char *key, bool *key_found_p) {
   Object **ptr = table_lookup_ref_alloc(tbl, key, NULL);
-  if (ptr == NULL) return NULL;
+  if (ptr == NULL) { if (key_found_p) *key_found_p = false; return NULL; }
+  if (key_found_p) *key_found_p = true;
   return *ptr;
 }
 
-Object *object_lookup(Object *obj, char *key) {
+Object *object_lookup(Object *obj, char *key, bool *key_found_p) {
   while (obj) {
-    Object *value = table_lookup(&obj->tbl, key);
-    if (value) return value;
+    bool key_found;
+    Object *value = table_lookup(&obj->tbl, key, &key_found);
+    if (key_found) { if (key_found_p) *key_found_p = true; return value; }
     obj = obj->parent;
   }
+  if (key_found_p) *key_found_p = false;
   return NULL;
 }
 
@@ -56,8 +59,9 @@ void obj_mark(Object *obj) {
     entry = entry->next;
   }
   
-  Object *mark_fn = object_lookup(obj, "gc_mark");
-  if (mark_fn) {
+  bool mark_fn_found;
+  Object *mark_fn = object_lookup(obj, "gc_mark", &mark_fn_found);
+  if (mark_fn_found) {
     FunctionObject *mark_fn_fnobj = (FunctionObject*) mark_fn;
     mark_fn_fnobj->fn_ptr(NULL, obj, mark_fn, NULL, 0);
   }
@@ -82,6 +86,23 @@ void object_set_existing(Object *obj, char *key, Object *value) {
     if (ptr != NULL) {
       assert(!(current->flags & OBJ_IMMUTABLE));
       *ptr = value;
+      return;
+    }
+    current = current->parent;
+  }
+  fprintf(stderr, "key '%s' not found in object\n", key);
+  assert(false);
+}
+
+// change a property but only if it exists somewhere in the prototype chain
+void object_set_shadowing(Object *obj, char *key, Object *value) {
+  assert(obj != NULL);
+  Object *current = obj;
+  while (current) {
+    Object **ptr = table_lookup_ref_alloc(&current->tbl, key, NULL);
+    if (ptr) {
+      // so create it in obj (not current!)
+      object_set(obj, key, value);
       return;
     }
     current = current->parent;
@@ -137,7 +158,7 @@ Object *alloc_object(Object *parent) {
 Object *alloc_int(Object *context, int value) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
+  Object *int_base = object_lookup(root, "int", NULL);
   IntObject *obj = alloc_object_internal(sizeof(IntObject));
   obj->base.parent = int_base;
   obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
@@ -154,7 +175,7 @@ Object *alloc_int(Object *context, int value) {
 Object *alloc_bool(Object *context, int value) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *bool_base = object_lookup(root, "bool");
+  Object *bool_base = object_lookup(root, "bool", NULL);
   BoolObject *obj = alloc_object_internal(sizeof(BoolObject));
   obj->base.parent = bool_base;
   obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
@@ -171,7 +192,7 @@ Object *alloc_bool(Object *context, int value) {
 Object *alloc_float(Object *context, float value) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *float_base = object_lookup(root, "float");
+  Object *float_base = object_lookup(root, "float", NULL);
   FloatObject *obj = alloc_object_internal(sizeof(FloatObject));
   obj->base.parent = float_base;
   obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
@@ -188,7 +209,7 @@ Object *alloc_float(Object *context, float value) {
 Object *alloc_string(Object *context, char *value) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *string_base = object_lookup(root, "string");
+  Object *string_base = object_lookup(root, "string", NULL);
   int len = strlen(value);
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(sizeof(StringObject) + len + 1);
@@ -208,7 +229,7 @@ Object *alloc_string(Object *context, char *value) {
 Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *fn_base = object_lookup(root, "function");
+  Object *fn_base = object_lookup(root, "function", NULL);
   FunctionObject *obj = alloc_object_internal(sizeof(FunctionObject));
   obj->base.parent = fn_base;
   obj->base.flags |= OBJ_PRIMITIVE;

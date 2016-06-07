@@ -12,7 +12,8 @@ typedef enum {
   INSTR_CLOSE_OBJECT,
   INSTR_ACCESS,
   INSTR_ASSIGN,
-  INSTR_ASSIGN_EXISTING,
+  INSTR_ASSIGN_EXISTING, // replace an existing key; error if missing
+  INSTR_ASSIGN_SHADOWING, // shadow an existing key; error if missing
   INSTR_CALL,
   INSTR_RETURN,
   INSTR_BR,
@@ -35,6 +36,7 @@ typedef struct {
   int arity; // first n slots are reserved for parameters
   int slots;
   char *name;
+  bool is_method;
   FunctionBody body;
 } UserFunction;
 
@@ -96,6 +98,11 @@ typedef struct {
   Instr base;
   int obj_slot, value_slot, key_slot;
 } AssignExistingInstr;
+
+typedef struct {
+  Instr base;
+  int obj_slot, value_slot, key_slot;
+} AssignShadowingInstr;
 
 typedef struct {
   Instr base;

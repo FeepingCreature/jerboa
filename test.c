@@ -18,8 +18,15 @@ int main(int argc, char **argv) {
   void *entry = gc_add_roots(&root, 1);
   
   char *text =
-    "var obj = {a: 5};"
+    "var obj = {a: 5, b: null, bar: method() { print(this.a - this.b); } };"
     "obj.b = 7;"
+    "var obj2 = new obj { b: 9 };"
+    ""
+    "obj[\"foo\"] = method() { print(this.a + this.b); };"
+    "obj.foo();"
+    "obj.bar();"
+    "obj2.foo();"
+    "obj2.bar();"
     "print(\"debug: \"+obj.a+\", \"+obj.b);"
     "print(\"2 != 2 = \"+(2 != 2));"
     "print(\"2 !< 2 = \"+(2 !< 2));"

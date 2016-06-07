@@ -3,11 +3,18 @@
 
 #include "vm/builder.h"
 
-// if 'key' is null, base is the value
+typedef enum {
+  REFMODE_NONE = -1, // not a reference
+  REFMODE_VARIABLE, // find the key; if you find it, overwrite it; otherwise error
+  REFMODE_OBJECT, // find the key; if you find it, shadow it; otherwise error
+  REFMODE_INDEX // just write the key without checking for anything
+} RefMode;
+
+// if 'key' is -1, the value is just 'base'
 typedef struct {
   int base;
-  char *key;
-  bool is_variable;
+  int key;
+  RefMode mode;
 } RefValue;
 
 void eat_filler(char **textp);

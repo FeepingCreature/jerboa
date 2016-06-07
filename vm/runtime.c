@@ -36,7 +36,7 @@ static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object 
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
+  Object *int_base = object_lookup(root, "int", NULL);
   
   Object *obj1 = thisptr, *obj2 = args_ptr[0];
   if (obj2->parent == int_base) {
@@ -52,7 +52,7 @@ static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object 
     return alloc_int(context, res);
   }
   
-  Object *float_base = object_lookup(root, "float");
+  Object *float_base = object_lookup(root, "float", NULL);
   if (obj2->parent == float_base || obj2->parent == int_base) {
     float v1 = ((IntObject*) obj1)->value, v2;
     if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
@@ -90,8 +90,8 @@ static Object *float_math_fn(Object *context, Object *thisptr, Object *fn, Objec
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
-  Object *float_base = object_lookup(root, "float");
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *float_base = object_lookup(root, "float", NULL);
   
   Object *obj1 = thisptr, *obj2 = args_ptr[0];
   if (obj2->parent == float_base || obj2->parent == int_base) {
@@ -131,10 +131,10 @@ static Object *string_add_fn(Object *context, Object *thisptr, Object *fn, Objec
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
-  Object *bool_base = object_lookup(root, "bool");
-  Object *float_base = object_lookup(root, "float");
-  Object *string_base = object_lookup(root, "string");
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *bool_base = object_lookup(root, "bool", NULL);
+  Object *float_base = object_lookup(root, "float", NULL);
+  Object *string_base = object_lookup(root, "string", NULL);
   
   Object *obj1 = thisptr, *obj2 = args_ptr[0];
   
@@ -164,7 +164,7 @@ static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object *
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
+  Object *int_base = object_lookup(root, "int", NULL);
   
   Object *obj1 = thisptr, *obj2 = args_ptr[0];
   if (obj2->parent == int_base) {
@@ -181,7 +181,7 @@ static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object *
     return alloc_bool(context, res);
   }
   
-  Object *float_base = object_lookup(root, "float");
+  Object *float_base = object_lookup(root, "float", NULL);
   if (obj2->parent == float_base || obj2->parent == int_base) {
     float v1 = ((IntObject*) obj1)->value, v2;
     if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
@@ -224,8 +224,8 @@ static Object *float_cmp_fn(Object *context, Object *thisptr, Object *fn, Object
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
-  Object *float_base = object_lookup(root, "float");
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *float_base = object_lookup(root, "float", NULL);
   
   Object *obj1 = thisptr, *obj2 = args_ptr[0];
   if (obj2->parent == float_base || obj2->parent == int_base) {
@@ -275,9 +275,9 @@ static Object *closure_mark_fn(Object *context, Object *thisptr, Object *fn, Obj
 static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int");
-  Object *float_base = object_lookup(root, "float");
-  Object *string_base = object_lookup(root, "string");
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *float_base = object_lookup(root, "float", NULL);
+  Object *string_base = object_lookup(root, "string", NULL);
   
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
@@ -303,6 +303,8 @@ Object *create_root() {
   Object *root = alloc_object(NULL);
   
   void *pin_root = gc_add_roots(&root, 1);
+  
+  object_set(root, "null", NULL);
   
   Object *function_obj = alloc_object(NULL);
   object_set(root, "function", function_obj);

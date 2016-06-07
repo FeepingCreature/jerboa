@@ -1,14 +1,22 @@
 #include "vm/builder.h"
 
 int new_block(FunctionBuilder *builder) {
+  assert(builder->block_terminated);
   FunctionBody *body = &builder->body;
   body->blocks_len ++;
   body->blocks_ptr = realloc(body->blocks_ptr, body->blocks_len * sizeof(InstrBlock));
   body->blocks_ptr[body->blocks_len - 1] = (InstrBlock){NULL, 0};
+  builder->block_terminated = false;
   return body->blocks_len - 1;
 }
 
+void terminate(FunctionBuilder *builder) {
+  // terminate with "return null"
+  addinstr_return(builder, builder->slot_base++);
+}
+
 static void addinstr(FunctionBuilder *builder, Instr *instr) {
+  assert(!builder->block_terminated);
   FunctionBody *body = &builder->body;
   InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
   block->instrs_len ++;
@@ -38,6 +46,15 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot) 
 void addinstr_assign_existing(FunctionBuilder *builder, int obj, int key_slot, int slot) {
   AssignExistingInstr *instr = malloc(sizeof(AssignExistingInstr));
   instr->base.type = INSTR_ASSIGN_EXISTING;
+  instr->obj_slot = obj;
+  instr->value_slot = slot;
+  instr->key_slot = key_slot;
+  addinstr(builder, (Instr*) instr);
+}
+
+void addinstr_assign_shadowing(FunctionBuilder *builder, int obj, int key_slot, int slot) {
+  AssignShadowingInstr *instr = malloc(sizeof(AssignShadowingInstr));
+  instr->base.type = INSTR_ASSIGN_SHADOWING;
   instr->obj_slot = obj;
   instr->value_slot = slot;
   instr->key_slot = key_slot;
@@ -143,6 +160,7 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, int **truebranch, 
   *falsebranch = &instr->false_blk;
   
   addinstr(builder, (Instr*) instr);
+  builder->block_terminated = true;
 }
 
 void addinstr_branch(FunctionBuilder *builder, int **branch) {
@@ -151,6 +169,7 @@ void addinstr_branch(FunctionBuilder *builder, int **branch) {
   *branch = &instr->blk;
   
   addinstr(builder, (Instr*) instr);
+  builder->block_terminated = true;
 }
 
 void addinstr_return(FunctionBuilder *builder, int slot) {
@@ -159,9 +178,11 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
   instr->ret_slot = slot;
   
   addinstr(builder, (Instr*) instr);
+  builder->block_terminated = true;
 }
 
 UserFunction *build_function(FunctionBuilder *builder) {
+  assert(builder->block_terminated);
   UserFunction *fn = malloc(sizeof(UserFunction));
   fn->arity = builder->arglist_len;
   fn->slots = builder->slot_base;
