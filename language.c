@@ -363,7 +363,6 @@ static void parse_if(char **textp, FunctionBuilder *builder) {
   if (!eat_string(&text, "(")) parser_error(text, "if expected opening paren");
   int testslot = ref_access(builder, parse_expr(&text, builder, 0));
   if (!eat_string(&text, ")")) parser_error(text, "if expected closing paren");
-  // blocks_ptr[0].instrs_ptr[6] = (Instr*) alloc(TestBranchInstr, {{INSTR_TESTBR}, 7, 1, 2});
   int *true_blk, *false_blk, *end_blk;
   addinstr_test_branch(builder, testslot, &true_blk, &false_blk);
   
@@ -379,6 +378,29 @@ static void parse_if(char **textp, FunctionBuilder *builder) {
   } else {
     *end_blk = *false_blk;
   }
+  *textp = text;
+}
+
+static void parse_while(char **textp, FunctionBuilder *builder) {
+  char *text = *textp;
+  if (!eat_string(&text, "(")) parser_error(text, "'while' expected opening paren");
+  
+  int *test_blk;
+  addinstr_branch(builder, &test_blk);
+  *test_blk = new_block(builder);
+  
+  int *loop_blk, *end_blk;
+  int testslot = ref_access(builder, parse_expr(&text, builder, 0));
+  if (!eat_string(&text, ")")) parser_error(text, "'while' expected closing paren");
+  addinstr_test_branch(builder, testslot, &loop_blk, &end_blk);
+  
+  *loop_blk = new_block(builder);
+  parse_block(&text, builder);
+  int *test_blk2;
+  addinstr_branch(builder, &test_blk2);
+  *test_blk2 = *test_blk;
+  
+  *end_blk = new_block(builder);
   *textp = text;
 }
 
@@ -446,6 +468,11 @@ static void parse_statement(char **textp, FunctionBuilder *builder) {
   if (eat_keyword(&text, "function")) {
     *textp = text;
     parse_fundecl(textp, builder);
+    return;
+  }
+  if (eat_keyword(&text, "while")) {
+    *textp = text;
+    parse_while(textp, builder);
     return;
   }
   {

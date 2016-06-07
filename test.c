@@ -39,6 +39,7 @@ int main(int argc, char **argv) {
     "print(\"2 !> 2 = \"+(2 !> 2));"
     "print(\"2 !<= 2 = \"+(2 !<= 2));"
     "print(\"2 !>= 2 = \"+(2 !>= 2));"
+    "var i = 0; while (i < 10) { print(\"i = \"+i); i = i + 1; }"
     "function ack(m, n) {"
     "  var np = n + 1, nm = n - 1, mm;"
     "  mm = m - 1;"

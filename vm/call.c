@@ -32,13 +32,13 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         int slot = get_root_instr->slot;
         Object *root = context;
         while (root->parent) root = root->parent;
-        assert(slot < num_slots && slots[slot] == NULL);
+        assert(slot < num_slots);
         slots[get_root_instr->slot] = root;
       } break;
       case INSTR_GET_CONTEXT:{
         GetContextInstr *get_context_instr = (GetContextInstr*) instr;
         int slot = get_context_instr->slot;
-        assert(slot < num_slots && slots[slot] == NULL);
+        assert(slot < num_slots);
         slots[slot] = context;
       } break;
       case INSTR_ACCESS: {
@@ -60,7 +60,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
           assert(false);
         }
         
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         slots[target_slot] = value;
       } break;
       case INSTR_ASSIGN: {
@@ -110,7 +110,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_ALLOC_OBJECT:{
         AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
         int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         assert(parent_slot < num_slots);
         Object *obj = alloc_object(slots[parent_slot]);
         slots[target_slot] = obj;
@@ -118,28 +118,28 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_ALLOC_INT_OBJECT:{
         AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
         int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         Object *obj = alloc_int(context, value);
         slots[target_slot] = obj;
       } break;
       case INSTR_ALLOC_FLOAT_OBJECT:{
         AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) instr;
         int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         Object *obj = alloc_float(context, value);
         slots[target_slot] = obj;
       } break;
       case INSTR_ALLOC_STRING_OBJECT:{
         AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) instr;
         int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         Object *obj = alloc_string(context, value);
         slots[target_slot] = obj;
       } break;
       case INSTR_ALLOC_CLOSURE_OBJECT:{
         AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
         int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         assert(context_slot < num_slots);
         Object *obj = alloc_closure_fn(slots[context_slot], alloc_closure_obj_instr->fn);
         slots[target_slot] = obj;
@@ -156,7 +156,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         CallInstr *call_instr = (CallInstr*) instr;
         int target_slot = call_instr->target_slot, function_slot = call_instr->function_slot;
         int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
-        assert(target_slot < num_slots && slots[target_slot] == NULL);
+        assert(target_slot < num_slots);
         assert(function_slot < num_slots);
         assert(this_slot < num_slots);
         Object *this_obj = slots[this_slot];
