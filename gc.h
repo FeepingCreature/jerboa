@@ -6,11 +6,11 @@
 struct _RootSet;
 typedef struct _RootSet RootSet;
 
-typedef struct _RootSet {
+struct _RootSet {
   Object **objects;
   int num_objects;
   RootSet *prev, *next;
-} RootSet;
+};
 
 typedef struct {
   RootSet *tail;

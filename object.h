@@ -26,19 +26,19 @@ typedef struct _TableEntry TableEntry;
 struct _Table;
 typedef struct _Table Table;
 
-typedef struct _TableEntry {
+struct _TableEntry {
   char *name;
   Object *value;
   TableEntry *next;
-} TableEntry;
+};
 
-typedef struct _Table {
+struct _Table {
   TableEntry entry;
-} Table;
+};
 
 #define OBJ_KEEP_IDS 0
 
-typedef struct _Object {
+struct _Object {
   Object *parent;
   ObjectFlags flags;
 #if OBJ_KEEP_IDS
@@ -46,7 +46,7 @@ typedef struct _Object {
 #endif
   Object *prev; // for gc
   Table tbl;
-} Object;
+};
 
 // TODO VM state struct
 Object *last_obj_allocated;

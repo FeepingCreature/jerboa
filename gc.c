@@ -1,6 +1,6 @@
 #include "gc.h"
 
-GCState state = (GCState) {NULL};
+GCState state = {0};
 
 void *gc_add_roots(Object **objects, int num_objects) {
   RootSet *prevTail = state.tail;
@@ -42,9 +42,10 @@ static void gc_sweep() {
   Object **curp = &last_obj_allocated;
   while (*curp) {
     if (!((*curp)->flags & OBJ_GC_MARK)) {
+      Object *prev = (*curp)->prev;
       obj_free(*curp);
       num_obj_allocated --;
-      *curp = (*curp)->prev; // update pointer
+      *curp = prev; // update pointer
     } else {
       (*curp)->flags &= ~OBJ_GC_MARK; // remove flag for next run
       curp = &(*curp)->prev;
