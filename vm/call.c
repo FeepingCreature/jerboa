@@ -208,12 +208,14 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         while (root->parent) root = root->parent;
         Object *bool_base = object_lookup(root, "bool", NULL);
         Object *int_base = object_lookup(root, "int", NULL);
+        Object *b_test_value = obj_instance_of(test_value, bool_base);
+        Object *i_test_value = obj_instance_of(test_value, int_base);
         
-        int test = 0;
-        if (test_value && test_value->parent == bool_base) {
-          if (((BoolObject*) test_value)->value == 1) test = 1;
-        } else if (test_value && test_value->parent == int_base) {
-          if (((IntObject*) test_value)->value != 0) test = 1;
+        bool test = false;
+        if (b_test_value) {
+          if (((BoolObject*) b_test_value)->value == true) test = true;
+        } else if (i_test_value) {
+          if (((IntObject*) i_test_value)->value != 0) test = true;
         } else {
           test = test_value != NULL;
         }

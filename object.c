@@ -77,6 +77,14 @@ void obj_free(Object *obj) {
   free(obj);
 }
 
+Object *obj_instance_of(Object *obj, Object *proto) {
+  while (obj) {
+    if (obj->parent == proto) return obj;
+    obj = obj->parent;
+  }
+  return NULL;
+}
+
 // change a property in-place
 void object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
@@ -144,7 +152,6 @@ static void *alloc_object_internal(int size) {
 
 Object *alloc_object(Object *parent) {
   Object *obj = alloc_object_internal(sizeof(Object));
-  if (parent) assert(!(parent->flags & OBJ_PRIMITIVE));
   obj->parent = parent;
 #if OBJ_KEEP_IDS
   obj->id = idcounter++;
@@ -161,7 +168,7 @@ Object *alloc_int(Object *context, int value) {
   Object *int_base = object_lookup(root, "int", NULL);
   IntObject *obj = alloc_object_internal(sizeof(IntObject));
   obj->base.parent = int_base;
-  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -178,7 +185,7 @@ Object *alloc_bool(Object *context, int value) {
   Object *bool_base = object_lookup(root, "bool", NULL);
   BoolObject *obj = alloc_object_internal(sizeof(BoolObject));
   obj->base.parent = bool_base;
-  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -195,7 +202,7 @@ Object *alloc_float(Object *context, float value) {
   Object *float_base = object_lookup(root, "float", NULL);
   FloatObject *obj = alloc_object_internal(sizeof(FloatObject));
   obj->base.parent = float_base;
-  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -214,7 +221,7 @@ Object *alloc_string(Object *context, char *value) {
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(sizeof(StringObject) + len + 1);
   obj->base.parent = string_base;
-  obj->base.flags |= OBJ_PRIMITIVE | OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM
@@ -232,7 +239,6 @@ Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *fn_base = object_lookup(root, "function", NULL);
   FunctionObject *obj = alloc_object_internal(sizeof(FunctionObject));
   obj->base.parent = fn_base;
-  obj->base.flags |= OBJ_PRIMITIVE;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;
 #if DEBUG_MEM

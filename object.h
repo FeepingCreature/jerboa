@@ -12,9 +12,7 @@ typedef enum {
   OBJ_NONE = 0,
   OBJ_CLOSED = 0x1, // no entries can be added or removed
   OBJ_IMMUTABLE = 0x2, // no entries' values can be changed
-  OBJ_PRIMITIVE = 0x4, // cannot be inherited from
-                       // ie. 5, "foo", anything with attached native data
-  OBJ_GC_MARK = 0x8    // reachable in the "gc mark" phase
+  OBJ_GC_MARK = 0x4   // reachable in the "gc mark" phase
 } ObjectFlags;
 
 struct _Object;
@@ -64,6 +62,9 @@ void object_set(Object *obj, char *key, Object *value);
 void obj_mark(Object *obj);
 
 void obj_free(Object *obj);
+
+// returns the object in obj's prototype chain whose immediate prototype is `proto`
+Object *obj_instance_of(Object *obj, Object *proto);
 
 void gc_run(); // defined here so we can call it in alloc
 

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     "var obj = {a: 5, b: null, bar: method() { print(this.a - this.b); } };"
     "obj.b = 7;"
     "var obj2 = new obj { b: 9 };"
-    ""
+    "var objx = new 5 { bar: 7 }; print(\"objx = \"+(objx + objx.bar));"
     "obj[\"foo\"] = method() { print(this.a + this.b); };"
     "obj.foo();"
     "obj.bar();"

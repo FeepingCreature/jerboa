@@ -36,11 +36,14 @@ static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object 
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int", NULL);
   
-  Object *obj1 = thisptr, *obj2 = args_ptr[0];
-  if (obj2->parent == int_base) {
-    int i1 = ((IntObject*) obj1)->value, i2 = ((IntObject*) obj2)->value;
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object
+    *iobj1 = obj_instance_of(thisptr, int_base),
+    *iobj2 = obj_instance_of(args_ptr[0], int_base);
+  assert(iobj1);
+  if (iobj2) {
+    int i1 = ((IntObject*) iobj1)->value, i2 = ((IntObject*) iobj2)->value;
     int res;
     switch (mop) {
       case MATH_ADD: res = i1 + i2; break;
@@ -53,10 +56,9 @@ static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object 
   }
   
   Object *float_base = object_lookup(root, "float", NULL);
-  if (obj2->parent == float_base || obj2->parent == int_base) {
-    float v1 = ((IntObject*) obj1)->value, v2;
-    if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
-    else v2 = ((IntObject*) obj2)->value;
+  Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
+  if (fobj2) {
+    float v1 = ((IntObject*) iobj1)->value, v2 = ((IntObject*) fobj2)->value;
     float res;
     switch (mop) {
       case MATH_ADD: res = v1 + v2; break;
@@ -93,11 +95,15 @@ static Object *float_math_fn(Object *context, Object *thisptr, Object *fn, Objec
   Object *int_base = object_lookup(root, "int", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
   
-  Object *obj1 = thisptr, *obj2 = args_ptr[0];
-  if (obj2->parent == float_base || obj2->parent == int_base) {
-    float v1 = ((FloatObject*) obj1)->value, v2;
-    if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
-    else v2 = ((IntObject*) obj2)->value;
+  Object
+    *fobj1 = obj_instance_of(thisptr, float_base),
+    *iobj2 = obj_instance_of(args_ptr[0], int_base),
+    *fobj2 = obj_instance_of(args_ptr[0], float_base);
+  assert(fobj1);
+  if (fobj2 || iobj2) {
+    float v1 = ((FloatObject*) fobj1)->value, v2;
+    if (fobj2) v2 = ((FloatObject*) fobj2)->value;
+    else v2 = ((IntObject*) iobj2)->value;
     float res;
     switch (mop) {
       case MATH_ADD: res = v1 + v2; break;
@@ -136,13 +142,19 @@ static Object *string_add_fn(Object *context, Object *thisptr, Object *fn, Objec
   Object *float_base = object_lookup(root, "float", NULL);
   Object *string_base = object_lookup(root, "string", NULL);
   
-  Object *obj1 = thisptr, *obj2 = args_ptr[0];
+  Object
+    *sobj1 = obj_instance_of(thisptr, string_base),
+    *iobj2 = obj_instance_of(args_ptr[0], int_base),
+    *bobj2 = obj_instance_of(args_ptr[0], bool_base),
+    *fobj2 = obj_instance_of(args_ptr[0], float_base),
+    *sobj2 = obj_instance_of(args_ptr[0], string_base);
+  assert(sobj1);
   
-  char *str1 = ((StringObject*) obj1)->value, *str2;
-  if (obj2->parent == string_base) asprintf(&str2, "%s", ((StringObject*) obj2)->value);
-  else if (obj2->parent == float_base) asprintf(&str2, "%f", ((FloatObject*) obj2)->value);
-  else if (obj2->parent == int_base) asprintf(&str2, "%i", ((IntObject*) obj2)->value);
-  else if (obj2->parent == bool_base) if (((BoolObject*)obj2)->value) asprintf(&str2, "%s", "true"); else asprintf(&str2, "%s", "false");
+  char *str1 = ((StringObject*) sobj1)->value, *str2;
+  if (sobj2) asprintf(&str2, "%s", ((StringObject*) sobj2)->value);
+  else if (fobj2) asprintf(&str2, "%f", ((FloatObject*) fobj2)->value);
+  else if (iobj2) asprintf(&str2, "%i", ((IntObject*) iobj2)->value);
+  else if (bobj2) if (((BoolObject*)bobj2)->value) asprintf(&str2, "%s", "true"); else asprintf(&str2, "%s", "false");
   else assert(false);
   char *str3;
   asprintf(&str3, "%s%s", str1, str2);
@@ -164,11 +176,14 @@ static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object *
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int", NULL);
   
-  Object *obj1 = thisptr, *obj2 = args_ptr[0];
-  if (obj2->parent == int_base) {
-    int i1 = ((IntObject*) obj1)->value, i2 = ((IntObject*) obj2)->value;
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object
+    *iobj1 = obj_instance_of(thisptr, int_base),
+    *iobj2 = obj_instance_of(args_ptr[0], int_base);
+  assert(iobj1);
+  if (iobj2) {
+    int i1 = ((IntObject*) iobj1)->value, i2 = ((IntObject*) iobj2)->value;
     bool res;
     switch (cmp) {
       case CMP_EQ: res = i1 == i2; break;
@@ -182,10 +197,9 @@ static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object *
   }
   
   Object *float_base = object_lookup(root, "float", NULL);
-  if (obj2->parent == float_base || obj2->parent == int_base) {
-    float v1 = ((IntObject*) obj1)->value, v2;
-    if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
-    else v2 = ((IntObject*) obj2)->value;
+  Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
+  if (fobj2) {
+    float v1 = ((IntObject*) iobj1)->value, v2 = ((FloatObject*) fobj2)->value;
     bool res;
     switch (cmp) {
       case CMP_EQ: res = v1 == v2; break;
@@ -224,14 +238,18 @@ static Object *float_cmp_fn(Object *context, Object *thisptr, Object *fn, Object
   assert(args_len == 1);
   Object *root = context;
   while (root->parent) root = root->parent;
+  
   Object *int_base = object_lookup(root, "int", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
-  
-  Object *obj1 = thisptr, *obj2 = args_ptr[0];
-  if (obj2->parent == float_base || obj2->parent == int_base) {
-    float v1 = ((FloatObject*) obj1)->value, v2;
-    if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
-    else v2 = ((IntObject*) obj2)->value;
+  Object
+    *fobj1 = obj_instance_of(thisptr, float_base),
+    *iobj2 = obj_instance_of(args_ptr[0], int_base),
+    *fobj2 = obj_instance_of(args_ptr[0], float_base);
+  assert(fobj1);
+  if (fobj2 || iobj2) {
+    float v1 = ((FloatObject*) fobj1)->value, v2;
+    if (fobj2) v2 = ((FloatObject*) fobj2)->value;
+    else v2 = ((IntObject*) iobj2)->value;
     bool res;
     switch (cmp) {
       case CMP_EQ: res = v1 == v2; break;
@@ -282,21 +300,26 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
   
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
-    if (arg->parent == int_base) {
-      printf("%i", ((IntObject*)arg)->value);
+    Object
+      *iarg = obj_instance_of(arg, int_base),
+      *barg = obj_instance_of(arg, bool_base),
+      *farg = obj_instance_of(arg, float_base),
+      *sarg = obj_instance_of(arg, string_base);
+    if (iarg) {
+      printf("%i", ((IntObject*)iarg)->value);
       continue;
     }
-    if (arg->parent == bool_base) {
-      if (((BoolObject*)arg)->value) printf("true");
+    if (barg) {
+      if (((BoolObject*)barg)->value) printf("true");
       else printf("false");
       continue;
     }
-    if (arg->parent == float_base) {
-      printf("%f", ((FloatObject*)arg)->value);
+    if (farg) {
+      printf("%f", ((FloatObject*)farg)->value);
       continue;
     }
-    if (arg->parent == string_base) {
-      printf("%s", ((StringObject*)arg)->value);
+    if (sarg) {
+      printf("%s", ((StringObject*)sarg)->value);
       continue;
     }
     assert(false);
