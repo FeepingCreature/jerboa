@@ -12,7 +12,11 @@ typedef enum {
   OBJ_NONE = 0,
   OBJ_CLOSED = 0x1, // no entries can be added or removed
   OBJ_IMMUTABLE = 0x2, // no entries' values can be changed
-  OBJ_GC_MARK = 0x4   // reachable in the "gc mark" phase
+  OBJ_NOINHERIT = 0x4, // don't allow the user to use this as a prototype
+                       // used for prototypes of objects with payload,
+                       // like int or float, that have their own alloc functions.
+                       // you can still prototype the objects themselves though.
+  OBJ_GC_MARK = 0x8   // reachable in the "gc mark" phase
 } ObjectFlags;
 
 struct _Object;
@@ -59,14 +63,12 @@ void object_set_shadowing(Object *obj, char *key, Object *value);
 
 void object_set(Object *obj, char *key, Object *value);
 
-void obj_mark(Object *obj);
+void obj_mark(Object *context, Object *obj);
 
 void obj_free(Object *obj);
 
 // returns the object in obj's prototype chain whose immediate prototype is `proto`
 Object *obj_instance_of(Object *obj, Object *proto);
-
-void gc_run(); // defined here so we can call it in alloc
 
 typedef Object* (*VMFunctionPointer)(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
@@ -101,7 +103,7 @@ typedef struct {
   char *value;
 } StringObject;
 
-Object *alloc_object(Object *parent);
+Object *alloc_object(Object *context, Object *parent);
 
 Object *alloc_int(Object *context, int value);
 

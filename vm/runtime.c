@@ -285,8 +285,11 @@ static Object *float_ge_fn(Object *context, Object *thisptr, Object *fn, Object 
 }
 
 static Object *closure_mark_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  ClosureObject *clobj = (ClosureObject*) thisptr;
-  obj_mark(clobj->context);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *closure_base = object_lookup(root, "closure", NULL);
+  ClosureObject *clobj = (ClosureObject*) obj_instance_of(thisptr, closure_base);
+  if (clobj) obj_mark(context, clobj->context);
   return NULL;
 }
 
@@ -329,31 +332,28 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
 }
 
 Object *create_root() {
-  Object *root = alloc_object(NULL);
+  Object *root = alloc_object(NULL, NULL);
   
   void *pin_root = gc_add_roots(&root, 1);
   
   object_set(root, "null", NULL);
   
-  Object *function_obj = alloc_object(NULL);
+  Object *function_obj = alloc_object(root, NULL);
+  function_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "function", function_obj);
   
-  // terrible hack. see, "closure" is the prototype for all closures, so it contains a gc_mark function
-  // so it has to be an actual closure itself (albeit with a null context/function pointer)
-  UserFunction bogus;
-  Object *closure_obj = alloc_closure_fn(root, &bogus);
-  ((ClosureObject*) closure_obj)->context = NULL;
-  ((ClosureObject*) closure_obj)->base.fn_ptr = NULL;
+  Object *closure_obj = alloc_object(root, NULL);
+  closure_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "closure", closure_obj);
   object_set(closure_obj, "gc_mark", alloc_fn(root, closure_mark_fn));
   
-  Object *bool_obj = alloc_object(NULL);
+  Object *bool_obj = alloc_object(root, NULL);
+  bool_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "bool", bool_obj);
   object_set(bool_obj, "!", alloc_fn(root, bool_not_fn));
   
-  // same hack
-  Object *int_obj = alloc_int(root, 0);
-  int_obj->flags &= ~OBJ_CLOSED; // hack hack hack
+  Object *int_obj = alloc_object(root, NULL);
+  int_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "int", int_obj);
   object_set(int_obj, "+" , alloc_fn(root, int_add_fn));
   object_set(int_obj, "-" , alloc_fn(root, int_sub_fn));
@@ -365,9 +365,8 @@ Object *create_root() {
   object_set(int_obj, "<=", alloc_fn(root, int_le_fn));
   object_set(int_obj, ">=", alloc_fn(root, int_ge_fn));
   
-  // same hack
-  Object *float_obj = alloc_float(root, 0);
-  float_obj->flags &= ~OBJ_CLOSED; // hack hack hack
+  Object *float_obj = alloc_object(root, NULL);
+  float_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "float", float_obj);
   object_set(float_obj, "+" , alloc_fn(root, float_add_fn));
   object_set(float_obj, "-" , alloc_fn(root, float_sub_fn));
@@ -379,7 +378,8 @@ Object *create_root() {
   object_set(float_obj, "<=", alloc_fn(root, float_le_fn));
   object_set(float_obj, ">=", alloc_fn(root, float_ge_fn));
   
-  Object *string_obj = alloc_object(NULL);
+  Object *string_obj = alloc_object(root, NULL);
+  string_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "string", string_obj);
   object_set(string_obj, "+", alloc_fn(root, string_add_fn));
   

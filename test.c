@@ -58,7 +58,9 @@ int main(int argc, char **argv) {
   printf("(%i cycles)\n", cyclecount);
   
   gc_remove_roots(entry);
-  gc_run();
+  
+  // one last run, deleting everything
+  gc_run(root);
   
   return 0;
 }

@@ -8,6 +8,9 @@ int cyclecount = 0;
 Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
   int num_slots = fn->slots;
   
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  
   Object **slots = calloc(sizeof(Object*), num_slots);
   void *frameroots = gc_add_roots(slots, num_slots);
   
@@ -30,8 +33,6 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
       case INSTR_GET_ROOT:{
         GetRootInstr *get_root_instr = (GetRootInstr*) instr;
         int slot = get_root_instr->slot;
-        Object *root = context;
-        while (root->parent) root = root->parent;
         assert(slot < num_slots);
         slots[get_root_instr->slot] = root;
       } break;
@@ -47,8 +48,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         int key_slot = access_instr->key_slot;
         
         assert(key_slot < num_slots && slots[key_slot]);
-        // TODO assert object type
-        char *key = ((StringObject*) slots[key_slot])->value;
+        Object *string_base = object_lookup(root, "string", NULL);
+        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
+        assert(skey);
+        char *key = skey->value;
         
         assert(obj_slot < num_slots);
         Object *obj = slots[obj_slot];
@@ -70,9 +73,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(obj_slot < num_slots);
         assert(value_slot < num_slots);
         assert(key_slot < num_slots && slots[key_slot]);
-        // TODO assert object type
-        char *key = ((StringObject*) slots[key_slot])->value;
-        
+        Object *string_base = object_lookup(root, "string", NULL);
+        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
+        assert(skey);
+        char *key = skey->value;
         Object *obj = slots[obj_slot];
         if (obj == NULL) {
           fprintf(stderr, "> assignment to null object");
@@ -88,8 +92,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(obj_slot < num_slots);
         assert(value_slot < num_slots);
         assert(key_slot < num_slots && slots[key_slot]);
-        // TODO assert object type
-        char *key = ((StringObject*) slots[key_slot])->value;
+        Object *string_base = object_lookup(root, "string", NULL);
+        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
+        assert(skey);
+        char *key = skey->value;
         Object *obj = slots[obj_slot];
         object_set_existing(obj, key, slots[value_slot]);
         // fprintf(stderr, "> obj set '%s'\n", key);
@@ -101,8 +107,10 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(obj_slot < num_slots);
         assert(value_slot < num_slots);
         assert(key_slot < num_slots && slots[key_slot]);
-        // TODO assert object type
-        char *key = ((StringObject*) slots[key_slot])->value;
+        Object *string_base = object_lookup(root, "string", NULL);
+        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
+        assert(skey);
+        char *key = skey->value;
         Object *obj = slots[obj_slot];
         object_set_shadowing(obj, key, slots[value_slot]);
         // fprintf(stderr, "> obj set '%s'\n", key);
@@ -112,7 +120,9 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
         assert(target_slot < num_slots);
         assert(parent_slot < num_slots);
-        Object *obj = alloc_object(slots[parent_slot]);
+        Object *parent_obj = slots[parent_slot];
+        if (parent_obj) assert(!(parent_obj->flags & OBJ_NOINHERIT));
+        Object *obj = alloc_object(root, slots[parent_slot]);
         slots[target_slot] = obj;
       } break;
       case INSTR_ALLOC_INT_OBJECT:{
@@ -161,15 +171,12 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(this_slot < num_slots);
         Object *this_obj = slots[this_slot];
         Object *fn_obj = slots[function_slot];
-        Object *root = context;
-        while (root->parent) root = root->parent;
         // validate function type
-        Object *function_base = object_lookup(root, "function", NULL);
         Object *closure_base = object_lookup(root, "closure", NULL);
-        Object *fn_type = fn_obj->parent;
-        while (fn_type->parent) fn_type = fn_type->parent;
-        assert(fn_type == function_base || fn_type == closure_base);
-        FunctionObject *fn = (FunctionObject*) fn_obj;
+        Object *function_base = object_lookup(root, "function", NULL);
+        FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
+        ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
+        assert(cl || fn);
         // form args array from slots
         Object **args = malloc(sizeof(Object*) * args_length);
         for (int i = 0; i < args_length; ++i) {
@@ -177,7 +184,9 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
           assert(argslot < num_slots);
           args[i] = slots[argslot];
         }
-        Object *obj = fn->fn_ptr(context, this_obj, fn_obj, args, args_length);
+        Object *obj;
+        if (cl) obj = cl->base.fn_ptr(context, this_obj, fn_obj, args, args_length);
+        else obj = fn->fn_ptr(context, this_obj, fn_obj, args, args_length);
         slots[target_slot] = obj;
         free(args);
       } break;
@@ -238,7 +247,7 @@ Object *function_handler(Object *calling_context, Object *thisptr, Object *fn, O
 Object *method_handler(Object *calling_context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   // discard calling context (lexical scoping!)
   ClosureObject *fn_obj = (ClosureObject*) fn;
-  Object *context = alloc_object(fn_obj->context);
+  Object *context = alloc_object(fn_obj->context, fn_obj->context);
   object_set(context, "this", thisptr);
   return call_function(context, &fn_obj->vmfun, args_ptr, args_len);
 }

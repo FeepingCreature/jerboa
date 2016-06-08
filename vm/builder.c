@@ -188,5 +188,6 @@ UserFunction *build_function(FunctionBuilder *builder) {
   fn->slots = builder->slot_base;
   fn->name = builder->name;
   fn->body = builder->body;
+  fn->is_method = false;
   return fn;
 }

@@ -3,6 +3,8 @@
 #include <stdio.h>
 #define DEBUG_MEM 0
 
+void gc_run(Object *context); // defined here so we can call it in alloc
+
 Object *last_obj_allocated = NULL;
 int num_obj_allocated = 0;
 int next_gc_run = 10000;
@@ -44,18 +46,18 @@ Object *object_lookup(Object *obj, char *key, bool *key_found_p) {
   return NULL;
 }
 
-void obj_mark(Object *obj) {
+void obj_mark(Object *context, Object *obj) {
   if (!obj) return;
   
   if (obj->flags & OBJ_GC_MARK) return; // break cycles
   
   obj->flags |= OBJ_GC_MARK;
   
-  obj_mark(obj->parent);
+  obj_mark(context, obj->parent);
   
   TableEntry *entry = &obj->tbl.entry;
   while (entry) {
-    obj_mark(entry->value);
+    obj_mark(context, entry->value);
     entry = entry->next;
   }
   
@@ -63,7 +65,7 @@ void obj_mark(Object *obj) {
   Object *mark_fn = object_lookup(obj, "gc_mark", &mark_fn_found);
   if (mark_fn_found) {
     FunctionObject *mark_fn_fnobj = (FunctionObject*) mark_fn;
-    mark_fn_fnobj->fn_ptr(NULL, obj, mark_fn, NULL, 0);
+    mark_fn_fnobj->fn_ptr(context, obj, mark_fn, NULL, 0);
   }
 }
 
@@ -137,9 +139,9 @@ void object_set(Object *obj, char *key, Object *value) {
 int idcounter = 0;
 #endif
 
-static void *alloc_object_internal(int size) {
+static void *alloc_object_internal(Object *context, int size) {
   if (num_obj_allocated > next_gc_run) {
-    gc_run();
+    gc_run(context);
     next_gc_run = (int) (num_obj_allocated * 1.2); // run gc after 20% growth
   }
   
@@ -150,8 +152,8 @@ static void *alloc_object_internal(int size) {
   return res;
 }
 
-Object *alloc_object(Object *parent) {
-  Object *obj = alloc_object_internal(sizeof(Object));
+Object *alloc_object(Object *context, Object *parent) {
+  Object *obj = alloc_object_internal(context, sizeof(Object));
   obj->parent = parent;
 #if OBJ_KEEP_IDS
   obj->id = idcounter++;
@@ -166,7 +168,7 @@ Object *alloc_int(Object *context, int value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
-  IntObject *obj = alloc_object_internal(sizeof(IntObject));
+  IntObject *obj = alloc_object_internal(context, sizeof(IntObject));
   obj->base.parent = int_base;
   obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
@@ -183,7 +185,7 @@ Object *alloc_bool(Object *context, int value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *bool_base = object_lookup(root, "bool", NULL);
-  BoolObject *obj = alloc_object_internal(sizeof(BoolObject));
+  BoolObject *obj = alloc_object_internal(context, sizeof(BoolObject));
   obj->base.parent = bool_base;
   obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
@@ -200,7 +202,7 @@ Object *alloc_float(Object *context, float value) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *float_base = object_lookup(root, "float", NULL);
-  FloatObject *obj = alloc_object_internal(sizeof(FloatObject));
+  FloatObject *obj = alloc_object_internal(context, sizeof(FloatObject));
   obj->base.parent = float_base;
   obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
@@ -219,7 +221,7 @@ Object *alloc_string(Object *context, char *value) {
   Object *string_base = object_lookup(root, "string", NULL);
   int len = strlen(value);
   // allocate the string as part of the object, so that it gets freed with the object
-  StringObject *obj = alloc_object_internal(sizeof(StringObject) + len + 1);
+  StringObject *obj = alloc_object_internal(context, sizeof(StringObject) + len + 1);
   obj->base.parent = string_base;
   obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
 #if OBJ_KEEP_IDS
@@ -237,7 +239,7 @@ Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *fn_base = object_lookup(root, "function", NULL);
-  FunctionObject *obj = alloc_object_internal(sizeof(FunctionObject));
+  FunctionObject *obj = alloc_object_internal(context, sizeof(FunctionObject));
   obj->base.parent = fn_base;
 #if OBJ_KEEP_IDS
   obj->base.id = idcounter++;

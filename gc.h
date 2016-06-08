@@ -22,6 +22,6 @@ void *gc_add_roots(Object **objects, int num_objects);
 
 void gc_remove_roots(void *ptr);
 
-void gc_run();
+void gc_run(Object *context);
 
 #endif

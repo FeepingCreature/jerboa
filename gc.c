@@ -27,11 +27,11 @@ void gc_remove_roots(void *ptr) {
 #include <stdio.h>
 
 // mark roots
-static void gc_mark() {
+static void gc_mark(Object *context) {
   RootSet *set = state.tail;
   while (set) {
     for (int i = 0; i < set->num_objects; ++i) {
-      obj_mark(set->objects[i]);
+      obj_mark(context, set->objects[i]);
     }
     set = set->prev;
   }
@@ -53,7 +53,7 @@ static void gc_sweep() {
   }
 }
 
-void gc_run() {
-  gc_mark();
+void gc_run(Object *context) {
+  gc_mark(context);
   gc_sweep();
 }
