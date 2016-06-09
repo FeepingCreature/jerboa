@@ -29,17 +29,17 @@ static int ref_access(FunctionBuilder *builder, RefValue rv) {
 
 static void ref_assign(FunctionBuilder *builder, RefValue rv, int value) {
   assert(rv.key != -1);
-  addinstr_assign(builder, rv.base, rv.key, value);
+  addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_PLAIN);
 }
 
 static void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value) {
   assert(rv.key != -1);
-  addinstr_assign_existing(builder, rv.base, rv.key, value);
+  addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_EXISTING);
 }
 
 static void ref_assign_shadowing(FunctionBuilder *builder, RefValue rv, int value) {
   assert(rv.key != -1);
-  addinstr_assign_shadowing(builder, rv.base, rv.key, value);
+  addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_SHADOWING);
 }
 
 /*
@@ -68,7 +68,7 @@ static void parse_object_literal_body(char **textp, FunctionBuilder *builder, in
     if (builder) {
       int key_slot = addinstr_alloc_string_object(builder, builder->scope, key_name);
       int value_slot = ref_access(builder, value);
-      addinstr_assign(builder, obj_slot, key_slot, value_slot);
+      addinstr_assign(builder, obj_slot, key_slot, value_slot, ASSIGN_PLAIN);
     }
     
     if (eat_string(textp, ",")) continue;
@@ -425,7 +425,7 @@ static void parse_vardecl(char **textp, FunctionBuilder *builder) {
     value = ref_access(builder, parse_expr(textp, builder, 0));
   }
   
-  addinstr_assign(builder, builder->scope, varname_slot, value);
+  addinstr_assign(builder, builder->scope, varname_slot, value, ASSIGN_PLAIN);
   addinstr_close_object(builder, builder->scope);
   
   // var a, b;
@@ -444,7 +444,7 @@ static void parse_fundecl(char **textp, FunctionBuilder *builder) {
   UserFunction *fn = parse_function_expr(textp);
   int name_slot = addinstr_alloc_string_object(builder, builder->scope, fn->name);
   int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
-  addinstr_assign(builder, builder->scope, name_slot, slot);
+  addinstr_assign(builder, builder->scope, name_slot, slot, ASSIGN_PLAIN);
   addinstr_close_object(builder, builder->scope);
 }
 
@@ -573,7 +573,7 @@ static UserFunction *parse_function_expr(char **textp) {
   builder->scope = addinstr_alloc_object(builder, ctxslot);
   for (int i = 0; i < arg_list_len; ++i) {
     int argname_slot = addinstr_alloc_string_object(builder, builder->scope, arg_list_ptr[i]);
-    addinstr_assign(builder, builder->scope, argname_slot, i);
+    addinstr_assign(builder, builder->scope, argname_slot, i, ASSIGN_PLAIN);
   }
   addinstr_close_object(builder, builder->scope);
   

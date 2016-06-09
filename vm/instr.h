@@ -22,6 +22,18 @@ typedef enum {
   INSTR_TESTBR
 } InstrType;
 
+typedef enum {
+  // just write the key to the top object, already-present or not
+  // ie. hashtable-type access
+  ASSIGN_PLAIN,
+  // replace an existing key (somewhere in the chain), error if absent
+  // ie. scope-type access
+  ASSIGN_EXISTING,
+  // shadow an existing key (write to top object), but error if absent anywhere
+  // ie. object-type access
+  ASSIGN_SHADOWING
+} AssignType;
+
 typedef struct {
   InstrType type;
 } Instr;
@@ -94,17 +106,8 @@ typedef struct {
 typedef struct {
   Instr base;
   int obj_slot, value_slot, key_slot;
+  AssignType type;
 } AssignInstr;
-
-typedef struct {
-  Instr base;
-  int obj_slot, value_slot, key_slot;
-} AssignExistingInstr;
-
-typedef struct {
-  Instr base;
-  int obj_slot, value_slot, key_slot;
-} AssignShadowingInstr;
 
 typedef struct {
   Instr base;

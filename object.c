@@ -145,22 +145,24 @@ static void *alloc_object_internal(Object *context, int size) {
     next_gc_run = (int) (num_obj_allocated * 1.2); // run gc after 20% growth
   }
   
-  Object *res = (Object*) calloc(size, 1);
+  Object *res = calloc(size, 1);
   res->prev = last_obj_allocated;
   last_obj_allocated = res;
   num_obj_allocated ++;
+  
+#if OBJ_KEEP_IDS
+  res->id = idcounter++;
+#if DEBUG_MEM
+  fprintf(stderr, "alloc object %i\n", obj->id);
+#endif
+#endif
+  
   return res;
 }
 
 Object *alloc_object(Object *context, Object *parent) {
   Object *obj = alloc_object_internal(context, sizeof(Object));
   obj->parent = parent;
-#if OBJ_KEEP_IDS
-  obj->id = idcounter++;
-#if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->id);
-#endif
-#endif
   return obj;
 }
 
@@ -170,13 +172,8 @@ Object *alloc_int(Object *context, int value) {
   Object *int_base = object_lookup(root, "int", NULL);
   IntObject *obj = alloc_object_internal(context, sizeof(IntObject));
   obj->base.parent = int_base;
-  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
-#if OBJ_KEEP_IDS
-  obj->base.id = idcounter++;
-#if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->base.id);
-#endif
-#endif
+  // why though?
+  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
@@ -187,13 +184,7 @@ Object *alloc_bool(Object *context, int value) {
   Object *bool_base = object_lookup(root, "bool", NULL);
   BoolObject *obj = alloc_object_internal(context, sizeof(BoolObject));
   obj->base.parent = bool_base;
-  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
-#if OBJ_KEEP_IDS
-  obj->base.id = idcounter++;
-#if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->base.id);
-#endif
-#endif
+  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
@@ -204,13 +195,7 @@ Object *alloc_float(Object *context, float value) {
   Object *float_base = object_lookup(root, "float", NULL);
   FloatObject *obj = alloc_object_internal(context, sizeof(FloatObject));
   obj->base.parent = float_base;
-  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
-#if OBJ_KEEP_IDS
-  obj->base.id = idcounter++;
-#if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->base.id);
-#endif
-#endif
+  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
@@ -223,13 +208,7 @@ Object *alloc_string(Object *context, char *value) {
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(context, sizeof(StringObject) + len + 1);
   obj->base.parent = string_base;
-  obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
-#if OBJ_KEEP_IDS
-  obj->base.id = idcounter++;
-#if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->base.id);
-#endif
-#endif
+  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = ((char*) obj) + sizeof(StringObject);
   strncpy(obj->value, value, len + 1);
   return (Object*) obj;
@@ -241,12 +220,6 @@ Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *fn_base = object_lookup(root, "function", NULL);
   FunctionObject *obj = alloc_object_internal(context, sizeof(FunctionObject));
   obj->base.parent = fn_base;
-#if OBJ_KEEP_IDS
-  obj->base.id = idcounter++;
-#if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->base.id);
-#endif
-#endif
   obj->fn_ptr = fn;
   return (Object*) obj;
 }

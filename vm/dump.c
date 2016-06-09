@@ -49,17 +49,14 @@ void dump_fn(UserFunction *fn) {
                   ((AccessInstr*) instr)->target_slot, ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key_slot);
           break;
         case INSTR_ASSIGN:
-          fprintf(stderr, "    assign: %i . %i = %i\n",
-                  ((AssignInstr*) instr)->obj_slot, ((AssignInstr*) instr)->key_slot, ((AssignInstr*) instr)->value_slot);
+        {
+          char *mode = "(plain)";
+          if (((AssignInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
+          else if (((AssignInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
+          fprintf(stderr, "    assign%s: %i . %i = %i\n",
+                  mode, ((AssignInstr*) instr)->obj_slot, ((AssignInstr*) instr)->key_slot, ((AssignInstr*) instr)->value_slot);
           break;
-        case INSTR_ASSIGN_EXISTING:
-          fprintf(stderr, "    assign_existing: %i . %i = %i\n",
-                  ((AssignExistingInstr*) instr)->obj_slot, ((AssignExistingInstr*) instr)->key_slot, ((AssignExistingInstr*) instr)->value_slot);
-          break;
-        case INSTR_ASSIGN_SHADOWING:
-          fprintf(stderr, "    assign_shadowing: %i . %i = %i\n",
-                  ((AssignShadowingInstr*) instr)->obj_slot, ((AssignShadowingInstr*) instr)->key_slot, ((AssignShadowingInstr*) instr)->value_slot);
-          break;
+        }
         case INSTR_CALL:
           fprintf(stderr, "    call: %i = %i . %i ( ",
                   ((CallInstr*) instr)->target_slot, ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);

@@ -285,6 +285,7 @@ static Object *float_ge_fn(Object *context, Object *thisptr, Object *fn, Object 
 }
 
 static Object *closure_mark_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 0);
   Object *root = context;
   while (root->parent) root = root->parent;
   Object *closure_base = object_lookup(root, "closure", NULL);

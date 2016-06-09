@@ -78,42 +78,22 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(skey);
         char *key = skey->value;
         Object *obj = slots[obj_slot];
-        if (obj == NULL) {
-          fprintf(stderr, "> assignment to null object");
-          assert(false);
+        // fprintf(stderr, "> obj set '%s'\n", key);
+        switch (assign_instr->type) {
+          case ASSIGN_PLAIN:
+            if (obj == NULL) {
+              fprintf(stderr, "> assignment to null object");
+              assert(false);
+            }
+            object_set(obj, key, slots[value_slot]);
+            break;
+          case ASSIGN_EXISTING:
+            object_set_existing(obj, key, slots[value_slot]);
+            break;
+          case ASSIGN_SHADOWING:
+            object_set_shadowing(obj, key, slots[value_slot]);
+            break;
         }
-        object_set(obj, key, slots[value_slot]);
-        // fprintf(stderr, "> obj set '%s'\n", key);
-      } break;
-      case INSTR_ASSIGN_EXISTING: {
-        AssignExistingInstr *assign_existing_instr = (AssignExistingInstr*) instr;
-        int obj_slot = assign_existing_instr->obj_slot, value_slot = assign_existing_instr->value_slot;
-        int key_slot = assign_existing_instr->key_slot;
-        assert(obj_slot < num_slots);
-        assert(value_slot < num_slots);
-        assert(key_slot < num_slots && slots[key_slot]);
-        Object *string_base = object_lookup(root, "string", NULL);
-        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
-        assert(skey);
-        char *key = skey->value;
-        Object *obj = slots[obj_slot];
-        object_set_existing(obj, key, slots[value_slot]);
-        // fprintf(stderr, "> obj set '%s'\n", key);
-      } break;
-      case INSTR_ASSIGN_SHADOWING: {
-        AssignShadowingInstr *assign_shadowing_instr = (AssignShadowingInstr*) instr;
-        int obj_slot = assign_shadowing_instr->obj_slot, value_slot = assign_shadowing_instr->value_slot;
-        int key_slot = assign_shadowing_instr->key_slot;
-        assert(obj_slot < num_slots);
-        assert(value_slot < num_slots);
-        assert(key_slot < num_slots && slots[key_slot]);
-        Object *string_base = object_lookup(root, "string", NULL);
-        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
-        assert(skey);
-        char *key = skey->value;
-        Object *obj = slots[obj_slot];
-        object_set_shadowing(obj, key, slots[value_slot]);
-        // fprintf(stderr, "> obj set '%s'\n", key);
       } break;
       case INSTR_ALLOC_OBJECT:{
         AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;

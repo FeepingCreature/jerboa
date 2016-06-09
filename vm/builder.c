@@ -34,30 +34,13 @@ int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
   return instr->target_slot;
 }
 
-void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot) {
+void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type) {
   AssignInstr *instr = malloc(sizeof(AssignInstr));
   instr->base.type = INSTR_ASSIGN;
   instr->obj_slot = obj;
   instr->value_slot = slot;
   instr->key_slot = key_slot;
-  addinstr(builder, (Instr*) instr);
-}
-
-void addinstr_assign_existing(FunctionBuilder *builder, int obj, int key_slot, int slot) {
-  AssignExistingInstr *instr = malloc(sizeof(AssignExistingInstr));
-  instr->base.type = INSTR_ASSIGN_EXISTING;
-  instr->obj_slot = obj;
-  instr->value_slot = slot;
-  instr->key_slot = key_slot;
-  addinstr(builder, (Instr*) instr);
-}
-
-void addinstr_assign_shadowing(FunctionBuilder *builder, int obj, int key_slot, int slot) {
-  AssignShadowingInstr *instr = malloc(sizeof(AssignShadowingInstr));
-  instr->base.type = INSTR_ASSIGN_SHADOWING;
-  instr->obj_slot = obj;
-  instr->value_slot = slot;
-  instr->key_slot = key_slot;
+  instr->type = type;
   addinstr(builder, (Instr*) instr);
 }
 
