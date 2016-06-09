@@ -93,6 +93,49 @@ static bool parse_object_literal(char **textp, FunctionBuilder *builder, RefValu
   return true;
 }
 
+static void parse_array_literal_body(char **textp, FunctionBuilder *builder, int obj_slot) {
+  RefValue *values_ptr = NULL; int values_len = 0;
+  while (!eat_string(textp, "]")) {
+    RefValue value = parse_expr(textp, builder, 0);
+    if (builder) {
+      values_ptr = realloc(values_ptr, sizeof(RefValue) * ++values_len);
+      values_ptr[values_len - 1] = value;
+    }
+    if (eat_string(textp, ",")) continue;
+    if (eat_string(textp, "]")) break;
+    parser_error(*textp, "expected commad or closing square bracket");
+  }
+  if (builder) {
+    int keyslot1 = addinstr_alloc_string_object(builder, builder->scope, "resize");
+    int keyslot2 = addinstr_alloc_string_object(builder, builder->scope, "[]=");
+    int resizefn = ref_access(builder, (RefValue) {obj_slot, keyslot1, REFMODE_OBJECT});
+    int assignfn = ref_access(builder, (RefValue) {obj_slot, keyslot2, REFMODE_OBJECT});
+    int newsize_slot = addinstr_alloc_int_object(builder, builder->scope, values_len);
+    obj_slot = addinstr_call1(builder, resizefn, obj_slot, newsize_slot);
+    for (int i = 0; i < values_len; ++i) {
+      int index_slot = addinstr_alloc_int_object(builder, builder->scope, i);
+      addinstr_call2(builder, assignfn, obj_slot, index_slot, ref_access(builder, values_ptr[i]));
+    }
+  }
+  free(values_ptr);
+}
+
+static bool parse_array_literal(char **textp, FunctionBuilder *builder, RefValue *rv_p) {
+  char *text = *textp;
+  eat_filler(&text);
+  
+  if (!eat_string(&text, "[")) return false;
+  
+  int obj_slot = 0;
+  if (builder) obj_slot = addinstr_alloc_array_object(builder, builder->scope);
+  *textp = text;
+  *rv_p = (RefValue) {obj_slot, -1, REFMODE_NONE};
+  
+  parse_array_literal_body(textp, builder, obj_slot);
+  
+  return true;
+}
+
 static RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   char *text = *textp;
   char *ident_name = parse_identifier(&text);
@@ -127,6 +170,10 @@ static RefValue parse_expr_stem(char **textp, FunctionBuilder *builder) {
   
   RefValue rv;
   if (parse_object_literal(&text, builder, &rv)) {
+    *textp = text;
+    return rv;
+  }
+  if (parse_array_literal(&text, builder, &rv)) {
     *textp = text;
     return rv;
   }

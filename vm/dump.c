@@ -31,6 +31,10 @@ void dump_fn(UserFunction *fn) {
           fprintf(stderr, "    alloc_float_object: %i = new float(%f)\n",
                   ((AllocFloatObjectInstr*) instr)->target_slot, ((AllocFloatObjectInstr*) instr)->value);
           break;
+        case INSTR_ALLOC_ARRAY_OBJECT:
+          fprintf(stderr, "    alloc_array_object: %i = []\n",
+                  ((AllocArrayObjectInstr*) instr)->target_slot);
+          break;
         case INSTR_ALLOC_STRING_OBJECT:
           fprintf(stderr, "    alloc_string_object: %i = new string(%s)\n",
                   ((AllocStringObjectInstr*) instr)->target_slot, ((AllocStringObjectInstr*) instr)->value);
@@ -87,4 +91,5 @@ void dump_fn(UserFunction *fn) {
     fprintf(stderr, " ---\n");
     dump_fn(other_fns_ptr[i]);
   }
+  free(other_fns_ptr);
 }

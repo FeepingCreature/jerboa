@@ -86,6 +86,14 @@ int addinstr_alloc_float_object(FunctionBuilder *builder, int ctxslot, float val
   return instr->target_slot;
 }
 
+int addinstr_alloc_array_object(FunctionBuilder *builder, int ctxslot) {
+  AllocArrayObjectInstr *instr = malloc(sizeof(AllocArrayObjectInstr));
+  instr->base.type = INSTR_ALLOC_ARRAY_OBJECT;
+  instr->target_slot = builder->slot_base++;
+  addinstr(builder, (Instr*) instr);
+  return instr->target_slot;
+}
+
 int addinstr_alloc_string_object(FunctionBuilder *builder, int ctxslot, char *value) {
   AllocStringObjectInstr *instr = malloc(sizeof(AllocStringObjectInstr));
   instr->base.type = INSTR_ALLOC_STRING_OBJECT;

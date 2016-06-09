@@ -103,6 +103,12 @@ typedef struct {
   char *value;
 } StringObject;
 
+typedef struct {
+  Object base;
+  Object **ptr;
+  int length;
+} ArrayObject;
+
 Object *alloc_object(Object *context, Object *parent);
 
 Object *alloc_int(Object *context, int value);
@@ -112,6 +118,8 @@ Object *alloc_float(Object *context, float value);
 Object *alloc_string(Object *context, char *value);
 
 Object *alloc_bool(Object *context, int value);
+
+Object *alloc_array(Object *context, Object **ptr, int length);
 
 Object *alloc_fn(Object *context, VMFunctionPointer fn);
 

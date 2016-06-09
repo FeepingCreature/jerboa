@@ -214,6 +214,18 @@ Object *alloc_string(Object *context, char *value) {
   return (Object*) obj;
 }
 
+Object *alloc_array(Object *context, Object **ptr, int length) {
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *obj = alloc_object_internal(context, sizeof(ArrayObject));
+  obj->base.parent = array_base;
+  obj->ptr = ptr;
+  obj->length = length;
+  object_set((Object*) obj, "length", alloc_int(context, length));
+  return (Object*) obj;
+}
+
 Object *alloc_fn(Object *context, VMFunctionPointer fn) {
   Object *root = context;
   while (root->parent) root = root->parent;

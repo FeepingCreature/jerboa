@@ -294,6 +294,97 @@ static Object *closure_mark_fn(Object *context, Object *thisptr, Object *fn, Obj
   return NULL;
 }
 
+static Object *array_mark_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 0);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  if (arr_obj) {
+    for (int i = 0; i < arr_obj->length; ++i) {
+      obj_mark(context, arr_obj->ptr[i]);
+    }
+  }
+  return NULL;
+}
+
+static Object *array_resize_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 1);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
+  assert(iarg);
+  assert(arr_obj);
+  int newsize = iarg->value;
+  assert(newsize >= 0);
+  arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * newsize);
+  arr_obj->length = newsize;
+  object_set(thisptr, "length", alloc_int(context, newsize));
+  return thisptr;
+}
+
+static Object *array_push_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 1);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  assert(arr_obj);
+  Object *value = args_ptr[0];
+  arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * ++arr_obj->length);
+  arr_obj->ptr[arr_obj->length - 1] = value;
+  object_set(thisptr, "length", alloc_int(context, arr_obj->length));
+  return thisptr;
+}
+
+static Object *array_pop_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 0);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  assert(arr_obj);
+  Object *res = arr_obj->ptr[arr_obj->length - 1];
+  arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * --arr_obj->length);
+  object_set(thisptr, "length", alloc_int(context, arr_obj->length));
+  return res;
+}
+
+static Object *array_index_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 1);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
+  if (!iarg) return NULL;
+  assert(arr_obj);
+  int index = iarg->value;
+  assert(index >= 0 && index < arr_obj->length);
+  return arr_obj->ptr[index];
+}
+
+static Object *array_index_assign_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  assert(args_len == 2);
+  Object *root = context;
+  while (root->parent) root = root->parent;
+  Object *int_base = object_lookup(root, "int", NULL);
+  Object *array_base = object_lookup(root, "array", NULL);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
+  assert(arr_obj);
+  assert(iarg);
+  int index = iarg->value;
+  assert(index >= 0 && index < arr_obj->length);
+  Object *value = args_ptr[1];
+  arr_obj->ptr[index] = value;
+  return NULL;
+}
+
 static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   Object *root = context;
   while (root->parent) root = root->parent;
@@ -383,6 +474,16 @@ Object *create_root() {
   string_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "string", string_obj);
   object_set(string_obj, "+", alloc_fn(root, string_add_fn));
+  
+  Object *array_obj = alloc_object(root, NULL);
+  array_obj->flags |= OBJ_NOINHERIT;
+  object_set(root, "array", array_obj);
+  object_set(array_obj, "gc_mark", alloc_fn(root, array_mark_fn));
+  object_set(array_obj, "resize", alloc_fn(root, array_resize_fn));
+  object_set(array_obj, "push", alloc_fn(root, array_push_fn));
+  object_set(array_obj, "pop", alloc_fn(root, array_pop_fn));
+  object_set(array_obj, "[]", alloc_fn(root, array_index_fn));
+  object_set(array_obj, "[]=", alloc_fn(root, array_index_assign_fn));
   
   object_set(root, "print", alloc_fn(root, print_fn));
   
