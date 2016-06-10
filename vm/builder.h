@@ -21,6 +21,8 @@ int new_block(FunctionBuilder *builder);
 
 void terminate(FunctionBuilder *builder);
 
+void addinstr(FunctionBuilder *builder, Instr *instr);
+
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot);
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type);

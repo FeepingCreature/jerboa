@@ -42,24 +42,44 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(slot < num_slots);
         slots[slot] = context;
       } break;
-      case INSTR_ACCESS: {
+      case INSTR_ACCESS: case INSTR_ACCESS_STRING_KEY: {
         AccessInstr *access_instr = (AccessInstr*) instr;
-        int target_slot = access_instr->target_slot, obj_slot = access_instr->obj_slot;
+        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+        int target_slot, obj_slot;
+        if (instr->type == INSTR_ACCESS) {
+          target_slot = access_instr->target_slot;
+          obj_slot = access_instr->obj_slot;
+        } else {
+          target_slot = aski->target_slot;
+          obj_slot = aski->obj_slot;
+        }
         
         assert(obj_slot < num_slots);
         Object *obj = slots[obj_slot];
         
-        int key_slot = access_instr->key_slot;
-        
-        assert(key_slot < num_slots && slots[key_slot]);
-        Object *string_base = object_lookup(root, "string", NULL);
-        Object *key_obj = slots[key_slot];
-        assert(key_obj);
-        StringObject *skey = (StringObject*) obj_instance_of(slots[key_slot], string_base);
-        bool object_found = false;
         Object *value;
-        if (skey) {
-          char *key = skey->value;
+        bool object_found = false;
+        
+        char *key;
+        bool has_char_key = false;
+        
+        if (instr->type == INSTR_ACCESS) {
+          int key_slot = access_instr->key_slot;
+          assert(key_slot < num_slots && slots[key_slot]);
+          Object *string_base = object_lookup(root, "string", NULL);
+          Object *key_obj = slots[key_slot];
+          assert(key_obj);
+          StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+          if (skey) {
+            key = skey->value;
+            has_char_key = true;
+          }
+        } else {
+          key = aski->key;
+          has_char_key = true;
+        }
+        if (has_char_key) {
+          // fprintf(stderr, "> obj get %p . '%s'\n", (void*) obj, key);
           value = object_lookup(obj, key, &object_found);
         }
         if (!object_found) {
@@ -70,14 +90,20 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
             FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
             ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
             assert(fn_index_op || cl_index_op);
+            Object *key_obj;
+            if (instr->type == INSTR_ACCESS) {
+              key_obj = slots[access_instr->key_slot];
+            } else {
+              key_obj = alloc_string(context, aski->key);
+            }
             if (fn_index_op) value = fn_index_op->fn_ptr(context, obj, index_op, &key_obj, 1);
             else value = cl_index_op->base.fn_ptr(context, obj, index_op, &key_obj, 1);
             if (value) object_found = true;
           }
         }
         if (!object_found) {
-          if (skey) {
-            fprintf(stderr, "> property not found: '%s'\n", skey->value);
+          if (has_char_key) {
+            fprintf(stderr, "> property not found: '%s'\n", key);
           } else {
             fprintf(stderr, "> property not found!\n");
           }
@@ -87,17 +113,40 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         assert(target_slot < num_slots);
         slots[target_slot] = value;
       } break;
-      case INSTR_ASSIGN: {
+      case INSTR_ASSIGN: case INSTR_ASSIGN_STRING_KEY: {
         AssignInstr *assign_instr = (AssignInstr*) instr;
-        int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
-        int key_slot = assign_instr->key_slot;
-        assert(obj_slot < num_slots);
-        assert(value_slot < num_slots);
-        assert(key_slot < num_slots && slots[key_slot]);
-        Object *string_base = object_lookup(root, "string", NULL);
-        Object *key_obj = slots[key_slot], *obj = slots[obj_slot];
-        StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
-        if (!skey) {
+        AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
+        AssignType assign_type;
+        Object *obj, *value_obj;
+        char *key;
+        bool has_char_key = false;
+        if (instr->type == INSTR_ASSIGN) {
+          int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
+          int key_slot = assign_instr->key_slot;
+          assert(obj_slot < num_slots);
+          assert(value_slot < num_slots);
+          assert(key_slot < num_slots && slots[key_slot]);
+          obj = slots[obj_slot];
+          value_obj = slots[value_slot];
+          Object *string_base = object_lookup(root, "string", NULL);
+          Object *key_obj = slots[key_slot];
+          StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+          if (skey) {
+            key = skey->value;
+            assign_type = assign_instr->type;
+            has_char_key = true;
+          }
+        } else {
+          int obj_slot = aski->obj_slot, value_slot = aski->value_slot;
+          assert(obj_slot < num_slots);
+          assert(value_slot < num_slots);
+          obj = slots[obj_slot];
+          value_obj = slots[value_slot];
+          key = aski->key;
+          assign_type = aski->type;
+          has_char_key = true;
+        }
+        if (!has_char_key) { // can assume INSTR_ASSIGN
           // non-string key, goes to []=
           Object *index_assign_op = object_lookup(obj, "[]=", NULL);
           if (index_assign_op) {
@@ -106,28 +155,27 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
             FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
             ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
             assert(fn_index_assign_op || cl_index_assign_op);
-            Object *key_value_pair[] = {key_obj, slots[value_slot]};
+            Object *key_value_pair[] = {slots[assign_instr->key_slot], value_obj};
             if (fn_index_assign_op) fn_index_assign_op->fn_ptr(context, obj, index_assign_op, key_value_pair, 2);
             else cl_index_assign_op->base.fn_ptr(context, obj, index_assign_op, key_value_pair, 2);
             break;
           }
           assert(false);
         }
-        char *key = skey->value;
-        // fprintf(stderr, "> obj set '%s'\n", key);
-        switch (assign_instr->type) {
+        // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
+        switch (assign_type) {
           case ASSIGN_PLAIN:
             if (obj == NULL) {
               fprintf(stderr, "> assignment to null object");
               assert(false);
             }
-            object_set(obj, key, slots[value_slot]);
+            object_set(obj, key, value_obj);
             break;
           case ASSIGN_EXISTING:
-            object_set_existing(obj, key, slots[value_slot]);
+            object_set_existing(obj, key, value_obj);
             break;
           case ASSIGN_SHADOWING:
-            object_set_shadowing(obj, key, slots[value_slot]);
+            object_set_shadowing(obj, key, value_obj);
             break;
         }
       } break;
@@ -251,7 +299,7 @@ Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int 
         block = &fn->body.blocks_ptr[target_blk];
         instr_offs = 0;
       } break;
-      default: assert(false); break;
+      default: fprintf(stderr, "unknown instruction: %i\n", instr->type); assert(false); break;
     }
   }
 }

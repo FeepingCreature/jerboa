@@ -2,6 +2,7 @@
 
 #include "parser.h"
 #include "vm/builder.h"
+#include "vm/optimize.h"
 
 typedef enum {
   REFMODE_NONE = -1, // not a reference
@@ -627,7 +628,7 @@ static UserFunction *parse_function_expr(char **textp) {
   parse_block(textp, builder);
   terminate(builder);
   
-  return build_function(builder);
+  return optimize(build_function(builder));
 }
 
 UserFunction *parse_module(char **textp) {
@@ -645,5 +646,5 @@ UserFunction *parse_module(char **textp) {
     parse_statement(textp, builder);
   }
   addinstr_return(builder, builder->scope);
-  return build_function(builder);
+  return optimize(build_function(builder));
 }

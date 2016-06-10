@@ -16,7 +16,7 @@ Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_p
   }
   TableEntry *entry = &tbl->entry, *prev_entry;
   while (entry) {
-    if (strcmp(key, entry->name) == 0) return &entry->value;
+    if (key[0] == entry->name[0] && strcmp(key, entry->name) == 0) return &entry->value;
     prev_entry = entry;
     entry = entry->next;
   }
@@ -142,7 +142,8 @@ int idcounter = 0;
 static void *alloc_object_internal(Object *context, int size) {
   if (num_obj_allocated > next_gc_run) {
     gc_run(context);
-    next_gc_run = (int) (num_obj_allocated * 1.2); // run gc after 20% growth
+    // run gc after 20% growth or 10000 allocated or thereabouts
+    next_gc_run = (int) (num_obj_allocated * 1.2) + 10000;
   }
   
   Object *res = calloc(size, 1);

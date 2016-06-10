@@ -15,13 +15,16 @@ void terminate(FunctionBuilder *builder) {
   addinstr_return(builder, builder->slot_base++);
 }
 
-static void addinstr(FunctionBuilder *builder, Instr *instr) {
+void addinstr(FunctionBuilder *builder, Instr *instr) {
   assert(!builder->block_terminated);
   FunctionBody *body = &builder->body;
   InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
   block->instrs_len ++;
   block->instrs_ptr = realloc(block->instrs_ptr, block->instrs_len * sizeof(Instr*));
   block->instrs_ptr[block->instrs_len - 1] = instr;
+  if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
+    builder->block_terminated = true;
+  }
 }
 
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
@@ -151,7 +154,6 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, int **truebranch, 
   *falsebranch = &instr->false_blk;
   
   addinstr(builder, (Instr*) instr);
-  builder->block_terminated = true;
 }
 
 void addinstr_branch(FunctionBuilder *builder, int **branch) {
@@ -160,7 +162,6 @@ void addinstr_branch(FunctionBuilder *builder, int **branch) {
   *branch = &instr->blk;
   
   addinstr(builder, (Instr*) instr);
-  builder->block_terminated = true;
 }
 
 void addinstr_return(FunctionBuilder *builder, int slot) {
@@ -169,7 +170,6 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
   instr->ret_slot = slot;
   
   addinstr(builder, (Instr*) instr);
-  builder->block_terminated = true;
 }
 
 UserFunction *build_function(FunctionBuilder *builder) {

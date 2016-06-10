@@ -80,6 +80,19 @@ void dump_fn(UserFunction *fn) {
           fprintf(stderr, "    test-branch: %i ? <%i> : <%i>\n",
                   ((TestBranchInstr*) instr)->test_slot, ((TestBranchInstr*) instr)->true_blk, ((TestBranchInstr*) instr)->false_blk);
           break;
+        case INSTR_ACCESS_STRING_KEY:
+          fprintf(stderr, "    access: %i = %i . '%s' \t\t(opt: string key)\n",
+                  ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot, ((AccessStringKeyInstr*) instr)->key);
+          break;
+        case INSTR_ASSIGN_STRING_KEY:
+        {
+          char *mode = "(plain)";
+          if (((AssignStringKeyInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
+          else if (((AssignStringKeyInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
+          fprintf(stderr, "    assign%s: %i . '%s' = %i \t\t(opt: string key)\n",
+                  mode, ((AssignStringKeyInstr*) instr)->obj_slot, ((AssignStringKeyInstr*) instr)->key, ((AssignStringKeyInstr*) instr)->value_slot);
+          break;
+        }
         default: fprintf(stderr, "    unknown instruction: %i\n", instr->type); break;
       }
     }
