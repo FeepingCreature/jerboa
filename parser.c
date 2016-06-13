@@ -18,12 +18,18 @@ static bool starts_with(char **textp, char *cmp) {
   return true;
 }
 
-static void eat_whitespace(char **textp) {
-  while ((*textp)[0] == ' ') (*textp)++;
-}
-
 void eat_filler(char **textp) {
-  eat_whitespace(textp);
+  int comment_depth = 0;
+  while (**textp) {
+    if (comment_depth) {
+      if (starts_with(textp, "*/")) comment_depth --;
+      else (*textp)++;
+    } else {
+      if (starts_with(textp, "/*")) comment_depth ++;
+      else if ((*textp)[0] == ' ' || (*textp)[0] == '\n') (*textp)++;
+      else break;
+    }
+  }
 }
 
 bool eat_string(char **textp, char *keyword) {
