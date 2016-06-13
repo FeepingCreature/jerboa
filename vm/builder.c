@@ -27,14 +27,19 @@ void addinstr(FunctionBuilder *builder, Instr *instr) {
   }
 }
 
+// use SAVE_RETURN so that ACCESS may generate a call internally
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
-  AccessInstr *instr = malloc(sizeof(AccessInstr));
-  instr->base.type = INSTR_ACCESS;
-  instr->target_slot = builder->slot_base++;
-  instr->obj_slot = obj_slot;
-  instr->key_slot = key_slot;
-  addinstr(builder, (Instr*) instr);
-  return instr->target_slot;
+  AccessInstr *instr1 = malloc(sizeof(AccessInstr));
+  instr1->base.type = INSTR_ACCESS;
+  instr1->obj_slot = obj_slot;
+  instr1->key_slot = key_slot;
+  addinstr(builder, (Instr*) instr1);
+  
+  SaveResultInstr *instr2 = malloc(sizeof(SaveResultInstr));
+  instr2->base.type = INSTR_SAVE_RESULT;
+  instr2->target_slot = builder->slot_base++;
+  addinstr(builder, (Instr*) instr2);
+  return instr2->target_slot;
 }
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type) {
@@ -117,16 +122,19 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFun
 }
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
-  CallInstr *instr = malloc(sizeof(CallInstr));
-  instr->base.type = INSTR_CALL;
-  instr->target_slot = builder->slot_base++;
-  instr->function_slot = fn;
-  instr->this_slot = this_slot;
-  instr->args_length = args_len;
-  instr->args_ptr = args_ptr;
+  CallInstr *instr1 = malloc(sizeof(CallInstr));
+  instr1->base.type = INSTR_CALL;
+  instr1->function_slot = fn;
+  instr1->this_slot = this_slot;
+  instr1->args_length = args_len;
+  instr1->args_ptr = args_ptr;
+  addinstr(builder, (Instr*) instr1);
   
-  addinstr(builder, (Instr*) instr);
-  return instr->target_slot;
+  SaveResultInstr *instr2 = malloc(sizeof(SaveResultInstr));
+  instr2->base.type = INSTR_SAVE_RESULT;
+  instr2->target_slot = builder->slot_base++;
+  addinstr(builder, (Instr*) instr2);
+  return instr2->target_slot;
 }
 
 int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot) {

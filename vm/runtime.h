@@ -3,6 +3,6 @@
 
 #include "object.h"
 
-Object *create_root();
+Object *create_root(VMState *state);
 
 #endif

@@ -13,9 +13,14 @@
 #include "language.h"
 
 int main(int argc, char **argv) {
-  Object *root = create_root();
+  // TODO clean up
+  VMState vmstate = {0};
+  vm_alloc_frame(&vmstate);
   
-  void *entry = gc_add_roots(&root, 1);
+  Object *root = create_root(&vmstate);
+  
+  GCRootSet set;
+  gc_add_roots(&vmstate, &root, 1, &set);
   
   char *text =
     "var obj = {a: 5, b: null, bar: method() { print(this.a - this.b); } };"
@@ -57,14 +62,17 @@ int main(int argc, char **argv) {
   UserFunction *module = parse_module(&text);
   dump_fn(module);
   
-  root = call_function(root, module, NULL, 0);
+  vmstate.stack_len = 0;
+  call_function(&vmstate, root, module, NULL, 0);
+  vm_run(&vmstate, root);
+  root = vmstate.result_value;
   
   printf("(%i cycles)\n", cyclecount);
   
-  gc_remove_roots(entry);
+  gc_remove_roots(&vmstate, &set);
   
   // one last run, deleting everything
-  gc_run(root);
+  gc_run(&vmstate);
   
   return 0;
 }

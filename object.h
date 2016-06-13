@@ -41,19 +41,48 @@ struct _Table {
 #define OBJ_KEEP_IDS 0
 
 struct _Object {
+  Table tbl;
   Object *parent;
+  int size;
   ObjectFlags flags;
 #if OBJ_KEEP_IDS
   int id;
 #endif
   Object *prev; // for gc
-  Table tbl;
 };
 
-// TODO VM state struct
-Object *last_obj_allocated;
-int num_obj_allocated;
-int next_gc_run;
+struct _GCRootSet;
+typedef struct _GCRootSet GCRootSet;
+
+struct _GCRootSet {
+  Object **objects;
+  int num_objects;
+  GCRootSet *prev, *next;
+};
+
+typedef struct {
+  GCRootSet *tail;
+} GCState;
+
+typedef struct {
+  UserFunction *uf;
+  Object *context;
+  Object **slots_ptr; int slots_len;
+  GCRootSet frameroot; // gc entry for the pinned slots array
+  InstrBlock *block;
+  int instr_offs;
+} Callframe;
+
+typedef struct {
+  Callframe *stack_ptr; int stack_len;
+  Object *root;
+  Object *result_value;
+  
+  // memory handling
+  GCState gcstate;
+  Object *last_obj_allocated;
+  int num_obj_allocated, next_gc_run;
+} VMState;
 
 Object *object_lookup(Object *obj, char *key, bool *key_found);
 
@@ -63,14 +92,14 @@ void object_set_shadowing(Object *obj, char *key, Object *value);
 
 void object_set(Object *obj, char *key, Object *value);
 
-void obj_mark(Object *context, Object *obj);
+void obj_mark(VMState *state, Object *obj);
 
 void obj_free(Object *obj);
 
 // returns the object in obj's prototype chain whose immediate prototype is `proto`
 Object *obj_instance_of(Object *obj, Object *proto);
 
-typedef Object* (*VMFunctionPointer)(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
+typedef void (*VMFunctionPointer)(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
 typedef struct {
   Object base;
@@ -109,18 +138,25 @@ typedef struct {
   int length;
 } ArrayObject;
 
-Object *alloc_object(Object *context, Object *parent);
+typedef struct {
+  Object base;
+  void (*mark_fn)(VMState *state, Object *obj);
+} CustomGCObject;
 
-Object *alloc_int(Object *context, int value);
+Object *alloc_object(VMState *state, Object *parent);
 
-Object *alloc_float(Object *context, float value);
+Object *alloc_int(VMState *state, int value);
 
-Object *alloc_string(Object *context, char *value);
+Object *alloc_float(VMState *state, float value);
 
-Object *alloc_bool(Object *context, int value);
+Object *alloc_string(VMState *state, char *value);
 
-Object *alloc_array(Object *context, Object **ptr, int length);
+Object *alloc_bool(VMState *state, int value);
 
-Object *alloc_fn(Object *context, VMFunctionPointer fn);
+Object *alloc_array(VMState *state, Object **ptr, int length);
+
+Object *alloc_fn(VMState *state, VMFunctionPointer fn);
+
+Object *alloc_custom_gc(VMState *state);
 
 #endif

@@ -5,12 +5,18 @@
 
 int cyclecount;
 
-Object *call_function( Object* context, UserFunction* fn, Object** args_ptr, int args_len );
+void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len);
 
-Object *function_handler( Object* calling_context, Object* thisptr, Object* fn, Object** args_ptr, int args_len );
+void function_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
-Object *method_handler( Object* calling_context, Object* thisptr, Object* fn, Object** args_ptr, int args_len );
+void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
 Object *alloc_closure_fn(Object *context, UserFunction *fn);
+
+Callframe *vm_alloc_frame(VMState *state);
+
+void vm_remove_frame(VMState *state);
+
+void vm_run(VMState *state, Object *root);
 
 #endif

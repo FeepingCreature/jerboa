@@ -3,11 +3,55 @@
 #include <stdio.h>
 #define DEBUG_MEM 0
 
-void gc_run(Object *context); // defined here so we can call it in alloc
+void gc_run(VMState *state); // defined here so we can call it in alloc
 
-Object *last_obj_allocated = NULL;
-int num_obj_allocated = 0;
-int next_gc_run = 10000;
+void *int_freelist = NULL;
+void *table_freelist = NULL;
+void *obj_freelist = NULL;
+
+static void *cache_alloc(int size) {
+  void *res = NULL;
+  if (size == sizeof(IntObject)) {
+    if (int_freelist) {
+      res = int_freelist;
+      int_freelist = *(void**) int_freelist;
+    }
+  }
+  else if (size == sizeof(TableEntry)) {
+    if (table_freelist) {
+      res = table_freelist;
+      table_freelist = *(void**) table_freelist;
+    }
+  } else if (size == sizeof(Object)) {
+    if (obj_freelist) {
+      res = obj_freelist;
+      obj_freelist = *(void**) obj_freelist;
+    }
+  }
+  if (!res) return calloc(size, 1);
+  memset(res, 0, size);
+  return res;
+}
+
+static void cache_free(int size, void *ptr) {
+  switch (size) {
+    case sizeof(IntObject):
+      *(void**) ptr = int_freelist;
+      int_freelist = ptr;
+      break;
+    case sizeof(TableEntry):
+      *(void**) ptr = table_freelist;
+      table_freelist = ptr;
+      break;
+    case sizeof(Object):
+      *(void**) ptr = obj_freelist;
+      obj_freelist = ptr;
+      break;
+    default:
+      free(ptr);
+      break;
+  }
+}
 
 Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_ptr) {
   if (tbl->entry.name == NULL) {
@@ -21,7 +65,7 @@ Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_p
     entry = entry->next;
   }
   if (first_free_ptr) {
-    TableEntry *new_entry = calloc(sizeof(TableEntry), 1);
+    TableEntry *new_entry = cache_alloc(sizeof(TableEntry));
     prev_entry->next = new_entry;
     *first_free_ptr = new_entry;
   }
@@ -46,26 +90,26 @@ Object *object_lookup(Object *obj, char *key, bool *key_found_p) {
   return NULL;
 }
 
-void obj_mark(Object *context, Object *obj) {
+void obj_mark(VMState *state, Object *obj) {
   if (!obj) return;
   
   if (obj->flags & OBJ_GC_MARK) return; // break cycles
   
   obj->flags |= OBJ_GC_MARK;
   
-  obj_mark(context, obj->parent);
+  obj_mark(state, obj->parent);
   
   TableEntry *entry = &obj->tbl.entry;
   while (entry) {
-    obj_mark(context, entry->value);
+    obj_mark(state, entry->value);
     entry = entry->next;
   }
   
-  bool mark_fn_found;
-  Object *mark_fn = object_lookup(obj, "gc_mark", &mark_fn_found);
-  if (mark_fn_found) {
-    FunctionObject *mark_fn_fnobj = (FunctionObject*) mark_fn;
-    mark_fn_fnobj->fn_ptr(context, obj, mark_fn, NULL, 0);
+  bool cust_gc_found;
+  Object *cust_gc_obj = object_lookup(obj, "gc", &cust_gc_found);
+  if (cust_gc_found) {
+    CustomGCObject *cust_gc = (CustomGCObject*) cust_gc_obj;
+    cust_gc->mark_fn(state, obj);
   }
 }
 
@@ -73,10 +117,10 @@ void obj_free(Object *obj) {
   TableEntry *entry = obj->tbl.entry.next;
   while (entry) {
     TableEntry *next = entry->next;
-    free(entry);
+    cache_free(sizeof(TableEntry), entry);
     entry = next;
   }
-  free(obj);
+  cache_free(obj->size, obj);
 }
 
 Object *obj_instance_of(Object *obj, Object *proto) {
@@ -139,17 +183,18 @@ void object_set(Object *obj, char *key, Object *value) {
 int idcounter = 0;
 #endif
 
-static void *alloc_object_internal(Object *context, int size) {
-  if (num_obj_allocated > next_gc_run) {
-    gc_run(context);
+static void *alloc_object_internal(VMState *state, int size) {
+  if (state->num_obj_allocated > state->next_gc_run) {
+    gc_run(state);
     // run gc after 20% growth or 10000 allocated or thereabouts
-    next_gc_run = (int) (num_obj_allocated * 1.2) + 10000;
+    state->next_gc_run = (int) (state->num_obj_allocated * 1.2) + 10000;
   }
   
-  Object *res = calloc(size, 1);
-  res->prev = last_obj_allocated;
-  last_obj_allocated = res;
-  num_obj_allocated ++;
+  Object *res = cache_alloc(size);
+  res->prev = state->last_obj_allocated;
+  res->size = size;
+  state->last_obj_allocated = res;
+  state->num_obj_allocated ++;
   
 #if OBJ_KEEP_IDS
   res->id = idcounter++;
@@ -161,17 +206,15 @@ static void *alloc_object_internal(Object *context, int size) {
   return res;
 }
 
-Object *alloc_object(Object *context, Object *parent) {
-  Object *obj = alloc_object_internal(context, sizeof(Object));
+Object *alloc_object(VMState *state, Object *parent) {
+  Object *obj = alloc_object_internal(state, sizeof(Object));
   obj->parent = parent;
   return obj;
 }
 
-Object *alloc_int(Object *context, int value) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *int_base = object_lookup(root, "int", NULL);
-  IntObject *obj = alloc_object_internal(context, sizeof(IntObject));
+Object *alloc_int(VMState *state, int value) {
+  Object *int_base = object_lookup(state->root, "int", NULL);
+  IntObject *obj = alloc_object_internal(state, sizeof(IntObject));
   obj->base.parent = int_base;
   // why though?
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
@@ -179,35 +222,29 @@ Object *alloc_int(Object *context, int value) {
   return (Object*) obj;
 }
 
-Object *alloc_bool(Object *context, int value) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *bool_base = object_lookup(root, "bool", NULL);
-  BoolObject *obj = alloc_object_internal(context, sizeof(BoolObject));
+Object *alloc_bool(VMState *state, int value) {
+  Object *bool_base = object_lookup(state->root, "bool", NULL);
+  BoolObject *obj = alloc_object_internal(state, sizeof(BoolObject));
   obj->base.parent = bool_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
 
-Object *alloc_float(Object *context, float value) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *float_base = object_lookup(root, "float", NULL);
-  FloatObject *obj = alloc_object_internal(context, sizeof(FloatObject));
+Object *alloc_float(VMState *state, float value) {
+  Object *float_base = object_lookup(state->root, "float", NULL);
+  FloatObject *obj = alloc_object_internal(state, sizeof(FloatObject));
   obj->base.parent = float_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
 
-Object *alloc_string(Object *context, char *value) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *string_base = object_lookup(root, "string", NULL);
+Object *alloc_string(VMState *state, char *value) {
+  Object *string_base = object_lookup(state->root, "string", NULL);
   int len = strlen(value);
   // allocate the string as part of the object, so that it gets freed with the object
-  StringObject *obj = alloc_object_internal(context, sizeof(StringObject) + len + 1);
+  StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
   obj->base.parent = string_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = ((char*) obj) + sizeof(StringObject);
@@ -215,24 +252,27 @@ Object *alloc_string(Object *context, char *value) {
   return (Object*) obj;
 }
 
-Object *alloc_array(Object *context, Object **ptr, int length) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *array_base = object_lookup(root, "array", NULL);
-  ArrayObject *obj = alloc_object_internal(context, sizeof(ArrayObject));
+Object *alloc_array(VMState *state, Object **ptr, int length) {
+  Object *array_base = object_lookup(state->root, "array", NULL);
+  ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
   obj->base.parent = array_base;
   obj->ptr = ptr;
   obj->length = length;
-  object_set((Object*) obj, "length", alloc_int(context, length));
+  object_set((Object*) obj, "length", alloc_int(state, length));
   return (Object*) obj;
 }
 
-Object *alloc_fn(Object *context, VMFunctionPointer fn) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *fn_base = object_lookup(root, "function", NULL);
-  FunctionObject *obj = alloc_object_internal(context, sizeof(FunctionObject));
+Object *alloc_fn(VMState *state, VMFunctionPointer fn) {
+  Object *fn_base = object_lookup(state->root, "function", NULL);
+  FunctionObject *obj = alloc_object_internal(state, sizeof(FunctionObject));
   obj->base.parent = fn_base;
   obj->fn_ptr = fn;
+  return (Object*) obj;
+}
+
+Object *alloc_custom_gc(VMState *state) {
+  CustomGCObject *obj = alloc_object_internal(state, sizeof(CustomGCObject));
+  obj->base.parent = NULL;
+  obj->mark_fn = NULL;
   return (Object*) obj;
 }

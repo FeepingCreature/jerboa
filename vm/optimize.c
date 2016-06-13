@@ -39,6 +39,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             }
           CASE(INSTR_RETURN, ReturnInstr, return_instr)
             slots[return_instr->ret_slot] = false;
+          CASE(INSTR_SAVE_RESULT, SaveResultInstr, save_result_instr)
           CASE(INSTR_BR, BranchInstr, branch_instr)
           CASE(INSTR_TESTBR, TestBranchInstr, test_branch_instr)
             slots[test_branch_instr->test_slot] = false;
@@ -85,7 +86,6 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
       {
         AccessStringKeyInstr *instr = malloc(sizeof(AccessStringKeyInstr));
         instr->base.type = INSTR_ACCESS_STRING_KEY;
-        instr->target_slot = acci->target_slot;
         instr->obj_slot = acci->obj_slot;
         instr->key = slot_table_ptr[acci->key_slot];
         addinstr(builder, (Instr*) instr);

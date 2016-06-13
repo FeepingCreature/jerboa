@@ -2,320 +2,382 @@
 
 #include <stdio.h>
 #include "gc.h"
+#include "dump.h"
 
 int cyclecount = 0;
 
-Object *call_function(Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
-  int num_slots = fn->slots;
-  
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  
-  Object **slots = calloc(sizeof(Object*), num_slots);
-  void *frameroots = gc_add_roots(slots, num_slots);
-  
-  assert(args_len == fn->arity);
-  for (int i = 0; i < args_len; ++i) {
-    slots[i] = args_ptr[i];
-  }
-  
-  assert(fn->body.blocks_len > 0);
-  InstrBlock *block = fn->body.blocks_ptr;
-  int instr_offs = 0;
-  while (true) {
-    if (!(instr_offs < block->instrs_len)) {
-      fprintf(stderr, "Interpreter error: reached end of block without branch instruction! (%li)\n", block - fn->body.blocks_ptr);
-      exit(1);
-    }
-    cyclecount ++;
-    Instr *instr = block->instrs_ptr[instr_offs++];
-    switch (instr->type) {
-      case INSTR_GET_ROOT:{
-        GetRootInstr *get_root_instr = (GetRootInstr*) instr;
-        int slot = get_root_instr->slot;
-        assert(slot < num_slots);
-        slots[get_root_instr->slot] = root;
-      } break;
-      case INSTR_GET_CONTEXT:{
-        GetContextInstr *get_context_instr = (GetContextInstr*) instr;
-        int slot = get_context_instr->slot;
-        assert(slot < num_slots);
-        slots[slot] = context;
-      } break;
-      case INSTR_ACCESS: case INSTR_ACCESS_STRING_KEY: {
-        AccessInstr *access_instr = (AccessInstr*) instr;
-        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
-        int target_slot, obj_slot;
-        if (instr->type == INSTR_ACCESS) {
-          target_slot = access_instr->target_slot;
-          obj_slot = access_instr->obj_slot;
-        } else {
-          target_slot = aski->target_slot;
-          obj_slot = aski->obj_slot;
-        }
-        
-        assert(obj_slot < num_slots);
-        Object *obj = slots[obj_slot];
-        
-        Object *value;
-        bool object_found = false;
-        
-        char *key;
-        bool has_char_key = false;
-        
-        if (instr->type == INSTR_ACCESS) {
-          int key_slot = access_instr->key_slot;
-          assert(key_slot < num_slots && slots[key_slot]);
-          Object *string_base = object_lookup(root, "string", NULL);
-          Object *key_obj = slots[key_slot];
-          assert(key_obj);
-          StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
-          if (skey) {
-            key = skey->value;
-            has_char_key = true;
-          }
-        } else {
-          key = aski->key;
-          has_char_key = true;
-        }
-        if (has_char_key) {
-          // fprintf(stderr, "> obj get %p . '%s'\n", (void*) obj, key);
-          value = object_lookup(obj, key, &object_found);
-        }
-        if (!object_found) {
-          Object *index_op = object_lookup(obj, "[]", NULL);
-          if (index_op) {
-            Object *function_base = object_lookup(root, "function", NULL);
-            Object *closure_base = object_lookup(root, "closure", NULL);
-            FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
-            ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
-            assert(fn_index_op || cl_index_op);
-            Object *key_obj;
-            if (instr->type == INSTR_ACCESS) {
-              key_obj = slots[access_instr->key_slot];
-            } else {
-              key_obj = alloc_string(context, aski->key);
-            }
-            if (fn_index_op) value = fn_index_op->fn_ptr(context, obj, index_op, &key_obj, 1);
-            else value = cl_index_op->base.fn_ptr(context, obj, index_op, &key_obj, 1);
-            if (value) object_found = true;
-          }
-        }
-        if (!object_found) {
-          if (has_char_key) {
-            fprintf(stderr, "> property not found: '%s'\n", key);
-          } else {
-            fprintf(stderr, "> property not found!\n");
-          }
-          assert(false);
-        }
-        
-        assert(target_slot < num_slots);
-        slots[target_slot] = value;
-      } break;
-      case INSTR_ASSIGN: case INSTR_ASSIGN_STRING_KEY: {
-        AssignInstr *assign_instr = (AssignInstr*) instr;
-        AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
-        AssignType assign_type;
-        Object *obj, *value_obj;
-        char *key;
-        bool has_char_key = false;
-        if (instr->type == INSTR_ASSIGN) {
-          int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
-          int key_slot = assign_instr->key_slot;
-          assert(obj_slot < num_slots);
-          assert(value_slot < num_slots);
-          assert(key_slot < num_slots && slots[key_slot]);
-          obj = slots[obj_slot];
-          value_obj = slots[value_slot];
-          Object *string_base = object_lookup(root, "string", NULL);
-          Object *key_obj = slots[key_slot];
-          StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
-          if (skey) {
-            key = skey->value;
-            assign_type = assign_instr->type;
-            has_char_key = true;
-          }
-        } else {
-          int obj_slot = aski->obj_slot, value_slot = aski->value_slot;
-          assert(obj_slot < num_slots);
-          assert(value_slot < num_slots);
-          obj = slots[obj_slot];
-          value_obj = slots[value_slot];
-          key = aski->key;
-          assign_type = aski->type;
-          has_char_key = true;
-        }
-        if (!has_char_key) { // can assume INSTR_ASSIGN
-          // non-string key, goes to []=
-          Object *index_assign_op = object_lookup(obj, "[]=", NULL);
-          if (index_assign_op) {
-            Object *function_base = object_lookup(root, "function", NULL);
-            Object *closure_base = object_lookup(root, "closure", NULL);
-            FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
-            ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
-            assert(fn_index_assign_op || cl_index_assign_op);
-            Object *key_value_pair[] = {slots[assign_instr->key_slot], value_obj};
-            if (fn_index_assign_op) fn_index_assign_op->fn_ptr(context, obj, index_assign_op, key_value_pair, 2);
-            else cl_index_assign_op->base.fn_ptr(context, obj, index_assign_op, key_value_pair, 2);
-            break;
-          }
-          assert(false);
-        }
-        // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
-        switch (assign_type) {
-          case ASSIGN_PLAIN:
-            if (obj == NULL) {
-              fprintf(stderr, "> assignment to null object");
-              assert(false);
-            }
-            object_set(obj, key, value_obj);
-            break;
-          case ASSIGN_EXISTING:
-            object_set_existing(obj, key, value_obj);
-            break;
-          case ASSIGN_SHADOWING:
-            object_set_shadowing(obj, key, value_obj);
-            break;
-        }
-      } break;
-      case INSTR_ALLOC_OBJECT:{
-        AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
-        int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
-        assert(target_slot < num_slots);
-        assert(parent_slot < num_slots);
-        Object *parent_obj = slots[parent_slot];
-        if (parent_obj) assert(!(parent_obj->flags & OBJ_NOINHERIT));
-        slots[target_slot] = alloc_object(root, slots[parent_slot]);
-      } break;
-      case INSTR_ALLOC_INT_OBJECT:{
-        AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
-        int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
-        assert(target_slot < num_slots);
-        slots[target_slot] = alloc_int(context, value);
-      } break;
-      case INSTR_ALLOC_FLOAT_OBJECT:{
-        AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) instr;
-        int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
-        assert(target_slot < num_slots);
-        slots[target_slot] = alloc_float(context, value);
-      } break;
-      case INSTR_ALLOC_ARRAY_OBJECT:{
-        AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) instr;
-        int target_slot = alloc_array_obj_instr->target_slot;
-        assert(target_slot < num_slots);
-        Object *obj = alloc_array(context, NULL, 0);
-        slots[target_slot] = obj;
-      } break;
-      case INSTR_ALLOC_STRING_OBJECT:{
-        AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) instr;
-        int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
-        assert(target_slot < num_slots);
-        slots[target_slot] = alloc_string(context, value);
-      } break;
-      case INSTR_ALLOC_CLOSURE_OBJECT:{
-        AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
-        int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
-        assert(target_slot < num_slots);
-        assert(context_slot < num_slots);
-        slots[target_slot] = alloc_closure_fn(slots[context_slot], alloc_closure_obj_instr->fn);
-      } break;
-      case INSTR_CLOSE_OBJECT:{
-        CloseObjectInstr *close_object_instr = (CloseObjectInstr*) instr;
-        int slot = close_object_instr->slot;
-        assert(slot < num_slots);
-        Object *obj = slots[slot];
-        assert(!(obj->flags & OBJ_CLOSED));
-        obj->flags |= OBJ_CLOSED;
-      } break;
-      case INSTR_CALL: {
-        CallInstr *call_instr = (CallInstr*) instr;
-        int target_slot = call_instr->target_slot, function_slot = call_instr->function_slot;
-        int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
-        assert(target_slot < num_slots);
-        assert(function_slot < num_slots);
-        assert(this_slot < num_slots);
-        Object *this_obj = slots[this_slot];
-        Object *fn_obj = slots[function_slot];
-        // validate function type
-        Object *closure_base = object_lookup(root, "closure", NULL);
-        Object *function_base = object_lookup(root, "function", NULL);
-        FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
-        ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
-        assert(cl || fn);
-        // form args array from slots
-        Object **args = malloc(sizeof(Object*) * args_length);
-        for (int i = 0; i < args_length; ++i) {
-          int argslot = call_instr->args_ptr[i];
-          assert(argslot < num_slots);
-          args[i] = slots[argslot];
-        }
-        Object *obj;
-        if (cl) obj = cl->base.fn_ptr(context, this_obj, fn_obj, args, args_length);
-        else obj = fn->fn_ptr(context, this_obj, fn_obj, args, args_length);
-        slots[target_slot] = obj;
-        free(args);
-      } break;
-      case INSTR_RETURN: {
-        ReturnInstr *ret_instr = (ReturnInstr*) instr;
-        int ret_slot = ret_instr->ret_slot;
-        assert(ret_slot < num_slots);
-        Object *res = slots[ret_slot];
-        gc_remove_roots(frameroots);
-        free(slots);
-        return res;
+#define UNLIKELY(X) __builtin_expect(X, 0)
+
+Callframe *vm_alloc_frame(VMState *state) {
+  // okay. this might get a bit complicated.
+  void *ptr = state->stack_ptr;
+  if (!ptr) {
+    assert(state->stack_len == 0);
+    int initial_capacity = sizeof(Callframe);
+    ptr = malloc(initial_capacity + sizeof(Callframe));
+    ptr = (Callframe*)ptr + 1;
+    *((int*)ptr - 1) = initial_capacity;
+    state->stack_ptr = ptr;
+  } else {
+    int capacity = *((int*)ptr - 1);
+    int new_size = sizeof(Callframe) * (state->stack_len + 1);
+    if (new_size > capacity) {
+      int new_capacity = capacity * 2;
+      if (new_size > new_capacity) new_capacity = new_size;
+      void *old_ptr = ptr, *old_ptr_base = (Callframe*)ptr - 1;
+      ptr = malloc(new_capacity + sizeof(Callframe));
+      ptr = (Callframe*)ptr + 1;
+      *((int*)ptr - 1) = new_capacity;
+      // tear down old gc roots
+      for (int i = 0; i < state->stack_len; ++i) {
+        gc_remove_roots(state, &state->stack_ptr[i].frameroot);
       }
-      case INSTR_BR: {
-        BranchInstr *br_instr = (BranchInstr*) instr;
-        int blk = br_instr->blk;
-        assert(blk < fn->body.blocks_len);
-        block = &fn->body.blocks_ptr[blk];
-        instr_offs = 0;
-      } break;
-      case INSTR_TESTBR: {
-        TestBranchInstr *tbr_instr = (TestBranchInstr*) instr;
-        int test_slot = tbr_instr->test_slot;
-        int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
-        assert(test_slot < num_slots);
-        Object *test_value = slots[test_slot];
-        
-        Object *root = context;
-        while (root->parent) root = root->parent;
-        Object *bool_base = object_lookup(root, "bool", NULL);
-        Object *int_base = object_lookup(root, "int", NULL);
-        Object *b_test_value = obj_instance_of(test_value, bool_base);
-        Object *i_test_value = obj_instance_of(test_value, int_base);
-        
-        bool test = false;
-        if (b_test_value) {
-          if (((BoolObject*) b_test_value)->value == true) test = true;
-        } else if (i_test_value) {
-          if (((IntObject*) i_test_value)->value != 0) test = true;
-        } else {
-          test = test_value != NULL;
-        }
-        
-        int target_blk = test ? true_blk : false_blk;
-        block = &fn->body.blocks_ptr[target_blk];
-        instr_offs = 0;
-      } break;
-      default: fprintf(stderr, "unknown instruction: %i\n", instr->type); assert(false); break;
+      memcpy(ptr, old_ptr, capacity);
+      state->stack_ptr = ptr;
+      // add new gc roots
+      for (int i = 0; i < state->stack_len; ++i) {
+        Callframe *cf = &state->stack_ptr[i];
+        gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot);
+      }
+      free(old_ptr_base);
     }
+  }
+  
+  state->stack_len = state->stack_len + 1;
+  return &state->stack_ptr[state->stack_len - 1];
+}
+
+void vm_remove_frame(VMState *state) {
+  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
+  gc_remove_roots(state, &cf->frameroot);
+  free(cf->slots_ptr);
+  // TODO shrink memory?
+  state->stack_len = state->stack_len - 1;
+}
+
+static void vm_step(VMState *state, Object *root, void **args_prealloc) {
+  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
+  
+#ifndef NDEBUG
+  if (UNLIKELY(!(cf->instr_offs < cf->block->instrs_len))) {
+    fprintf(stderr, "Interpreter error: reached end of block without branch instruction! (%li)\n", cf->block - cf->uf->body.blocks_ptr);
+    exit(1);
+  }
+#endif
+  
+  cyclecount ++;
+  Instr *instr = cf->block->instrs_ptr[cf->instr_offs++];
+  switch (instr->type) {
+    case INSTR_GET_ROOT:{
+      GetRootInstr *get_root_instr = (GetRootInstr*) instr;
+      int slot = get_root_instr->slot;
+      assert(slot < cf->slots_len);
+      cf->slots_ptr[get_root_instr->slot] = root;
+    } break;
+    case INSTR_GET_CONTEXT:{
+      GetContextInstr *get_context_instr = (GetContextInstr*) instr;
+      int slot = get_context_instr->slot;
+      assert(slot < cf->slots_len);
+      cf->slots_ptr[slot] = cf->context;
+    } break;
+    case INSTR_ACCESS: case INSTR_ACCESS_STRING_KEY: {
+      AccessInstr *access_instr = (AccessInstr*) instr;
+      AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+      int obj_slot;
+      if (instr->type == INSTR_ACCESS) {
+        obj_slot = access_instr->obj_slot;
+      } else {
+        obj_slot = aski->obj_slot;
+      }
+      
+      assert(obj_slot < cf->slots_len);
+      Object *obj = cf->slots_ptr[obj_slot];
+      
+      char *key;
+      bool has_char_key = false;
+      
+      if (instr->type == INSTR_ACCESS) {
+        int key_slot = access_instr->key_slot;
+        assert(key_slot < cf->slots_len && cf->slots_ptr[key_slot]);
+        Object *string_base = object_lookup(root, "string", NULL);
+        Object *key_obj = cf->slots_ptr[key_slot];
+        assert(key_obj);
+        StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+        if (skey) {
+          key = skey->value;
+          has_char_key = true;
+        }
+      } else {
+        key = aski->key;
+        has_char_key = true;
+      }
+      bool object_found = false;
+      if (has_char_key) {
+        // fprintf(stderr, "> obj get %p . '%s'\n", (void*) obj, key);
+        state->result_value = object_lookup(obj, key, &object_found);
+      }
+      if (!object_found) {
+        Object *index_op = object_lookup(obj, "[]", NULL);
+        if (index_op) {
+          Object *function_base = object_lookup(root, "function", NULL);
+          Object *closure_base = object_lookup(root, "closure", NULL);
+          FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
+          ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
+          assert(fn_index_op || cl_index_op);
+          Object *key_obj;
+          if (instr->type == INSTR_ACCESS) {
+            key_obj = cf->slots_ptr[access_instr->key_slot];
+          } else {
+            key_obj = alloc_string(state, aski->key);
+          }
+          if (fn_index_op) fn_index_op->fn_ptr(state, obj, index_op, &key_obj, 1);
+          else cl_index_op->base.fn_ptr(state, obj, index_op, &key_obj, 1);
+          object_found = true; // rely on the [] call to error on its own, if key not found
+        }
+      }
+      if (!object_found) {
+        if (has_char_key) {
+          fprintf(stderr, "> property not found: '%s'\n", key);
+        } else {
+          fprintf(stderr, "> property not found!\n");
+        }
+        assert(false);
+      }
+    } break;
+    case INSTR_ASSIGN: case INSTR_ASSIGN_STRING_KEY: {
+      AssignInstr *assign_instr = (AssignInstr*) instr;
+      AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
+      AssignType assign_type;
+      Object *obj, *value_obj;
+      char *key;
+      bool has_char_key = false;
+      if (instr->type == INSTR_ASSIGN) {
+        int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
+        int key_slot = assign_instr->key_slot;
+        assert(obj_slot < cf->slots_len);
+        assert(value_slot < cf->slots_len);
+        assert(key_slot < cf->slots_len && cf->slots_ptr[key_slot]);
+        obj = cf->slots_ptr[obj_slot];
+        value_obj = cf->slots_ptr[value_slot];
+        Object *string_base = object_lookup(root, "string", NULL);
+        Object *key_obj = cf->slots_ptr[key_slot];
+        StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+        if (skey) {
+          key = skey->value;
+          assign_type = assign_instr->type;
+          has_char_key = true;
+        }
+      } else {
+        int obj_slot = aski->obj_slot, value_slot = aski->value_slot;
+        assert(obj_slot < cf->slots_len);
+        assert(value_slot < cf->slots_len);
+        obj = cf->slots_ptr[obj_slot];
+        value_obj = cf->slots_ptr[value_slot];
+        key = aski->key;
+        assign_type = aski->type;
+        has_char_key = true;
+      }
+      if (!has_char_key) { // can assume INSTR_ASSIGN
+        // non-string key, goes to []=
+        Object *index_assign_op = object_lookup(obj, "[]=", NULL);
+        if (index_assign_op) {
+          Object *function_base = object_lookup(root, "function", NULL);
+          Object *closure_base = object_lookup(root, "closure", NULL);
+          FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
+          ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
+          assert(fn_index_assign_op || cl_index_assign_op);
+          Object *key_value_pair[] = {cf->slots_ptr[assign_instr->key_slot], value_obj};
+          if (fn_index_assign_op) fn_index_assign_op->fn_ptr(state, obj, index_assign_op, key_value_pair, 2);
+          else cl_index_assign_op->base.fn_ptr(state, obj, index_assign_op, key_value_pair, 2);
+          break;
+        }
+        assert(false);
+      }
+      // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
+      switch (assign_type) {
+        case ASSIGN_PLAIN:
+          if (obj == NULL) {
+            fprintf(stderr, "> assignment to null object");
+            assert(false);
+          }
+          object_set(obj, key, value_obj);
+          break;
+        case ASSIGN_EXISTING:
+          object_set_existing(obj, key, value_obj);
+          break;
+        case ASSIGN_SHADOWING:
+          object_set_shadowing(obj, key, value_obj);
+          break;
+      }
+    } break;
+    case INSTR_ALLOC_OBJECT:{
+      AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
+      int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
+      assert(target_slot < cf->slots_len);
+      assert(parent_slot < cf->slots_len);
+      Object *parent_obj = cf->slots_ptr[parent_slot];
+      if (parent_obj) assert(!(parent_obj->flags & OBJ_NOINHERIT));
+      cf->slots_ptr[target_slot] = alloc_object(state, cf->slots_ptr[parent_slot]);
+    } break;
+    case INSTR_ALLOC_INT_OBJECT:{
+      AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
+      int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
+      assert(target_slot < cf->slots_len);
+      cf->slots_ptr[target_slot] = alloc_int(state, value);
+    } break;
+    case INSTR_ALLOC_FLOAT_OBJECT:{
+      AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) instr;
+      int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
+      assert(target_slot < cf->slots_len);
+      cf->slots_ptr[target_slot] = alloc_float(state, value);
+    } break;
+    case INSTR_ALLOC_ARRAY_OBJECT:{
+      AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) instr;
+      int target_slot = alloc_array_obj_instr->target_slot;
+      assert(target_slot < cf->slots_len);
+      Object *obj = alloc_array(state, NULL, 0);
+      cf->slots_ptr[target_slot] = obj;
+    } break;
+    case INSTR_ALLOC_STRING_OBJECT:{
+      AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) instr;
+      int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
+      assert(target_slot < cf->slots_len);
+      cf->slots_ptr[target_slot] = alloc_string(state, value);
+    } break;
+    case INSTR_ALLOC_CLOSURE_OBJECT:{
+      AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
+      int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
+      assert(target_slot < cf->slots_len);
+      assert(context_slot < cf->slots_len);
+      cf->slots_ptr[target_slot] = alloc_closure_fn(cf->slots_ptr[context_slot], alloc_closure_obj_instr->fn);
+    } break;
+    case INSTR_CLOSE_OBJECT:{
+      CloseObjectInstr *close_object_instr = (CloseObjectInstr*) instr;
+      int slot = close_object_instr->slot;
+      assert(slot < cf->slots_len);
+      Object *obj = cf->slots_ptr[slot];
+      assert(!(obj->flags & OBJ_CLOSED));
+      obj->flags |= OBJ_CLOSED;
+    } break;
+    case INSTR_CALL: {
+      CallInstr *call_instr = (CallInstr*) instr;
+      int function_slot = call_instr->function_slot;
+      int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
+      assert(function_slot < cf->slots_len);
+      assert(this_slot < cf->slots_len);
+      Object *this_obj = cf->slots_ptr[this_slot];
+      Object *fn_obj = cf->slots_ptr[function_slot];
+      // validate function type
+      Object *closure_base = object_lookup(root, "closure", NULL);
+      Object *function_base = object_lookup(root, "function", NULL);
+      FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
+      ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
+      assert(cl || fn);
+      // form args array from slots
+      
+      Object **args;
+      if (args_length < 10) { args = args_prealloc[args_length]; }
+      else { args = malloc(sizeof(Object*) * args_length); }
+      
+      for (int i = 0; i < args_length; ++i) {
+        int argslot = call_instr->args_ptr[i];
+        assert(argslot < cf->slots_len);
+        args[i] = cf->slots_ptr[argslot];
+      }
+      if (cl) cl->base.fn_ptr(state, this_obj, fn_obj, args, args_length);
+      else fn->fn_ptr(state, this_obj, fn_obj, args, args_length);
+      
+      if (args_length < 10) { }
+      else { free(args); }
+    } break;
+    case INSTR_RETURN: {
+      ReturnInstr *ret_instr = (ReturnInstr*) instr;
+      int ret_slot = ret_instr->ret_slot;
+      assert(ret_slot < cf->slots_len);
+      Object *res = cf->slots_ptr[ret_slot];
+      vm_remove_frame(state);
+      state->result_value = res;
+    } break;
+    case INSTR_SAVE_RESULT: {
+      SaveResultInstr *save_instr = (SaveResultInstr*) instr;
+      int save_slot = save_instr->target_slot;
+      assert(save_slot < cf->slots_len);
+      cf->slots_ptr[save_slot] = state->result_value;
+      state->result_value = NULL;
+    } break;
+    case INSTR_BR: {
+      BranchInstr *br_instr = (BranchInstr*) instr;
+      int blk = br_instr->blk;
+      assert(blk < cf->uf->body.blocks_len);
+      cf->block = &cf->uf->body.blocks_ptr[blk];
+      cf->instr_offs = 0;
+    } break;
+    case INSTR_TESTBR: {
+      TestBranchInstr *tbr_instr = (TestBranchInstr*) instr;
+      int test_slot = tbr_instr->test_slot;
+      int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
+      assert(test_slot < cf->slots_len);
+      Object *test_value = cf->slots_ptr[test_slot];
+      
+      Object *bool_base = object_lookup(root, "bool", NULL);
+      Object *int_base = object_lookup(root, "int", NULL);
+      Object *b_test_value = obj_instance_of(test_value, bool_base);
+      Object *i_test_value = obj_instance_of(test_value, int_base);
+      
+      bool test = false;
+      if (b_test_value) {
+        if (((BoolObject*) b_test_value)->value == true) test = true;
+      } else if (i_test_value) {
+        if (((IntObject*) i_test_value)->value != 0) test = true;
+      } else {
+        test = test_value != NULL;
+      }
+      
+      int target_blk = test ? true_blk : false_blk;
+      cf->block = &cf->uf->body.blocks_ptr[target_blk];
+      cf->instr_offs = 0;
+    } break;
+    default: fprintf(stderr, "unknown instruction: %i\n", instr->type); assert(false); break;
   }
 }
 
-Object *function_handler(Object *calling_context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  // discard calling context (lexical scoping!)
-  ClosureObject *fn_obj = (ClosureObject*) fn;
-  return call_function(fn_obj->context, &fn_obj->vmfun, args_ptr, args_len);
+void vm_run(VMState *state, Object *root) {
+  void **args_prealloc = malloc(sizeof(void*) * 10);
+  for (int i = 0; i < 10; ++i) { args_prealloc[i] = malloc(sizeof(Object*) * i); }
+  while (state->stack_len) vm_step(state, root, args_prealloc);
 }
 
-Object *method_handler(Object *calling_context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
+  Callframe *cf = vm_alloc_frame(state);
+  
+  cf->uf = fn;
+  cf->context = context;
+  cf->slots_len = fn->slots;
+  cf->slots_ptr = calloc(sizeof(Object*), cf->slots_len);
+  gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot);
+  
+  assert(args_len == cf->uf->arity);
+  for (int i = 0; i < args_len; ++i) {
+    cf->slots_ptr[i] = args_ptr[i];
+  }
+  
+  assert(cf->uf->body.blocks_len > 0);
+  cf->block = cf->uf->body.blocks_ptr;
+  cf->instr_offs = 0;
+}
+
+void function_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   // discard calling context (lexical scoping!)
   ClosureObject *fn_obj = (ClosureObject*) fn;
-  Object *context = alloc_object(fn_obj->context, fn_obj->context);
+  call_function(state, fn_obj->context, &fn_obj->vmfun, args_ptr, args_len);
+}
+
+void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  // discard calling context (lexical scoping!)
+  ClosureObject *fn_obj = (ClosureObject*) fn;
+  Object *context = alloc_object(state, fn_obj->context);
   object_set(context, "this", thisptr);
-  return call_function(context, &fn_obj->vmfun, args_ptr, args_len);
+  call_function(state, context, &fn_obj->vmfun, args_ptr, args_len);
 }
 
 Object *alloc_closure_fn(Object *context, UserFunction *fn) {

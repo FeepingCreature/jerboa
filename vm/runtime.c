@@ -17,12 +17,12 @@ static void asprintf(char **outp, char *fmt, ...) {
   va_end(ap);
 }
 
-static Object *bool_not_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 0);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
-  return alloc_bool(context, ! ((BoolObject*) thisptr)->value);
+  state->result_value = alloc_bool(state, ! ((BoolObject*) thisptr)->value);
 }
 
 typedef enum {
@@ -32,9 +32,9 @@ typedef enum {
   MATH_DIV
 } MathOp;
 
-static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
+static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
   Object *int_base = object_lookup(root, "int", NULL);
@@ -52,7 +52,8 @@ static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object 
       case MATH_DIV: res = i1 / i2; break;
       default: assert(false);
     }
-    return alloc_int(context, res);
+    state->result_value = alloc_int(state, res);
+    return;
   }
   
   Object *float_base = object_lookup(root, "float", NULL);
@@ -67,30 +68,31 @@ static Object *int_math_fn(Object *context, Object *thisptr, Object *fn, Object 
       case MATH_DIV: res = v1 / v2; break;
       default: assert(false);
     }
-    return alloc_float(context, res);
+    state->result_value = alloc_float(state, res);
+    return;
   }
   assert(false);
 }
 
-static Object *int_add_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_ADD);
+static void int_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_ADD);
 }
 
-static Object *int_sub_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_SUB);
+static void int_sub_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_SUB);
 }
 
-static Object *int_mul_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_MUL);
+static void int_mul_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_MUL);
 }
 
-static Object *int_div_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_DIV);
+static void int_div_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_DIV);
 }
 
-static Object *float_math_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
+static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
@@ -112,30 +114,31 @@ static Object *float_math_fn(Object *context, Object *thisptr, Object *fn, Objec
       case MATH_DIV: res = v1 / v2; break;
       default: assert(false);
     }
-    return alloc_float(context, res);
+    state->result_value = alloc_float(state, res);
+    return;
   }
   assert(false);
 }
 
-static Object *float_add_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_ADD);
+static void float_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_ADD);
 }
 
-static Object *float_sub_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_SUB);
+static void float_sub_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_SUB);
 }
 
-static Object *float_mul_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_MUL);
+static void float_mul_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_MUL);
 }
 
-static Object *float_div_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_math_fn(context, thisptr, fn, args_ptr, args_len, MATH_DIV);
+static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_DIV);
 }
 
-static Object *string_add_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *bool_base = object_lookup(root, "bool", NULL);
@@ -159,9 +162,8 @@ static Object *string_add_fn(Object *context, Object *thisptr, Object *fn, Objec
   char *str3;
   asprintf(&str3, "%s%s", str1, str2);
   free(str2);
-  Object *res = alloc_string(context, str3);
+  state->result_value = alloc_string(state, str3);
   free(str3);
-  return res;
 }
 
 typedef enum {
@@ -172,9 +174,9 @@ typedef enum {
   CMP_GE
 } CompareOp;
 
-static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
+static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
   Object *int_base = object_lookup(root, "int", NULL);
@@ -193,7 +195,8 @@ static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object *
       case CMP_GE: res = i1 >= i2; break;
       default: assert(false);
     }
-    return alloc_bool(context, res);
+    state->result_value = alloc_bool(state, res);
+    return;
   }
   
   Object *float_base = object_lookup(root, "float", NULL);
@@ -209,34 +212,35 @@ static Object *int_cmp_fn(Object *context, Object *thisptr, Object *fn, Object *
       case CMP_GE: res = v1 >= v2; break;
       default: assert(false);
     }
-    return alloc_bool(context, res);
+    state->result_value = alloc_bool(state, res);
+    return;
   }
   assert(false);
 }
 
-static Object *int_eq_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_EQ);
+static void int_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_EQ);
 }
 
-static Object *int_lt_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_LT);
+static void int_lt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_LT);
 }
 
-static Object *int_gt_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_GT);
+static void int_gt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_GT);
 }
 
-static Object *int_le_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_LE);
+static void int_le_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_LE);
 }
 
-static Object *int_ge_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return int_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_GE);
+static void int_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_GE);
 }
 
-static Object *float_cmp_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
+static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
   Object *int_base = object_lookup(root, "int", NULL);
@@ -259,58 +263,55 @@ static Object *float_cmp_fn(Object *context, Object *thisptr, Object *fn, Object
       case CMP_GE: res = v1 >= v2; break;
       default: assert(false);
     }
-    return alloc_bool(context, res);
+    state->result_value = alloc_bool(state, res);
+    return;
   }
   assert(false);
 }
 
-static Object *float_eq_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_EQ);
+static void float_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_EQ);
 }
 
-static Object *float_lt_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_LT);
+static void float_lt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_LT);
 }
 
-static Object *float_gt_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_GT);
+static void float_gt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_GT);
 }
 
-static Object *float_le_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_LE);
+static void float_le_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_LE);
 }
 
-static Object *float_ge_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  return float_cmp_fn(context, thisptr, fn, args_ptr, args_len, CMP_GE);
+static void float_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_GE);
 }
 
-static Object *closure_mark_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 0);
-  Object *root = context;
+static void closure_mark_fn(VMState *state, Object *obj) {
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *closure_base = object_lookup(root, "closure", NULL);
-  ClosureObject *clobj = (ClosureObject*) obj_instance_of(thisptr, closure_base);
-  if (clobj) obj_mark(context, clobj->context);
-  return NULL;
+  ClosureObject *clobj = (ClosureObject*) obj_instance_of(obj, closure_base);
+  if (clobj) obj_mark(state, clobj->context);
 }
 
-static Object *array_mark_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 0);
-  Object *root = context;
+static void array_mark_fn(VMState *state, Object *obj) {
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
   if (arr_obj) {
     for (int i = 0; i < arr_obj->length; ++i) {
-      obj_mark(context, arr_obj->ptr[i]);
+      obj_mark(state, arr_obj->ptr[i]);
     }
   }
-  return NULL;
 }
 
-static Object *array_resize_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
@@ -322,13 +323,13 @@ static Object *array_resize_fn(Object *context, Object *thisptr, Object *fn, Obj
   assert(newsize >= 0);
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * newsize);
   arr_obj->length = newsize;
-  object_set(thisptr, "length", alloc_int(context, newsize));
-  return thisptr;
+  object_set(thisptr, "length", alloc_int(state, newsize));
+  state->result_value = thisptr;
 }
 
-static Object *array_push_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
@@ -336,41 +337,41 @@ static Object *array_push_fn(Object *context, Object *thisptr, Object *fn, Objec
   Object *value = args_ptr[0];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * ++arr_obj->length);
   arr_obj->ptr[arr_obj->length - 1] = value;
-  object_set(thisptr, "length", alloc_int(context, arr_obj->length));
-  return thisptr;
+  object_set(thisptr, "length", alloc_int(state, arr_obj->length));
+  state->result_value = thisptr;
 }
 
-static Object *array_pop_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 0);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   assert(arr_obj);
   Object *res = arr_obj->ptr[arr_obj->length - 1];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * --arr_obj->length);
-  object_set(thisptr, "length", alloc_int(context, arr_obj->length));
-  return res;
+  object_set(thisptr, "length", alloc_int(state, arr_obj->length));
+  state->result_value = res;
 }
 
-static Object *array_index_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 1);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
-  if (!iarg) return NULL;
+  if (!iarg) { state->result_value = NULL; return; }
   assert(arr_obj);
   int index = iarg->value;
   assert(index >= 0 && index < arr_obj->length);
-  return arr_obj->ptr[index];
+  state->result_value = arr_obj->ptr[index];
 }
 
-static Object *array_index_assign_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   assert(args_len == 2);
-  Object *root = context;
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
@@ -382,11 +383,11 @@ static Object *array_index_assign_fn(Object *context, Object *thisptr, Object *f
   assert(index >= 0 && index < arr_obj->length);
   Object *value = args_ptr[1];
   arr_obj->ptr[index] = value;
-  return NULL;
+  state->result_value = NULL;
 }
 
-static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  Object *root = context;
+static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *bool_base = object_lookup(root, "bool", NULL);
@@ -420,74 +421,83 @@ static Object *print_fn(Object *context, Object *thisptr, Object *fn, Object **a
     assert(false);
   }
   printf("\n");
-  return NULL;
+  state->result_value = NULL;
 }
 
-Object *create_root() {
-  Object *root = alloc_object(NULL, NULL);
+Object *create_root(VMState *state) {
+  Object *root = alloc_object(state, NULL);
   
-  void *pin_root = gc_add_roots(&root, 1);
+  state->root = root;
+  state->stack_ptr[state->stack_len - 1].context = root;
+  
+  GCRootSet pin_root;
+  gc_add_roots(state, &root, 1, &pin_root);
   
   object_set(root, "null", NULL);
   
-  Object *function_obj = alloc_object(root, NULL);
+  Object *function_obj = alloc_object(state, NULL);
   function_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "function", function_obj);
   
-  Object *closure_obj = alloc_object(root, NULL);
+  Object *closure_obj = alloc_object(state, NULL);
   closure_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "closure", closure_obj);
-  object_set(closure_obj, "gc_mark", alloc_fn(root, closure_mark_fn));
   
-  Object *bool_obj = alloc_object(root, NULL);
+  Object *closure_gc = alloc_custom_gc(state);
+  ((CustomGCObject*) closure_gc)->mark_fn = closure_mark_fn;
+  object_set(closure_obj, "gc", closure_gc);
+  
+  Object *bool_obj = alloc_object(state, NULL);
   bool_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "bool", bool_obj);
-  object_set(bool_obj, "!", alloc_fn(root, bool_not_fn));
+  object_set(bool_obj, "!", alloc_fn(state, bool_not_fn));
   
-  Object *int_obj = alloc_object(root, NULL);
+  Object *int_obj = alloc_object(state, NULL);
   int_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "int", int_obj);
-  object_set(int_obj, "+" , alloc_fn(root, int_add_fn));
-  object_set(int_obj, "-" , alloc_fn(root, int_sub_fn));
-  object_set(int_obj, "*" , alloc_fn(root, int_mul_fn));
-  object_set(int_obj, "/" , alloc_fn(root, int_div_fn));
-  object_set(int_obj, "==", alloc_fn(root, int_eq_fn));
-  object_set(int_obj, "<" , alloc_fn(root, int_lt_fn));
-  object_set(int_obj, ">" , alloc_fn(root, int_gt_fn));
-  object_set(int_obj, "<=", alloc_fn(root, int_le_fn));
-  object_set(int_obj, ">=", alloc_fn(root, int_ge_fn));
+  object_set(int_obj, "+" , alloc_fn(state, int_add_fn));
+  object_set(int_obj, "-" , alloc_fn(state, int_sub_fn));
+  object_set(int_obj, "*" , alloc_fn(state, int_mul_fn));
+  object_set(int_obj, "/" , alloc_fn(state, int_div_fn));
+  object_set(int_obj, "==", alloc_fn(state, int_eq_fn));
+  object_set(int_obj, "<" , alloc_fn(state, int_lt_fn));
+  object_set(int_obj, ">" , alloc_fn(state, int_gt_fn));
+  object_set(int_obj, "<=", alloc_fn(state, int_le_fn));
+  object_set(int_obj, ">=", alloc_fn(state, int_ge_fn));
   
-  Object *float_obj = alloc_object(root, NULL);
+  Object *float_obj = alloc_object(state, NULL);
   float_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "float", float_obj);
-  object_set(float_obj, "+" , alloc_fn(root, float_add_fn));
-  object_set(float_obj, "-" , alloc_fn(root, float_sub_fn));
-  object_set(float_obj, "*" , alloc_fn(root, float_mul_fn));
-  object_set(float_obj, "/" , alloc_fn(root, float_div_fn));
-  object_set(float_obj, "==", alloc_fn(root, float_eq_fn));
-  object_set(float_obj, "<" , alloc_fn(root, float_lt_fn));
-  object_set(float_obj, ">" , alloc_fn(root, float_gt_fn));
-  object_set(float_obj, "<=", alloc_fn(root, float_le_fn));
-  object_set(float_obj, ">=", alloc_fn(root, float_ge_fn));
+  object_set(float_obj, "+" , alloc_fn(state, float_add_fn));
+  object_set(float_obj, "-" , alloc_fn(state, float_sub_fn));
+  object_set(float_obj, "*" , alloc_fn(state, float_mul_fn));
+  object_set(float_obj, "/" , alloc_fn(state, float_div_fn));
+  object_set(float_obj, "==", alloc_fn(state, float_eq_fn));
+  object_set(float_obj, "<" , alloc_fn(state, float_lt_fn));
+  object_set(float_obj, ">" , alloc_fn(state, float_gt_fn));
+  object_set(float_obj, "<=", alloc_fn(state, float_le_fn));
+  object_set(float_obj, ">=", alloc_fn(state, float_ge_fn));
   
-  Object *string_obj = alloc_object(root, NULL);
+  Object *string_obj = alloc_object(state, NULL);
   string_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "string", string_obj);
-  object_set(string_obj, "+", alloc_fn(root, string_add_fn));
+  object_set(string_obj, "+", alloc_fn(state, string_add_fn));
   
-  Object *array_obj = alloc_object(root, NULL);
+  Object *array_obj = alloc_object(state, NULL);
   array_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "array", array_obj);
-  object_set(array_obj, "gc_mark", alloc_fn(root, array_mark_fn));
-  object_set(array_obj, "resize", alloc_fn(root, array_resize_fn));
-  object_set(array_obj, "push", alloc_fn(root, array_push_fn));
-  object_set(array_obj, "pop", alloc_fn(root, array_pop_fn));
-  object_set(array_obj, "[]", alloc_fn(root, array_index_fn));
-  object_set(array_obj, "[]=", alloc_fn(root, array_index_assign_fn));
+  Object *array_gc =  alloc_custom_gc(state);
+  ((CustomGCObject*) array_gc)->mark_fn = array_mark_fn;
+  object_set(array_obj, "gc", array_gc);
+  object_set(array_obj, "resize", alloc_fn(state, array_resize_fn));
+  object_set(array_obj, "push", alloc_fn(state, array_push_fn));
+  object_set(array_obj, "pop", alloc_fn(state, array_pop_fn));
+  object_set(array_obj, "[]", alloc_fn(state, array_index_fn));
+  object_set(array_obj, "[]=", alloc_fn(state, array_index_assign_fn));
   
-  object_set(root, "print", alloc_fn(root, print_fn));
+  object_set(root, "print", alloc_fn(state, print_fn));
   
-  gc_remove_roots(pin_root);
+  gc_remove_roots(state, &pin_root);
   
   return root;
 }

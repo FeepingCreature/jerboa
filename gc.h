@@ -3,25 +3,10 @@
 
 #include "object.h"
 
-struct _RootSet;
-typedef struct _RootSet RootSet;
+void gc_add_roots(VMState *state, Object **objects, int num_objects, GCRootSet *set);
 
-struct _RootSet {
-  Object **objects;
-  int num_objects;
-  RootSet *prev, *next;
-};
+void gc_remove_roots(VMState *state, GCRootSet *ptr);
 
-typedef struct {
-  RootSet *tail;
-} GCState;
-
-GCState state;
-
-void *gc_add_roots(Object **objects, int num_objects);
-
-void gc_remove_roots(void *ptr);
-
-void gc_run(Object *context);
+void gc_run(VMState *state);
 
 #endif
