@@ -99,6 +99,8 @@ void obj_free(Object *obj);
 // returns the object in obj's prototype chain whose immediate prototype is `proto`
 Object *obj_instance_of(Object *obj, Object *proto);
 
+Object *obj_instance_of_or_equal(Object *obj, Object *proto);
+
 typedef void (*VMFunctionPointer)(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
 typedef struct {
@@ -138,6 +140,12 @@ typedef struct {
   int length;
 } ArrayObject;
 
+// used internally
+typedef struct {
+  Object base;
+  void *ptr;
+} PointerObject;
+
 typedef struct {
   Object base;
   void (*mark_fn)(VMState *state, Object *obj);
@@ -154,6 +162,8 @@ Object *alloc_string(VMState *state, char *value);
 Object *alloc_bool(VMState *state, int value);
 
 Object *alloc_array(VMState *state, Object **ptr, int length);
+
+Object *alloc_ptr(VMState *state, void *ptr); // TODO unify with alloc_fn
 
 Object *alloc_fn(VMState *state, VMFunctionPointer fn);
 

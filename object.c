@@ -131,6 +131,11 @@ Object *obj_instance_of(Object *obj, Object *proto) {
   return NULL;
 }
 
+Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
+  if (obj == proto) return obj;
+  return obj_instance_of(obj, proto);
+}
+
 // change a property in-place
 void object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
@@ -259,6 +264,14 @@ Object *alloc_array(VMState *state, Object **ptr, int length) {
   obj->ptr = ptr;
   obj->length = length;
   object_set((Object*) obj, "length", alloc_int(state, length));
+  return (Object*) obj;
+}
+
+Object *alloc_ptr(VMState *state, void *ptr) { // TODO unify with alloc_fn
+  Object *fn_base = object_lookup(state->root, "pointer", NULL);
+  PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject));
+  obj->base.parent = fn_base;
+  obj->ptr = ptr;
   return (Object*) obj;
 }
 
