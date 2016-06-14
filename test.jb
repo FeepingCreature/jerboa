@@ -1,0 +1,133 @@
+var libc_so = ffi.open("libc.so.6");
+var puts = libc_so.sym("puts", ffi.sint, [ffi.char_pointer]);
+var malloc = libc_so.sym("malloc", ffi.pointer, [ffi.sint]);
+puts("Hello World from libffi!");
+
+var sdl_so = ffi.open("libSDL.so");
+var SDL_Init = sdl_so.sym("SDL_Init", ffi.sint, [ffi.uint32]);
+var SDL_SetVideoMode = sdl_so.sym("SDL_SetVideoMode", ffi.pointer, [ffi.sint, ffi.sint, ffi.sint, ffi.uint32]);
+var SDL_WaitEvent = sdl_so.sym("SDL_WaitEvent", ffi.sint, [ffi.pointer]);
+var SDL_PollEvent = sdl_so.sym("SDL_PollEvent", ffi.sint, [ffi.pointer]);
+var SDL_Quit = sdl_so.sym("SDL_Quit", ffi.void, []);
+var SDL_GL_SwapBuffers = sdl_so.sym("SDL_GL_SwapBuffers", ffi.void, []);
+var SDL_INIT_EVERYTHING = -1;
+var SDL_HWSURFACE = 1;
+var SDL_OPENGL = 2;
+var SDL_RESIZABLE = 0x10;
+var SDL_QUIT = 12;
+
+var gl_so = ffi.open("libGL.so");
+var glClear = gl_so.sym("glClear", ffi.void, [ffi.uint]);
+var glLoadIdentity = gl_so.sym("glLoadIdentity", ffi.void, []);
+var glTranslatef = gl_so.sym("glTranslatef", ffi.void, [ffi.float, ffi.float, ffi.float]);
+var glBegin = gl_so.sym("glBegin", ffi.void, [ffi.uint]);
+var glEnd = gl_so.sym("glEnd", ffi.void, []);
+var glEnable = gl_so.sym("glEnable", ffi.void, [ffi.uint]);
+var glVertex3f = gl_so.sym("glVertex3f", ffi.void, [ffi.float, ffi.float, ffi.float]);
+var glShadeModel = gl_so.sym("glShadeModel", ffi.void, [ffi.uint]);
+var glDepthFunc = gl_so.sym("glDepthFunc", ffi.void, [ffi.uint]);
+var glClearColor = gl_so.sym("glClearColor", ffi.void, [ffi.float, ffi.float, ffi.float, ffi.float]);
+var glColor3f = gl_so.sym("glColor3f", ffi.void, [ffi.float, ffi.float, ffi.float]);
+var glClearDepth = gl_so.sym("glClearDepth", ffi.void, [ffi.double]);
+var glHint = gl_so.sym("glHint", ffi.void, [ffi.uint, ffi.uint]);
+var glViewport = gl_so.sym("glViewport", ffi.void, [ffi.sint, ffi.sint, ffi.uint, ffi.uint]);
+var glMatrixMode = gl_so.sym("glMatrixMode", ffi.void, [ffi.uint]);
+var GL_DEPTH_BUFFER_BIT = 0x00000100;
+var GL_COLOR_BUFFER_BIT = 0x00004000;
+var GL_TRIANGLES = 0x0004;
+var GL_QUADS = 0x0007;
+var GL_LEQUAL = 0x0203;
+var GL_DEPTH_TEST = 0x0B71;
+var GL_SMOOTH = 0x1D01;
+var GL_NICEST = 0x1102;
+var GL_MODELVIEW = 0x1700;
+var GL_PROJECTION = 0x1701;
+var GL_PERSPECTIVE_CORRECTION_HINT = 0x0C50;
+
+var glu_so = ffi.open("libGLU.so");
+var gluPerspective = glu_so.sym("gluPerspective", ffi.void, [ffi.double, ffi.double, ffi.double, ffi.double]);
+
+function drawGL() {
+  glViewport(0, 0, 800, 600);
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  gluPerspective(45, 800.0/600, 0.1, 100);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  
+  glShadeModel(GL_SMOOTH);
+  glClearDepth(1);
+  glDepthFunc(GL_LEQUAL);
+  glEnable(GL_DEPTH_TEST);
+  glClearColor(0.2, 0.2, 0.2, 0);
+  glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+  
+  // TODO '|'
+  glClear(GL_COLOR_BUFFER_BIT + GL_DEPTH_BUFFER_BIT);
+  glLoadIdentity();
+  glTranslatef(-1.5, 0.0, -6.0);
+  glColor3f(1, 1, 1);
+  glBegin(GL_TRIANGLES);
+  glVertex3f( 0.0,  1.0, 0.0);
+  glVertex3f(-1.0, -1.0, 0.0);
+  glVertex3f( 1.0, -1.0, 0.0);
+  glEnd();
+  
+  glTranslatef(3.0, 0.0, 0.0);
+  
+  glBegin(GL_QUADS);
+  glVertex3f(-1.0, 1.0, 0.0);
+  glVertex3f( 1.0, 1.0, 0.0);
+  glVertex3f( 1.0,-1.0, 0.0);
+  glVertex3f(-1.0,-1.0, 0.0);
+  glEnd();
+}
+
+SDL_Init(SDL_INIT_EVERYTHING);
+// TODO '|'
+SDL_SetVideoMode(800, 600, 32, SDL_OPENGL + SDL_RESIZABLE);
+var event = malloc(64);
+var running = true;
+while (running) {
+  while (SDL_PollEvent(event)) {
+    if (event.dereference(ffi.uint8) == SDL_QUIT) running = false;
+  }
+  drawGL();
+  SDL_GL_SwapBuffers();
+}
+SDL_Quit();
+
+var obj = {a: 5, b: null, bar: method() { print(this.a - this.b); } };
+obj.b = /* test */ 7;
+var obj2 = new obj { b: 9 };
+var objx = new 5 { bar: 7 }; print("objx = "+(objx + objx.bar));
+var arr = [2, 3, 4];
+arr[1] = 7;
+var vv = arr.push(5).pop(); print("vv = " + vv);
+print("" + arr[0] + ", " + arr[1] + ", " + arr[2] + " (" + arr.length + ")");
+obj["foo"] = method() { print(this.a + this.b); };
+obj.foo();
+obj.bar();
+obj2.foo();
+obj2.bar();
+var Class = { a: 0 };
+var SubClass = new Class { b: 0, test: method() { print("a + b = " + (this.a + this.b)); } };
+var obj = new SubClass;
+obj.a = 5;
+obj.b = 8;
+obj.test();
+print("debug: "+obj.a+", "+obj.b);
+print("2 != 2 = "+(2 != 2));
+print("2 !< 2 = "+(2 !< 2));
+print("2 !> 2 = "+(2 !> 2));
+print("2 !<= 2 = "+(2 !<= 2));
+print("2 !>= 2 = "+(2 !>= 2));
+var i = 0; while (i < 10) { print("i = "+i); i = i + 1; }
+function ack(m, n) {
+  var np = n + 1, nm = n - 1, mm;
+  mm = m - 1;
+  if (m < 0.5) return np;
+  if (n == 0) return ack(mm, 1);
+  return ack(mm, ack(m, nm));
+}
+print("ack(3, 7) = "+ack(3, 7));
