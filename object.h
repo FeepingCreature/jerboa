@@ -73,10 +73,19 @@ typedef struct {
   int instr_offs;
 } Callframe;
 
+typedef enum {
+  VM_TERMINATED,
+  VM_RUNNING,
+  VM_ERRORED
+} VMRunState;
+
 typedef struct {
   Callframe *stack_ptr; int stack_len;
   Object *root;
   Object *result_value;
+  
+  VMRunState runstate;
+  char *error;
   
   // memory handling
   GCState gcstate;
@@ -86,9 +95,9 @@ typedef struct {
 
 Object *object_lookup(Object *obj, char *key, bool *key_found);
 
-void object_set_existing(Object *obj, char *key, Object *value);
+bool object_set_existing(Object *obj, char *key, Object *value);
 
-void object_set_shadowing(Object *obj, char *key, Object *value);
+bool object_set_shadowing(Object *obj, char *key, Object *value);
 
 void object_set(Object *obj, char *key, Object *value);
 

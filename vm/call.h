@@ -15,6 +15,8 @@ Object *alloc_closure_fn(Object *context, UserFunction *fn);
 
 Callframe *vm_alloc_frame(VMState *state);
 
+void vm_error(VMState *state, char *fmt, ...);
+
 void vm_remove_frame(VMState *state);
 
 void vm_run(VMState *state, Object *root);

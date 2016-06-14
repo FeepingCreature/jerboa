@@ -3,7 +3,6 @@
 #include "parser.h"
 #include "vm/builder.h"
 #include "vm/optimize.h"
-#include <stdio.h>
 
 typedef enum {
   REFMODE_NONE = -1, // not a reference

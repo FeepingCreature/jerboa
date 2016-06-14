@@ -137,7 +137,7 @@ Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
 }
 
 // change a property in-place
-void object_set_existing(Object *obj, char *key, Object *value) {
+bool object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
@@ -145,16 +145,15 @@ void object_set_existing(Object *obj, char *key, Object *value) {
     if (ptr != NULL) {
       assert(!(current->flags & OBJ_IMMUTABLE));
       *ptr = value;
-      return;
+      return true;
     }
     current = current->parent;
   }
-  fprintf(stderr, "key '%s' not found in object\n", key);
-  assert(false);
+  return false;
 }
 
 // change a property but only if it exists somewhere in the prototype chain
-void object_set_shadowing(Object *obj, char *key, Object *value) {
+bool object_set_shadowing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
@@ -162,12 +161,11 @@ void object_set_shadowing(Object *obj, char *key, Object *value) {
     if (ptr) {
       // so create it in obj (not current!)
       object_set(obj, key, value);
-      return;
+      return true;
     }
     current = current->parent;
   }
-  fprintf(stderr, "key '%s' not found in object\n", key);
-  assert(false);
+  return false;
 }
 
 void object_set(Object *obj, char *key, Object *value) {

@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include "call.h"
 
 #include <stdio.h>
+#include <stdarg.h>
 #include "gc.h"
 #include "dump.h"
 
@@ -12,7 +14,7 @@ Callframe *vm_alloc_frame(VMState *state) {
   // okay. this might get a bit complicated.
   void *ptr = state->stack_ptr;
   if (!ptr) {
-    assert(state->stack_len == 0);
+    if (state->stack_len != 0) { vm_error(state, "internal error"); return NULL; }
     int initial_capacity = sizeof(Callframe);
     ptr = malloc(initial_capacity + sizeof(Callframe));
     ptr = (Callframe*)ptr + 1;
@@ -47,6 +49,17 @@ Callframe *vm_alloc_frame(VMState *state) {
   return &state->stack_ptr[state->stack_len - 1];
 }
 
+void vm_error(VMState *state, char *fmt, ...) {
+  assert(state->runstate == VM_RUNNING);
+  char *errorstr;
+  va_list ap;
+  va_start(ap, fmt);
+  vasprintf(&errorstr, fmt, ap);
+  va_end(ap);
+  state->runstate = VM_ERRORED;
+  state->error = errorstr;
+}
+
 void vm_remove_frame(VMState *state) {
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   gc_remove_roots(state, &cf->frameroot);
@@ -65,19 +78,21 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
   }
 #endif
   
+#define VM_ASSERT(cond, ...) if (!(cond)) { vm_error(state, __VA_ARGS__); return; }
+  
   cyclecount ++;
-  Instr *instr = cf->block->instrs_ptr[cf->instr_offs++];
+  Instr *instr = cf->block->instrs_ptr[cf->instr_offs];
   switch (instr->type) {
     case INSTR_GET_ROOT:{
       GetRootInstr *get_root_instr = (GetRootInstr*) instr;
       int slot = get_root_instr->slot;
-      assert(slot < cf->slots_len);
+      VM_ASSERT(slot < cf->slots_len, "internal slot error");
       cf->slots_ptr[get_root_instr->slot] = root;
     } break;
     case INSTR_GET_CONTEXT:{
       GetContextInstr *get_context_instr = (GetContextInstr*) instr;
       int slot = get_context_instr->slot;
-      assert(slot < cf->slots_len);
+      VM_ASSERT(slot < cf->slots_len, "internal slot error");
       cf->slots_ptr[slot] = cf->context;
     } break;
     case INSTR_ACCESS: case INSTR_ACCESS_STRING_KEY: {
@@ -90,7 +105,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
         obj_slot = aski->obj_slot;
       }
       
-      assert(obj_slot < cf->slots_len);
+      VM_ASSERT(obj_slot < cf->slots_len, "internal slot error");
       Object *obj = cf->slots_ptr[obj_slot];
       
       char *key;
@@ -98,10 +113,11 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       
       if (instr->type == INSTR_ACCESS) {
         int key_slot = access_instr->key_slot;
-        assert(key_slot < cf->slots_len && cf->slots_ptr[key_slot]);
+        VM_ASSERT(key_slot < cf->slots_len, "internal slot error");
+        VM_ASSERT(cf->slots_ptr[key_slot], "key slot null"); // TODO "slot_assigned"
         Object *string_base = object_lookup(root, "string", NULL);
         Object *key_obj = cf->slots_ptr[key_slot];
-        assert(key_obj);
+        VM_ASSERT(key_obj, "key is null");
         StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
         if (skey) {
           key = skey->value;
@@ -123,7 +139,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
           Object *closure_base = object_lookup(root, "closure", NULL);
           FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
           ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
-          assert(fn_index_op || cl_index_op);
+          VM_ASSERT(fn_index_op || cl_index_op, "index op is neither function nor closure");
           Object *key_obj;
           if (instr->type == INSTR_ACCESS) {
             key_obj = cf->slots_ptr[access_instr->key_slot];
@@ -132,16 +148,16 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
           }
           if (fn_index_op) fn_index_op->fn_ptr(state, obj, index_op, &key_obj, 1);
           else cl_index_op->base.fn_ptr(state, obj, index_op, &key_obj, 1);
+          if (state->runstate != VM_RUNNING) return;
           object_found = true; // rely on the [] call to error on its own, if key not found
         }
       }
       if (!object_found) {
         if (has_char_key) {
-          fprintf(stderr, "> property not found: '%s'\n", key);
+          VM_ASSERT(false, "property not found: '%s'", key);
         } else {
-          fprintf(stderr, "> property not found!\n");
+          VM_ASSERT(false, "property not found!");
         }
-        assert(false);
       }
     } break;
     case INSTR_ASSIGN: case INSTR_ASSIGN_STRING_KEY: {
@@ -154,9 +170,10 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       if (instr->type == INSTR_ASSIGN) {
         int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
         int key_slot = assign_instr->key_slot;
-        assert(obj_slot < cf->slots_len);
-        assert(value_slot < cf->slots_len);
-        assert(key_slot < cf->slots_len && cf->slots_ptr[key_slot]);
+        VM_ASSERT(obj_slot < cf->slots_len, "slot numbering error");
+        VM_ASSERT(value_slot < cf->slots_len, "slot numbering error");
+        VM_ASSERT(key_slot < cf->slots_len, "slot numbering error");
+        VM_ASSERT(cf->slots_ptr[key_slot], "key slot null"); // TODO see above
         obj = cf->slots_ptr[obj_slot];
         value_obj = cf->slots_ptr[value_slot];
         Object *string_base = object_lookup(root, "string", NULL);
@@ -169,8 +186,8 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
         }
       } else {
         int obj_slot = aski->obj_slot, value_slot = aski->value_slot;
-        assert(obj_slot < cf->slots_len);
-        assert(value_slot < cf->slots_len);
+        VM_ASSERT(obj_slot < cf->slots_len, "slot numbering error");
+        VM_ASSERT(value_slot < cf->slots_len, "slot numbering error");
         obj = cf->slots_ptr[obj_slot];
         value_obj = cf->slots_ptr[value_slot];
         key = aski->key;
@@ -185,86 +202,89 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
           Object *closure_base = object_lookup(root, "closure", NULL);
           FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
           ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
-          assert(fn_index_assign_op || cl_index_assign_op);
+          VM_ASSERT(fn_index_assign_op || cl_index_assign_op, "'[]=' is neither function nor closure");
           Object *key_value_pair[] = {cf->slots_ptr[assign_instr->key_slot], value_obj};
           if (fn_index_assign_op) fn_index_assign_op->fn_ptr(state, obj, index_assign_op, key_value_pair, 2);
           else cl_index_assign_op->base.fn_ptr(state, obj, index_assign_op, key_value_pair, 2);
           break;
         }
-        assert(false);
+        VM_ASSERT(false, "key is not string and no '[]=' is set");
       }
       // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
       switch (assign_type) {
         case ASSIGN_PLAIN:
           if (obj == NULL) {
-            fprintf(stderr, "> assignment to null object");
-            assert(false);
+            VM_ASSERT(false, "assignment to null object");
           }
           object_set(obj, key, value_obj);
           break;
         case ASSIGN_EXISTING:
-          object_set_existing(obj, key, value_obj);
+          if (!object_set_existing(obj, key, value_obj)) {
+            VM_ASSERT(false, "key '%s' not found in object", key);
+          }
           break;
         case ASSIGN_SHADOWING:
-          object_set_shadowing(obj, key, value_obj);
+          if (!object_set_shadowing(obj, key, value_obj)) {
+            VM_ASSERT(false, "key '%s' not found in object", key);
+          }
           break;
       }
     } break;
     case INSTR_ALLOC_OBJECT:{
       AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) instr;
       int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
-      assert(target_slot < cf->slots_len);
-      assert(parent_slot < cf->slots_len);
+      VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
+      VM_ASSERT(parent_slot < cf->slots_len, "slot numbering error");
       Object *parent_obj = cf->slots_ptr[parent_slot];
-      if (parent_obj) assert(!(parent_obj->flags & OBJ_NOINHERIT));
+      if (parent_obj) VM_ASSERT(!(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
       cf->slots_ptr[target_slot] = alloc_object(state, cf->slots_ptr[parent_slot]);
     } break;
     case INSTR_ALLOC_INT_OBJECT:{
       AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
       int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
-      assert(target_slot < cf->slots_len);
+      VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
       cf->slots_ptr[target_slot] = alloc_int(state, value);
     } break;
     case INSTR_ALLOC_FLOAT_OBJECT:{
       AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) instr;
       int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
-      assert(target_slot < cf->slots_len);
+      VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
       cf->slots_ptr[target_slot] = alloc_float(state, value);
     } break;
     case INSTR_ALLOC_ARRAY_OBJECT:{
       AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) instr;
       int target_slot = alloc_array_obj_instr->target_slot;
-      assert(target_slot < cf->slots_len);
+      VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
       Object *obj = alloc_array(state, NULL, 0);
       cf->slots_ptr[target_slot] = obj;
     } break;
     case INSTR_ALLOC_STRING_OBJECT:{
       AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) instr;
       int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
-      assert(target_slot < cf->slots_len);
+      VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
       cf->slots_ptr[target_slot] = alloc_string(state, value);
     } break;
     case INSTR_ALLOC_CLOSURE_OBJECT:{
       AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) instr;
       int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
-      assert(target_slot < cf->slots_len);
-      assert(context_slot < cf->slots_len);
+      VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
+      VM_ASSERT(context_slot < cf->slots_len, "slot numbering error");
       cf->slots_ptr[target_slot] = alloc_closure_fn(cf->slots_ptr[context_slot], alloc_closure_obj_instr->fn);
     } break;
     case INSTR_CLOSE_OBJECT:{
       CloseObjectInstr *close_object_instr = (CloseObjectInstr*) instr;
       int slot = close_object_instr->slot;
-      assert(slot < cf->slots_len);
+      VM_ASSERT(slot < cf->slots_len, "slot numbering error");
       Object *obj = cf->slots_ptr[slot];
-      assert(!(obj->flags & OBJ_CLOSED));
+      VM_ASSERT(!(obj->flags & OBJ_CLOSED), "object is already closed!");
       obj->flags |= OBJ_CLOSED;
     } break;
     case INSTR_CALL: {
       CallInstr *call_instr = (CallInstr*) instr;
       int function_slot = call_instr->function_slot;
       int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
-      assert(function_slot < cf->slots_len);
-      assert(this_slot < cf->slots_len);
+      VM_ASSERT(function_slot < cf->slots_len, "slot numbering error");
+      VM_ASSERT(this_slot < cf->slots_len, "slot numbering error");
       Object *this_obj = cf->slots_ptr[this_slot];
       Object *fn_obj = cf->slots_ptr[function_slot];
       // validate function type
@@ -272,7 +292,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       Object *function_base = object_lookup(root, "function", NULL);
       FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
       ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
-      assert(cl || fn);
+      VM_ASSERT(cl || fn, "cannot call: object is neither function nor closure");
       // form args array from slots
       
       Object **args;
@@ -281,7 +301,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       
       for (int i = 0; i < args_length; ++i) {
         int argslot = call_instr->args_ptr[i];
-        assert(argslot < cf->slots_len);
+        VM_ASSERT(argslot < cf->slots_len, "slot numbering error");
         args[i] = cf->slots_ptr[argslot];
       }
       if (cl) cl->base.fn_ptr(state, this_obj, fn_obj, args, args_length);
@@ -293,7 +313,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
     case INSTR_RETURN: {
       ReturnInstr *ret_instr = (ReturnInstr*) instr;
       int ret_slot = ret_instr->ret_slot;
-      assert(ret_slot < cf->slots_len);
+      VM_ASSERT(ret_slot < cf->slots_len, "slot numbering error");
       Object *res = cf->slots_ptr[ret_slot];
       vm_remove_frame(state);
       state->result_value = res;
@@ -301,14 +321,14 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
     case INSTR_SAVE_RESULT: {
       SaveResultInstr *save_instr = (SaveResultInstr*) instr;
       int save_slot = save_instr->target_slot;
-      assert(save_slot < cf->slots_len);
+      VM_ASSERT(save_slot < cf->slots_len, "slot numbering error");
       cf->slots_ptr[save_slot] = state->result_value;
       state->result_value = NULL;
     } break;
     case INSTR_BR: {
       BranchInstr *br_instr = (BranchInstr*) instr;
       int blk = br_instr->blk;
-      assert(blk < cf->uf->body.blocks_len);
+      VM_ASSERT(blk < cf->uf->body.blocks_len, "slot numbering error");
       cf->block = &cf->uf->body.blocks_ptr[blk];
       cf->instr_offs = 0;
     } break;
@@ -316,7 +336,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       TestBranchInstr *tbr_instr = (TestBranchInstr*) instr;
       int test_slot = tbr_instr->test_slot;
       int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
-      assert(test_slot < cf->slots_len);
+      VM_ASSERT(test_slot < cf->slots_len, "slot numbering error");
       Object *test_value = cf->slots_ptr[test_slot];
       
       Object *bool_base = object_lookup(root, "bool", NULL);
@@ -337,14 +357,24 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       cf->block = &cf->uf->body.blocks_ptr[target_blk];
       cf->instr_offs = 0;
     } break;
-    default: fprintf(stderr, "unknown instruction: %i\n", instr->type); assert(false); break;
+    default:
+      VM_ASSERT(false, "unknown instruction: %i\n", instr->type);
+      break;
   }
+  cf->instr_offs++;
+#undef VM_ASSERT
 }
 
 void vm_run(VMState *state, Object *root) {
+  assert(state->runstate == VM_TERMINATED || state->runstate == VM_ERRORED);
+  state->runstate = VM_RUNNING;
+  state->error = NULL;
   void **args_prealloc = malloc(sizeof(void*) * 10);
   for (int i = 0; i < 10; ++i) { args_prealloc[i] = malloc(sizeof(Object*) * i); }
-  while (state->stack_len) vm_step(state, root, args_prealloc);
+  while (state->runstate == VM_RUNNING) {
+    vm_step(state, root, args_prealloc);
+    if (state->stack_len == 0) state->runstate = VM_TERMINATED;
+  }
 }
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
@@ -356,12 +386,15 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
   cf->slots_ptr = calloc(sizeof(Object*), cf->slots_len);
   gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot);
   
-  assert(args_len == cf->uf->arity);
+  if (args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
   for (int i = 0; i < args_len; ++i) {
     cf->slots_ptr[i] = args_ptr[i];
   }
   
-  assert(cf->uf->body.blocks_len > 0);
+  if (cf->uf->body.blocks_len == 0) {
+    vm_error(state, "invalid function: no instructions");
+    return;
+  }
   cf->block = cf->uf->body.blocks_ptr;
   cf->instr_offs = 0;
 }
