@@ -26,7 +26,10 @@ void eat_filler(char **textp) {
       else (*textp)++;
     } else {
       if (starts_with(textp, "/*")) comment_depth ++;
-      else if ((*textp)[0] == ' ' || (*textp)[0] == '\n') (*textp)++;
+      else if (starts_with(textp, "//")) {
+        while (**textp && **textp != '\n') (*textp)++;
+      }
+      else if (**textp == ' ' || **textp == '\n') (*textp)++;
       else break;
     }
   }
@@ -78,8 +81,17 @@ bool parse_int(char **textp, int *outp) {
   char *text = *textp;
   eat_filler(&text);
   char *start = text;
+  int base = 10;
   if (text[0] && text[0] == '-') text++;
-  while (text[0] && text[0] >= '0' && text[0] <= '9') text++;
+  if (text[0] == '0' && text[1] == 'x') {
+    base = 16;
+    text += 2;
+  }
+  while (text[0]) {
+    if (base >= 10 && text[0] >= '0' && text[0] <= '9') text++;
+    else if (base >= 16 && ((text[0] >= 'A' && text[0] <= 'F') || (text[0] >= 'a' && text[0] <= 'f'))) text++;
+    else break;
+  }
   if (text == start) return false;
   
   *textp = text;
@@ -87,7 +99,7 @@ bool parse_int(char **textp, int *outp) {
   char *res = malloc(len + 1);
   memcpy(res, start, len);
   res[len] = 0;
-  *outp = atoi(res);
+  *outp = strtol(res, NULL, base);
   free(res);
   return true;
 }
