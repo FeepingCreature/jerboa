@@ -23,7 +23,7 @@ static void asprintf(char **outp, char *fmt, ...) {
 }
 
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 0);
+  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
@@ -38,7 +38,7 @@ typedef enum {
 } MathOp;
 
 static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
@@ -46,7 +46,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object
     *iobj1 = obj_instance_of(thisptr, int_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base);
-  assert(iobj1);
+  VM_ASSERT(iobj1, "internal error: int math function called on wrong type of object"); // otherwise how are we called on it??
   if (iobj2) {
     int i1 = ((IntObject*) iobj1)->value, i2 = ((IntObject*) iobj2)->value;
     int res;
@@ -76,7 +76,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     state->result_value = alloc_float(state, res);
     return;
   }
-  assert(false);
+  vm_error(state, "don't know how to perform int math with %p", args_ptr[0]);
 }
 
 static void int_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -96,7 +96,7 @@ static void int_div_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
 }
 
 static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
@@ -106,7 +106,7 @@ static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **
     *fobj1 = obj_instance_of(thisptr, float_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base),
     *fobj2 = obj_instance_of(args_ptr[0], float_base);
-  assert(fobj1);
+  VM_ASSERT(fobj1, "internal error: float math function called on wrong type of object");
   if (fobj2 || iobj2) {
     float v1 = ((FloatObject*) fobj1)->value, v2;
     if (fobj2) v2 = ((FloatObject*) fobj2)->value;
@@ -122,7 +122,7 @@ static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **
     state->result_value = alloc_float(state, res);
     return;
   }
-  assert(false);
+  vm_error(state, "don't know how to perform float math with %p", args_ptr[0]);
 }
 
 static void float_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -142,7 +142,7 @@ static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 }
 
 static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
@@ -156,14 +156,14 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
     *bobj2 = obj_instance_of(args_ptr[0], bool_base),
     *fobj2 = obj_instance_of(args_ptr[0], float_base),
     *sobj2 = obj_instance_of(args_ptr[0], string_base);
-  assert(sobj1);
+  VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
   
   char *str1 = ((StringObject*) sobj1)->value, *str2;
   if (sobj2) asprintf(&str2, "%s", ((StringObject*) sobj2)->value);
   else if (fobj2) asprintf(&str2, "%f", ((FloatObject*) fobj2)->value);
   else if (iobj2) asprintf(&str2, "%i", ((IntObject*) iobj2)->value);
   else if (bobj2) if (((BoolObject*)bobj2)->value) asprintf(&str2, "%s", "true"); else asprintf(&str2, "%s", "false");
-  else assert(false);
+  else VM_ASSERT(false, "don't know how to format object: %p", args_ptr[0]);
   char *str3;
   asprintf(&str3, "%s%s", str1, str2);
   free(str2);
@@ -180,7 +180,7 @@ typedef enum {
 } CompareOp;
 
 static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
@@ -188,7 +188,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   Object
     *iobj1 = obj_instance_of(thisptr, int_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base);
-  assert(iobj1);
+  VM_ASSERT(iobj1, "internal error: int compare function called on wrong type of object");
   if (iobj2) {
     int i1 = ((IntObject*) iobj1)->value, i2 = ((IntObject*) iobj2)->value;
     bool res;
@@ -220,7 +220,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
     state->result_value = alloc_bool(state, res);
     return;
   }
-  assert(false);
+  VM_ASSERT(false, "don't know how to compare int with object %p", args_ptr[0]);
 }
 
 static void int_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -244,7 +244,7 @@ static void int_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **args
 }
 
 static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   
@@ -254,7 +254,7 @@ static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **a
     *fobj1 = obj_instance_of(thisptr, float_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base),
     *fobj2 = obj_instance_of(args_ptr[0], float_base);
-  assert(fobj1);
+  VM_ASSERT(fobj1, "internal error: float compare function called on wrong type of object");
   if (fobj2 || iobj2) {
     float v1 = ((FloatObject*) fobj1)->value, v2;
     if (fobj2) v2 = ((FloatObject*) fobj2)->value;
@@ -271,7 +271,7 @@ static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **a
     state->result_value = alloc_bool(state, res);
     return;
   }
-  assert(false);
+  VM_ASSERT(false, "don't know how to compare float with %p", args_ptr[0]);
 }
 
 static void float_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -315,17 +315,17 @@ static void array_mark_fn(VMState *state, Object *obj) {
 }
 
 static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
-  assert(iarg);
-  assert(arr_obj);
+  VM_ASSERT(iarg, "parameter to resize function must be int");
+  VM_ASSERT(arr_obj, "internal error: resize called on object that is not an array");
   int newsize = iarg->value;
-  assert(newsize >= 0);
+  VM_ASSERT(newsize >= 0, "bad size: %i", newsize);
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * newsize);
   arr_obj->length = newsize;
   object_set(thisptr, "length", alloc_int(state, newsize));
@@ -333,12 +333,12 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
 }
 
 static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
-  assert(arr_obj);
+  VM_ASSERT(arr_obj, "internal error: push called on object that is not an array");
   Object *value = args_ptr[0];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * ++arr_obj->length);
   arr_obj->ptr[arr_obj->length - 1] = value;
@@ -347,12 +347,12 @@ static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **
 }
 
 static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 0);
+  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
-  assert(arr_obj);
+  VM_ASSERT(arr_obj, "internal error: pop called on object that is not an array");
   Object *res = arr_obj->ptr[arr_obj->length - 1];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * --arr_obj->length);
   object_set(thisptr, "length", alloc_int(state, arr_obj->length));
@@ -360,7 +360,7 @@ static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 }
 
 static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 1);
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
@@ -368,24 +368,24 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
   if (!iarg) { state->result_value = NULL; return; }
-  assert(arr_obj);
+  VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = iarg->value;
-  assert(index >= 0 && index < arr_obj->length);
+  VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   state->result_value = arr_obj->ptr[index];
 }
 
 static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  assert(args_len == 2);
+  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
-  assert(arr_obj);
-  assert(iarg);
+  VM_ASSERT(arr_obj, "internal error: array '[]=' called on object that is not an array");
+  VM_ASSERT(iarg, "index of array '[]=' must be int");
   int index = iarg->value;
-  assert(index >= 0 && index < arr_obj->length);
+  VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   Object *value = args_ptr[1];
   arr_obj->ptr[index] = value;
   state->result_value = NULL;
@@ -423,20 +423,21 @@ static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_
       printf("%s", ((StringObject*)sarg)->value);
       continue;
     }
-    assert(false);
+    vm_error(state, "don't know how to print %p", arg);
+    return;
   }
   printf("\n");
   state->result_value = NULL;
 }
 
 static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *string_base = object_lookup(root, "string", NULL);
   Object *ffi = object_lookup(root, "ffi", NULL);
   Object *handle_base = object_lookup(ffi, "handle", NULL);
   
-  assert(args_len == 1);
   StringObject *sarg = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   
   char *file = sarg->value;
@@ -475,6 +476,7 @@ static ffi_type *type_to_ffi_ptr(Object *ffi, Object *obj) {
 }
 
 static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *pointer_base = object_lookup(root, "pointer", NULL);
@@ -490,7 +492,6 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   PointerObject *thisptr_obj = (PointerObject*) obj_instance_of(thisptr, pointer_base);
   assert(thisptr);
   
-  assert(args_len == 1);
   Object *ffi_type_obj = obj_instance_of(args_ptr[0], ffi_type);
   assert(ffi_type_obj);
   if (obj_instance_of_or_equal(ffi_type_obj, ffi_sint)) {
@@ -534,10 +535,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   FFIHandle *ffihdl = ffi_ptr_obj_sub->ptr;
   void *sym_ptr = sym_ptr_obj_sub->ptr;
   
-  if (args_len != par_types_array->length) {
-    fprintf(stderr, "FFI arity violated: expected %i, got %i\n", par_types_array->length, args_len);
-    assert(false);
-  }
+  VM_ASSERT(args_len == par_types_array->length, "FFI arity violated: expected %i, got %i", par_types_array->length, args_len);
   
   int par_len_sum = 0;
   for (int i = -1; i < args_len; ++i) {
@@ -643,6 +641,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 }
 
 static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 3, "wrong arity: expected 3, got %i", args_len);
   Object *root = state->stack_ptr[state->stack_len - 1].context;
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
@@ -657,7 +656,6 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   PointerObject *handle_ptr = (PointerObject*) obj_instance_of(handle_ptr_obj, pointer_base);
   void *handle = handle_ptr->ptr;
   
-  assert(args_len == 3);
   StringObject *fn_name_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   assert(fn_name_obj);
   

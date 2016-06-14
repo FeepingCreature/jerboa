@@ -14,7 +14,7 @@ Callframe *vm_alloc_frame(VMState *state) {
   // okay. this might get a bit complicated.
   void *ptr = state->stack_ptr;
   if (!ptr) {
-    if (state->stack_len != 0) { vm_error(state, "internal error"); return NULL; }
+    VM_ASSERT(state->stack_len == 0, "internal error") NULL;
     int initial_capacity = sizeof(Callframe);
     ptr = malloc(initial_capacity + sizeof(Callframe));
     ptr = (Callframe*)ptr + 1;
@@ -77,8 +77,6 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
     exit(1);
   }
 #endif
-  
-#define VM_ASSERT(cond, ...) if (!(cond)) { vm_error(state, __VA_ARGS__); return; }
   
   cyclecount ++;
   Instr *instr = cf->block->instrs_ptr[cf->instr_offs];
@@ -362,7 +360,6 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       break;
   }
   cf->instr_offs++;
-#undef VM_ASSERT
 }
 
 void vm_run(VMState *state, Object *root) {

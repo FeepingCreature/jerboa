@@ -3,6 +3,7 @@
 
 #include "object.h"
 
+#define VM_ASSERT(cond, ...) if (!(cond) && (vm_error(state, __VA_ARGS__), true)) return
 int cyclecount;
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len);
