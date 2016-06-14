@@ -19,6 +19,6 @@ bool parse_float(char **textp, float *outp);
 
 bool parse_string(char **textp, char **outp);
 
-void parser_error(char *location, char *format, ...) __attribute__ ((noreturn));
+void log_parser_error(char *location, char *format, ...);
 
 #endif

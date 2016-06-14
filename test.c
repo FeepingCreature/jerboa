@@ -24,7 +24,9 @@ int main(int argc, char **argv) {
   
   String source = readfile("test.jb");
   
-  UserFunction *module = parse_module(&source.ptr);
+  UserFunction *module;
+  ParseResult res = parse_module(&source.ptr, &module);
+  assert(res == PARSE_OK);
   dump_fn(module);
   
   vmstate.stack_len = 0;

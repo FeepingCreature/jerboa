@@ -3,6 +3,12 @@
 
 #include "vm/instr.h"
 
-UserFunction *parse_module(char **textp);
+typedef enum {
+  PARSE_NONE,
+  PARSE_ERROR,
+  PARSE_OK
+} ParseResult;
+
+ParseResult parse_module(char **textp, UserFunction **uf_p);
 
 #endif

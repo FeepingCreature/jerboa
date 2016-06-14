@@ -151,7 +151,7 @@ bool eat_keyword(char **textp, char *keyword) {
   return true;
 }
 
-void parser_error(char *location, char *format, ...) {
+void log_parser_error(char *location, char *format, ...) {
   fprintf(stderr, "at %.*s:\n", 20, location);
   fprintf(stderr, "parser error: ");
   va_list ap;
@@ -159,7 +159,4 @@ void parser_error(char *location, char *format, ...) {
   vfprintf(stderr, format, ap);
   va_end(ap);
   fprintf(stderr, "\n");
-  exit(1);
 }
-
-void parser_error(char *location, char *format, ...) __attribute__ ((noreturn));
