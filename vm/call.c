@@ -328,7 +328,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       int blk = br_instr->blk;
       VM_ASSERT(blk < cf->uf->body.blocks_len, "slot numbering error");
       cf->block = &cf->uf->body.blocks_ptr[blk];
-      cf->instr_offs = 0;
+      cf->instr_offs = -1;
     } break;
     case INSTR_TESTBR: {
       TestBranchInstr *tbr_instr = (TestBranchInstr*) instr;
@@ -353,7 +353,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       
       int target_blk = test ? true_blk : false_blk;
       cf->block = &cf->uf->body.blocks_ptr[target_blk];
-      cf->instr_offs = 0;
+      cf->instr_offs = -1;
     } break;
     default:
       VM_ASSERT(false, "unknown instruction: %i\n", instr->type);
