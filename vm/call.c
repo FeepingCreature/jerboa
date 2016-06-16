@@ -10,7 +10,7 @@ int cyclecount = 0;
 
 #define UNLIKELY(X) __builtin_expect(X, 0)
 
-Callframe *vm_alloc_frame(VMState *state) {
+Callframe *vm_alloc_frame(VMState *state, int slots) {
   // okay. this might get a bit complicated.
   void *ptr = state->stack_ptr;
   if (!ptr) {
@@ -46,7 +46,10 @@ Callframe *vm_alloc_frame(VMState *state) {
   }
   
   state->stack_len = state->stack_len + 1;
-  return &state->stack_ptr[state->stack_len - 1];
+  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
+  cf->slots_len = slots;
+  cf->slots_ptr = calloc(sizeof(Object*), cf->slots_len);
+  return cf;
 }
 
 void vm_error(VMState *state, char *fmt, ...) {
@@ -62,7 +65,6 @@ void vm_error(VMState *state, char *fmt, ...) {
 
 void vm_remove_frame(VMState *state) {
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
-  gc_remove_roots(state, &cf->frameroot);
   free(cf->slots_ptr);
   // TODO shrink memory?
   state->stack_len = state->stack_len - 1;
@@ -302,8 +304,12 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
         VM_ASSERT(argslot < cf->slots_len, "slot numbering error");
         args[i] = cf->slots_ptr[argslot];
       }
+      int prev_stacklen = state->stack_len;
       if (cl) cl->base.fn_ptr(state, this_obj, fn_obj, args, args_length);
       else fn->fn_ptr(state, this_obj, fn_obj, args, args_length);
+      // recreate pointer, because the function may have reallocated our stack
+      // and we still need to increment the instr ptr for this frame (which is now 1 down)
+      cf = &state->stack_ptr[prev_stacklen - 1];
       
       if (args_length < 10) { }
       else { free(args); }
@@ -313,6 +319,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       int ret_slot = ret_instr->ret_slot;
       VM_ASSERT(ret_slot < cf->slots_len, "slot numbering error");
       Object *res = cf->slots_ptr[ret_slot];
+      gc_remove_roots(state, &cf->frameroot);
       vm_remove_frame(state);
       state->result_value = res;
     } break;
@@ -375,12 +382,10 @@ void vm_run(VMState *state, Object *root) {
 }
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
-  Callframe *cf = vm_alloc_frame(state);
+  Callframe *cf = vm_alloc_frame(state, fn->slots);
   
   cf->uf = fn;
   cf->context = context;
-  cf->slots_len = fn->slots;
-  cf->slots_ptr = calloc(sizeof(Object*), cf->slots_len);
   gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot);
   
   if (args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }

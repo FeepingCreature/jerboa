@@ -14,22 +14,24 @@
 #include "util.h"
 
 int main(int argc, char **argv) {
-  VMState vmstate = {0};
-  vm_alloc_frame(&vmstate);
+  assert(argc == 2);
   
+  VMState vmstate = {0};
+  
+  vm_alloc_frame(&vmstate, 0);
   Object *root = create_root(&vmstate);
+  vm_remove_frame(&vmstate);
   
   GCRootSet set;
   gc_add_roots(&vmstate, &root, 1, &set);
   
-  String source = readfile("test.jb");
+  String source = readfile(argv[1]);
   
   UserFunction *module;
   ParseResult res = parse_module(&source.ptr, &module);
   assert(res == PARSE_OK);
   dump_fn(module);
   
-  vmstate.stack_len = 0;
   call_function(&vmstate, root, module, NULL, 0);
   vm_run(&vmstate, root);
   

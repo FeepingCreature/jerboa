@@ -18,9 +18,9 @@
 
 int main(int argc, char **argv) {
   VMState vmstate = {0};
-  vm_alloc_frame(&vmstate);
+  vm_alloc_frame(&vmstate, 0);
   Object *root = create_root(&vmstate);
-  vmstate.stack_len = 0;
+  vm_remove_frame(&vmstate);
   
   GCRootSet set;
   gc_add_roots(&vmstate, &root, 1, &set);
