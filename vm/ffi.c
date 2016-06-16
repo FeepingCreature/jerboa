@@ -23,10 +23,7 @@ static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   
   char *file = sarg->value;
   void *dlptr = dlopen(file, RTLD_LAZY);
-  if (dlptr == NULL) {
-    fprintf(stderr, "dlopen failed: %s\n", dlerror());
-    assert(false);
-  }
+  VM_ASSERT(dlptr, "dlopen failed: %s", dlerror());
   
   Object *handle_obj = alloc_object(state, handle_base);
   handle_obj->flags |= OBJ_IMMUTABLE;
@@ -140,7 +137,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     
     if (obj_instance_of_or_equal(type, ffi_void)) {
       if (i == -1) ret_ptr = data;
-      else assert("Void in parameter types??" && false);
+      else VM_ASSERT(false, "void in parameter types??");
     }
     else if (obj_instance_of_or_equal(type, ffi_sint)
       || obj_instance_of_or_equal(type, ffi_uint32)
@@ -149,7 +146,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       if (i == -1) ret_ptr = data;
       else {
         IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-        assert(iobj);
+        VM_ASSERT(iobj, "ffi int rgument must be int");
         *(int*) data = iobj->value;
         par_ptrs[i] = data;
       }
@@ -160,7 +157,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       else {
         FloatObject *fobj = (FloatObject*) obj_instance_of(args_ptr[i], float_base);
         IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-        assert(fobj || iobj);
+        VM_ASSERT(fobj || iobj, "ffi float argument must be int or float");
         if (fobj) *(float*) data = fobj->value;
         else *(float*) data = iobj->value;
         par_ptrs[i] = data;
@@ -172,7 +169,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       else {
         FloatObject *fobj = (FloatObject*) obj_instance_of(args_ptr[i], float_base);
         IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-        assert(fobj || iobj);
+        VM_ASSERT(fobj || iobj, "ffi double argument must be int or float");
         if (fobj) *(double*) data = fobj->value;
         else *(double*) data = iobj->value;
         par_ptrs[i] = data;
@@ -183,7 +180,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       if (i == -1) ret_ptr = data;
       else {
         StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[i], string_base);
-        assert(sobj);
+        VM_ASSERT(sobj, "ffi char* argument must be string");
         *(char**) data = sobj->value;
         par_ptrs[i] = data;
       }
@@ -193,7 +190,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       if (i == -1) ret_ptr = data;
       else {
         PointerObject *pobj = (PointerObject*) obj_instance_of(args_ptr[i], pointer_base);
-        assert(pobj);
+        VM_ASSERT(pobj, "ffi pointer argument must be pointer");
         *(void**) data = pobj->ptr;
         par_ptrs[i] = data;
       }
@@ -208,13 +205,15 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     state->result_value = NULL;
   } else if (obj_instance_of_or_equal(ret_type, ffi_sint)) {
     state->result_value = alloc_int(state, *(int*) ret_ptr);
+  } else if (obj_instance_of_or_equal(ret_type, ffi_uint)) {
+    state->result_value = alloc_int(state, *(unsigned int*) ret_ptr);
   } else if (obj_instance_of_or_equal(ret_type, ffi_charptr)) {
     state->result_value = alloc_string(state, *(char**) ret_ptr);
   } else if (obj_instance_of_or_equal(ret_type, ffi_pointer)) {
     Object *ptr = alloc_ptr(state, *(void**) ret_ptr);
     object_set(ptr, "dereference", alloc_fn(state, ffi_ptr_dereference));
     state->result_value = ptr;
-  } else assert(false);
+  } else VM_ASSERT(false, "unknown return type");
 }
 
 static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -234,35 +233,29 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   void *handle = handle_ptr->ptr;
   
   StringObject *fn_name_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
-  assert(fn_name_obj);
+  VM_ASSERT(fn_name_obj, "symbol name must be string");
   
   void *fnptr = dlsym(handle, fn_name_obj->value);
   char *error = dlerror();
-  if (error != NULL) {
-    fprintf(stderr, "dlsym failed: %s\n", error);
-    assert(false);
-  }
+  VM_ASSERT(!error, "dlsym failed: %s", error);
   
   Object *ret_type = obj_instance_of(args_ptr[1], type_base);
-  assert(ret_type);
+  VM_ASSERT(ret_type, "return type must be ffi.type!");
   
   ArrayObject *par_types = (ArrayObject*) obj_instance_of(args_ptr[2], array_base);
-  assert(par_types);
+  VM_ASSERT(par_types, "parameter type must be array");
   
   ffi_type *ffi_ret_type = type_to_ffi_ptr(ffi, ret_type);
   FFIHandle *ffihdl = malloc(sizeof(FFIHandle) + sizeof(ffi_type*) * par_types->length);
   
   for (int i = 0; i < par_types->length; ++i) {
     Object *sub_type = obj_instance_of(par_types->ptr[i], type_base);
-    assert(sub_type);
+    VM_ASSERT(sub_type, "parameter type %i must be ffi.type!", i);
     ((ffi_type**)(ffihdl + 1))[i] = type_to_ffi_ptr(ffi, sub_type);
   }
   
   ffi_status status = ffi_prep_cif(&ffihdl->cif, FFI_DEFAULT_ABI, par_types->length, ffi_ret_type, (ffi_type**)(ffihdl + 1));
-  if (status != FFI_OK) {
-    fprintf(stderr, "FFI error: %i\n", status);
-    assert(false);
-  }
+  VM_ASSERT(status == FFI_OK, "FFI error: %i", status);
   
   Object *fn_obj = alloc_fn(state, ffi_call_fn);
   fn_obj->flags |= OBJ_IMMUTABLE;

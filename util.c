@@ -17,9 +17,12 @@ String readfile(char *filename) {
   do {
     res_len = bytes_read + 1024;
     res_ptr = realloc(res_ptr, res_len);
-    ssize_t numitems = read(file, res_ptr + bytes_read, res_len - bytes_read);
+    ssize_t numitems = read(file, res_ptr + bytes_read, res_len - bytes_read - 1);
     if (numitems == -1) { fprintf(stderr, "cannot read from file: %s\n", strerror(errno)); assert(false); }
-    if (numitems == 0) { return (String){res_ptr, res_len}; }
+    if (numitems == 0) {
+      res_ptr[bytes_read] = 0;
+      return (String){res_ptr, bytes_read};
+    }
     bytes_read += numitems;
   } while (true);
 }

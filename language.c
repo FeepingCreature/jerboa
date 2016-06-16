@@ -162,7 +162,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     *textp = text;
     if (builder) {
       int slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
-      *rv = (RefValue) {slot, -1, false};
+      *rv = (RefValue) {slot, -1, REFMODE_NONE};
     }
     return PARSE_OK;
   }
@@ -177,17 +177,18 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     return PARSE_OK;
   }
   
-  char *t_value;
-  if (parse_string(&text, &t_value)) {
-    *textp = text;
-    if (builder) {
-      int slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
-      *rv = (RefValue) {slot, -1, REFMODE_NONE};
-    }
-    return PARSE_OK;
-  }
-  
   ParseResult res;
+  
+  char *t_value;
+  if ((res = parse_string(&text, &t_value)) != PARSE_NONE) {
+    if (res == PARSE_OK) {*textp = text;
+      if (builder) {
+        int slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
+        *rv = (RefValue) {slot, -1, REFMODE_NONE};
+      }
+    }
+    return res;
+  }
   
   if ((res = parse_object_literal(&text, builder, rv)) != PARSE_NONE) {
     if (res == PARSE_OK) *textp = text;
@@ -663,10 +664,14 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
       
       RefValue value_expr;
       res = parse_expr(&text, builder, 0, &value_expr);
+      if (res == PARSE_ERROR) return res;
       assert(res == PARSE_OK);
       int value = ref_access(builder, value_expr);
       
       switch (rv.mode) {
+        case REFMODE_NONE:
+          log_parser_error(text, "cannot assign to non-reference expression!");
+          return PARSE_ERROR;
         case REFMODE_VARIABLE: ref_assign_existing(builder, rv, value); break;
         case REFMODE_OBJECT: ref_assign_shadowing(builder, rv, value); break;
         case REFMODE_INDEX: ref_assign(builder, rv, value); break;
@@ -804,7 +809,7 @@ ParseResult parse_module(char **textp, UserFunction **uf_p) {
   
   while (true) {
     eat_filler(textp);
-    if ((*textp)[0] == 0) break;
+    if (!**textp) break;
     ParseResult res = parse_statement(textp, builder);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);

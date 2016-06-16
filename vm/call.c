@@ -57,7 +57,7 @@ void vm_error(VMState *state, char *fmt, ...) {
   char *errorstr;
   va_list ap;
   va_start(ap, fmt);
-  vasprintf(&errorstr, fmt, ap);
+  if (-1 == vasprintf(&errorstr, fmt, ap)) abort();
   va_end(ap);
   state->runstate = VM_ERRORED;
   state->error = errorstr;
@@ -211,18 +211,17 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
         VM_ASSERT(false, "key is not string and no '[]=' is set");
       }
       // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
+      VM_ASSERT(obj, "assignment to null object");
       switch (assign_type) {
         case ASSIGN_PLAIN:
-          if (obj == NULL) {
-            VM_ASSERT(false, "assignment to null object");
-          }
           object_set(obj, key, value_obj);
           break;
         case ASSIGN_EXISTING:
-          if (!object_set_existing(obj, key, value_obj)) {
-            VM_ASSERT(false, "key '%s' not found in object", key);
-          }
+        {
+          char *error = object_set_existing(obj, key, value_obj);
+          VM_ASSERT(!error, error);
           break;
+        }
         case ASSIGN_SHADOWING:
           if (!object_set_shadowing(obj, key, value_obj)) {
             VM_ASSERT(false, "key '%s' not found in object", key);
@@ -366,6 +365,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       VM_ASSERT(false, "unknown instruction: %i\n", instr->type);
       break;
   }
+  if (state->runstate == VM_ERRORED) return;
   cf->instr_offs++;
 }
 

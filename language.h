@@ -2,12 +2,7 @@
 #define LANGUAGE_H
 
 #include "vm/instr.h"
-
-typedef enum {
-  PARSE_NONE,
-  PARSE_ERROR,
-  PARSE_OK
-} ParseResult;
+#include "parser.h"
 
 ParseResult parse_module(char **textp, UserFunction **uf_p);
 

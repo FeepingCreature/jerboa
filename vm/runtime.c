@@ -51,7 +51,10 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       case MATH_ADD: res = i1 + i2; break;
       case MATH_SUB: res = i1 - i2; break;
       case MATH_MUL: res = i1 * i2; break;
-      case MATH_DIV: res = i1 / i2; break;
+      case MATH_DIV:
+        VM_ASSERT(i2 != 0, "division by zero");
+        res = i1 / i2;
+        break;
       default: assert(false);
     }
     state->result_value = alloc_int(state, res);
@@ -67,7 +70,10 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       case MATH_ADD: res = v1 + v2; break;
       case MATH_SUB: res = v1 - v2; break;
       case MATH_MUL: res = v1 * v2; break;
-      case MATH_DIV: res = v1 / v2; break;
+      case MATH_DIV:
+        VM_ASSERT(v2 != 0.0f, "float division by zero");
+        res = v1 / v2;
+        break;
       default: assert(false);
     }
     state->result_value = alloc_float(state, res);
@@ -330,9 +336,11 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
   VM_ASSERT(iarg, "parameter to resize function must be int");
   VM_ASSERT(arr_obj, "internal error: resize called on object that is not an array");
+  int oldsize = arr_obj->length;
   int newsize = iarg->value;
   VM_ASSERT(newsize >= 0, "bad size: %i", newsize);
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * newsize);
+  memset(arr_obj->ptr + oldsize, 0, sizeof(Object*) * (newsize - oldsize));
   arr_obj->length = newsize;
   object_set(thisptr, "length", alloc_int(state, newsize));
   state->result_value = thisptr;

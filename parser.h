@@ -3,6 +3,12 @@
 
 #include <stdbool.h>
 
+typedef enum {
+  PARSE_NONE,
+  PARSE_ERROR,
+  PARSE_OK
+} ParseResult;
+
 void eat_filler(char **textp);
 
 bool eat_string(char **textp, char *keyword);
@@ -17,7 +23,7 @@ bool parse_int(char **textp, int *outp);
 
 bool parse_float(char **textp, float *outp);
 
-bool parse_string(char **textp, char **outp);
+ParseResult parse_string(char **textp, char **outp);
 
 void log_parser_error(char *location, char *format, ...);
 

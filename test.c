@@ -29,6 +29,10 @@ int main(int argc, char **argv) {
   
   UserFunction *module;
   ParseResult res = parse_module(&source.ptr, &module);
+  if (res != PARSE_OK) {
+    fprintf(stderr, "parse failed!");
+    return 1;
+  }
   assert(res == PARSE_OK);
   dump_fn(module);
   

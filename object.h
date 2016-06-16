@@ -95,7 +95,8 @@ typedef struct {
 
 Object *object_lookup(Object *obj, char *key, bool *key_found);
 
-bool object_set_existing(Object *obj, char *key, Object *value);
+// returns NULL on success, error string otherwise
+char *object_set_existing(Object *obj, char *key, Object *value);
 
 bool object_set_shadowing(Object *obj, char *key, Object *value);
 
@@ -177,5 +178,10 @@ Object *alloc_ptr(VMState *state, void *ptr); // TODO unify with alloc_fn
 Object *alloc_fn(VMState *state, VMFunctionPointer fn);
 
 Object *alloc_custom_gc(VMState *state);
+
+// here so that object.c can use it
+void gc_add_roots(VMState *state, Object **objects, int num_objects, GCRootSet *set);
+
+void gc_remove_roots(VMState *state, GCRootSet *ptr);
 
 #endif

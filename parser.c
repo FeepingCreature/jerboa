@@ -125,13 +125,17 @@ bool parse_float(char **textp, float *outp) {
   return true;
 }
 
-bool parse_string(char **textp, char **outp) {
+ParseResult parse_string(char **textp, char **outp) {
   char *text = *textp;
   eat_filler(&text);
   char *start = text;
-  if (text[0] != '"') return false;
+  if (text[0] != '"') return PARSE_NONE;
   text++;
-  while (text[0] != '"') text++; // TODO escape
+  while (text[0] && text[0] != '"') text++; // TODO escape
+  if (!text[0]) {
+    log_parser_error(text, "closing quote mark is missing");
+    return PARSE_ERROR;
+  }
   text++;
   
   *textp = text;
@@ -140,7 +144,7 @@ bool parse_string(char **textp, char **outp) {
   memcpy(res, start + 1, len - 2);
   res[len - 2] = 0;
   *outp = res;
-  return true;
+  return PARSE_OK;
 }
 
 bool eat_keyword(char **textp, char *keyword) {

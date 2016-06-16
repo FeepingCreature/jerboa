@@ -137,19 +137,27 @@ Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
 }
 
 // change a property in-place
-bool object_set_existing(Object *obj, char *key, Object *value) {
+// returns an error string or NULL
+char *object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
     Object **ptr = table_lookup_ref_alloc(&current->tbl, key, NULL);
     if (ptr != NULL) {
+      if (current->flags & OBJ_IMMUTABLE) {
+        char *error = NULL;
+        if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was immutable.", key, (void*) current)) abort();
+        return error;
+      }
       assert(!(current->flags & OBJ_IMMUTABLE));
       *ptr = value;
-      return true;
+      return NULL;
     }
     current = current->parent;
   }
-  return false;
+  char *error = NULL;
+  if (-1 == asprintf(&error, "Key '%s' not found in object %p.", key, (void*) obj)) abort();
+  return error;
 }
 
 // change a property but only if it exists somewhere in the prototype chain
@@ -261,7 +269,11 @@ Object *alloc_array(VMState *state, Object **ptr, int length) {
   obj->base.parent = array_base;
   obj->ptr = ptr;
   obj->length = length;
+  // pin because the alloc_int may trigger gc
+  GCRootSet set;
+  gc_add_roots(state, (Object**) &obj, 1, &set);
   object_set((Object*) obj, "length", alloc_int(state, length));
+  gc_remove_roots(state, &set);
   return (Object*) obj;
 }
 
