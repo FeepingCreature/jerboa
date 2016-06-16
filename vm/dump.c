@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 void dump_instr(Instr *instr) {
+  // fprintf(stderr, "%p", (void*) instr);
   switch (instr->type) {
     case INSTR_GET_ROOT:
       fprintf(stderr, "    get_root: %i\n", ((GetRootInstr*) instr)->slot);

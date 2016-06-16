@@ -33,6 +33,10 @@ int main(int argc, char **argv) {
   call_function(&vmstate, root, module, NULL, 0);
   vm_run(&vmstate, root);
   
+  if (vmstate.runstate == VM_ERRORED) {
+    fprintf(stderr, "vm failure: %s\n", vmstate.error);
+  }
+  
   printf("(%i cycles)\n", cyclecount);
   
   gc_remove_roots(&vmstate, &set);
