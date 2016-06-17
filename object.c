@@ -212,10 +212,6 @@ void object_set(Object *obj, char *key, Object *value) {
   *ptr = value;
 }
 
-#if OBJ_KEEP_IDS
-int idcounter = 0;
-#endif
-
 static void *alloc_object_internal(VMState *state, int size) {
   if (state->num_obj_allocated > state->next_gc_run) {
     gc_run(state);
@@ -229,11 +225,8 @@ static void *alloc_object_internal(VMState *state, int size) {
   state->last_obj_allocated = res;
   state->num_obj_allocated ++;
   
-#if OBJ_KEEP_IDS
-  res->id = idcounter++;
 #if DEBUG_MEM
-  fprintf(stderr, "alloc object %i\n", obj->id);
-#endif
+  fprintf(stderr, "alloc object %p\n", (void*) obj);
 #endif
   
   return res;

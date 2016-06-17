@@ -38,16 +38,11 @@ struct _TablePage {
   TablePage *next;
 };
 
-#define OBJ_KEEP_IDS 0
-
 struct _Object {
   TablePage tbl;
   Object *parent;
   int size;
   ObjectFlags flags;
-#if OBJ_KEEP_IDS
-  int id;
-#endif
   Object *prev; // for gc
 };
 
