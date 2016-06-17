@@ -49,7 +49,17 @@ static void gc_sweep(VMState *state) {
   }
 }
 
+void gc_disable(VMState *state) {
+  state->gcstate.disabledness ++;
+}
+
+void gc_enable(VMState *state) {
+  assert(state->gcstate.disabledness > 0);
+  state->gcstate.disabledness --;
+}
+
 void gc_run(VMState *state) {
+  if (state->gcstate.disabledness > 0) return;
   gc_mark(state);
   gc_sweep(state);
 }

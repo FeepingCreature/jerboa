@@ -17,7 +17,9 @@ typedef enum {
                        // like int or float, that have their own alloc functions.
                        // you can still prototype the objects themselves though.
   OBJ_GC_MARK = 0x8   // reachable in the "gc mark" phase
-} ObjectFlags;
+} ObjectFlagsBase;
+
+typedef short int ObjectFlags;
 
 struct _Object;
 typedef struct _Object Object;
@@ -29,7 +31,7 @@ struct _TablePage;
 typedef struct _TablePage TablePage;
 
 struct _TableEntry {
-  char *name;
+  const char *name;
   Object *value;
 };
 
@@ -41,7 +43,7 @@ struct _TablePage {
 struct _Object {
   TablePage tbl;
   Object *parent;
-  int size;
+  short int size;
   ObjectFlags flags;
   Object *prev; // for gc
 };
@@ -57,6 +59,7 @@ struct _GCRootSet {
 
 typedef struct {
   GCRootSet *tail;
+  int disabledness;
 } GCState;
 
 typedef struct {
@@ -88,14 +91,14 @@ typedef struct {
   int num_obj_allocated, next_gc_run;
 } VMState;
 
-Object *object_lookup(Object *obj, char *key, bool *key_found);
+Object *object_lookup(Object *obj, const char *key, bool *key_found);
 
 // returns NULL on success, error string otherwise
-char *object_set_existing(Object *obj, char *key, Object *value);
+char *object_set_existing(Object *obj, const char *key, Object *value);
 
-bool object_set_shadowing(Object *obj, char *key, Object *value);
+bool object_set_shadowing(Object *obj, const char *key, Object *value);
 
-void object_set(Object *obj, char *key, Object *value);
+void object_set(Object *obj, const char *key, Object *value);
 
 void obj_mark(VMState *state, Object *obj);
 
@@ -162,7 +165,7 @@ Object *alloc_int(VMState *state, int value);
 
 Object *alloc_float(VMState *state, float value);
 
-Object *alloc_string(VMState *state, char *value);
+Object *alloc_string(VMState *state, const char *value);
 
 Object *alloc_bool(VMState *state, int value);
 
@@ -175,8 +178,8 @@ Object *alloc_fn(VMState *state, VMFunctionPointer fn);
 Object *alloc_custom_gc(VMState *state);
 
 // here so that object.c can use it
-void gc_add_roots(VMState *state, Object **objects, int num_objects, GCRootSet *set);
+void gc_enable(VMState *state);
 
-void gc_remove_roots(VMState *state, GCRootSet *ptr);
+void gc_disable(VMState *state);
 
 #endif

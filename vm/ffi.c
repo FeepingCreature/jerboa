@@ -270,7 +270,6 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
 
 void ffi_setup_root(VMState *state, Object *root) {
   Object *ffi_obj = alloc_object(state, NULL);
-  object_set(root, "ffi", ffi_obj);
   object_set(ffi_obj, "open", alloc_fn(state, ffi_open_fn));
   Object *type_obj = alloc_object(state, NULL);
   object_set(ffi_obj, "type", type_obj);
@@ -298,4 +297,7 @@ void ffi_setup_root(VMState *state, Object *root) {
   object_set(ffi_obj, "handle", handle_obj);
   object_set(handle_obj, "pointer", NULL);
   object_set(handle_obj, "sym", alloc_fn(state, ffi_sym_fn));
+  
+  ffi_obj->flags |= OBJ_IMMUTABLE;
+  object_set(root, "ffi", ffi_obj);
 }

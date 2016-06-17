@@ -12,6 +12,7 @@ void *table_freelist = NULL;
 void *obj_freelist = NULL;
 
 static void *cache_alloc(int size) {
+  // return calloc(size, 1);
   void *res = NULL;
   if (size == sizeof(IntObject)) {
     if (int_freelist) {
@@ -36,6 +37,7 @@ static void *cache_alloc(int size) {
 }
 
 static void cache_free(int size, void *ptr) {
+  // free(ptr); return;
   switch (size) {
     case sizeof(IntObject):
       *(void**) ptr = int_freelist;
@@ -55,7 +57,7 @@ static void cache_free(int size, void *ptr) {
   }
 }
 
-Object **table_lookup_ref(TablePage *tbl, char *key) {
+Object **table_lookup_ref(TablePage *tbl, const char *key) {
   // printf("::%s\n", key);
   TablePage *page = tbl;
   do {
@@ -69,7 +71,7 @@ Object **table_lookup_ref(TablePage *tbl, char *key) {
   return NULL;
 }
 
-Object **table_lookup_ref_alloc(TablePage *tbl, char *key, TableEntry** first_free_ptr) {
+Object **table_lookup_ref_alloc(TablePage *tbl, const char *key, TableEntry** first_free_ptr) {
   // printf("::%s\n", key);
   TablePage *page = tbl, *prev_page;
   *first_free_ptr = NULL;
@@ -91,14 +93,14 @@ Object **table_lookup_ref_alloc(TablePage *tbl, char *key, TableEntry** first_fr
   return NULL;
 }
 
-Object *table_lookup(TablePage *tbl, char *key, bool *key_found_p) {
+Object *table_lookup(TablePage *tbl, const char *key, bool *key_found_p) {
   Object **ptr = table_lookup_ref(tbl, key);
   if (ptr == NULL) { if (key_found_p) *key_found_p = false; return NULL; }
   if (key_found_p) *key_found_p = true;
   return *ptr;
 }
 
-Object *object_lookup(Object *obj, char *key, bool *key_found_p) {
+Object *object_lookup(Object *obj, const char *key, bool *key_found_p) {
   while (obj) {
     bool key_found;
     Object *value = table_lookup(&obj->tbl, key, &key_found);
@@ -126,8 +128,17 @@ void obj_mark(VMState *state, Object *obj) {
   
   Object *cust_gc_obj = NULL;
   // gc must be first entry in table
-  if (obj->tbl.entries[0].name && obj->tbl.entries[0].name[0] == 'g' && obj->tbl.entries[0].name[1] == 'c' && obj->tbl.entries[0].name[2] == 0) {
-    cust_gc_obj = obj->tbl.entries[0].value;
+  Object *current = obj;
+  while (current) {
+    if (current->tbl.entries[0].name
+      && current->tbl.entries[0].name[0] == 'g'
+      && current->tbl.entries[0].name[1] == 'c'
+      && current->tbl.entries[0].name[2] == 0
+    ) {
+      cust_gc_obj = current->tbl.entries[0].value;
+      break;
+    }
+    current = current->parent;
   }
   if (cust_gc_obj) {
     CustomGCObject *cust_gc = (CustomGCObject*) cust_gc_obj;
@@ -160,7 +171,7 @@ Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
 
 // change a property in-place
 // returns an error string or NULL
-char *object_set_existing(Object *obj, char *key, Object *value) {
+char *object_set_existing(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
@@ -183,7 +194,7 @@ char *object_set_existing(Object *obj, char *key, Object *value) {
 }
 
 // change a property but only if it exists somewhere in the prototype chain
-bool object_set_shadowing(Object *obj, char *key, Object *value) {
+bool object_set_shadowing(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
@@ -198,7 +209,7 @@ bool object_set_shadowing(Object *obj, char *key, Object *value) {
   return false;
 }
 
-void object_set(Object *obj, char *key, Object *value) {
+void object_set(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   TableEntry *freeptr;
   Object **ptr = table_lookup_ref_alloc(&obj->tbl, key, &freeptr);
@@ -266,7 +277,7 @@ Object *alloc_float(VMState *state, float value) {
   return (Object*) obj;
 }
 
-Object *alloc_string(VMState *state, char *value) {
+Object *alloc_string(VMState *state, const char *value) {
   Object *string_base = object_lookup(state->root, "string", NULL);
   int len = strlen(value);
   // allocate the string as part of the object, so that it gets freed with the object
@@ -284,11 +295,9 @@ Object *alloc_array(VMState *state, Object **ptr, int length) {
   obj->base.parent = array_base;
   obj->ptr = ptr;
   obj->length = length;
-  // pin because the alloc_int may trigger gc
-  GCRootSet set;
-  gc_add_roots(state, (Object**) &obj, 1, &set);
+  gc_disable(state);
   object_set((Object*) obj, "length", alloc_int(state, length));
-  gc_remove_roots(state, &set);
+  gc_enable(state);
   return (Object*) obj;
 }
 

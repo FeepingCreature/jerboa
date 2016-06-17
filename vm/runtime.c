@@ -310,7 +310,7 @@ static void array_mark_fn(VMState *state, Object *obj) {
   while (root->parent) root = root->parent;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
-  if (arr_obj) {
+  if (arr_obj) { // else it's obj == array_base
     for (int i = 0; i < arr_obj->length; ++i) {
       obj_mark(state, arr_obj->ptr[i]);
     }
