@@ -453,26 +453,9 @@ Object *create_root(VMState *state) {
   GCRootSet pin_root;
   gc_add_roots(state, &root, 1, &pin_root);
   
-  object_set(root, "null", NULL);
-  
   Object *function_obj = alloc_object(state, NULL);
   function_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "function", function_obj);
-  
-  Object *closure_obj = alloc_object(state, NULL);
-  closure_obj->flags |= OBJ_NOINHERIT;
-  object_set(root, "closure", closure_obj);
-  
-  Object *closure_gc = alloc_custom_gc(state);
-  ((CustomGCObject*) closure_gc)->mark_fn = closure_mark_fn;
-  object_set(closure_obj, "gc", closure_gc);
-  
-  Object *bool_obj = alloc_object(state, NULL);
-  bool_obj->flags |= OBJ_NOINHERIT;
-  object_set(root, "bool", bool_obj);
-  object_set(bool_obj, "!", alloc_fn(state, bool_not_fn));
-  object_set(root, "true", alloc_bool(state, true));
-  object_set(root, "false", alloc_bool(state, false));
   
   Object *int_obj = alloc_object(state, NULL);
   int_obj->flags |= OBJ_NOINHERIT;
@@ -500,6 +483,23 @@ Object *create_root(VMState *state) {
   object_set(float_obj, "<=", alloc_fn(state, float_le_fn));
   object_set(float_obj, ">=", alloc_fn(state, float_ge_fn));
   
+  Object *closure_obj = alloc_object(state, NULL);
+  closure_obj->flags |= OBJ_NOINHERIT;
+  object_set(root, "closure", closure_obj);
+  
+  Object *closure_gc = alloc_custom_gc(state);
+  ((CustomGCObject*) closure_gc)->mark_fn = closure_mark_fn;
+  object_set(closure_obj, "gc", closure_gc); // note: gc must be first entry in object
+  
+  Object *bool_obj = alloc_object(state, NULL);
+  bool_obj->flags |= OBJ_NOINHERIT;
+  object_set(root, "bool", bool_obj);
+  object_set(bool_obj, "!", alloc_fn(state, bool_not_fn));
+  object_set(root, "true", alloc_bool(state, true));
+  object_set(root, "false", alloc_bool(state, false));
+  
+  object_set(root, "null", NULL);
+  
   Object *string_obj = alloc_object(state, NULL);
   string_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "string", string_obj);
@@ -510,7 +510,7 @@ Object *create_root(VMState *state) {
   object_set(root, "array", array_obj);
   Object *array_gc =  alloc_custom_gc(state);
   ((CustomGCObject*) array_gc)->mark_fn = array_mark_fn;
-  object_set(array_obj, "gc", array_gc);
+  object_set(array_obj, "gc", array_gc); // note: gc must be first entry in object
   object_set(array_obj, "resize", alloc_fn(state, array_resize_fn));
   object_set(array_obj, "push", alloc_fn(state, array_push_fn));
   object_set(array_obj, "pop", alloc_fn(state, array_pop_fn));

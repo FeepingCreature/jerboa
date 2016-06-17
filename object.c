@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
+#include <stdio.h>
+
 #include "object.h"
 
-#include <stdio.h>
 #define DEBUG_MEM 0
 
 void gc_run(VMState *state); // defined here so we can call it in alloc
@@ -17,7 +19,7 @@ static void *cache_alloc(int size) {
       int_freelist = *(void**) int_freelist;
     }
   }
-  else if (size == sizeof(TableEntry)) {
+  else if (size == sizeof(TablePage)) {
     if (table_freelist) {
       res = table_freelist;
       table_freelist = *(void**) table_freelist;
@@ -39,7 +41,7 @@ static void cache_free(int size, void *ptr) {
       *(void**) ptr = int_freelist;
       int_freelist = ptr;
       break;
-    case sizeof(TableEntry):
+    case sizeof(TablePage):
       *(void**) ptr = table_freelist;
       table_freelist = ptr;
       break;
@@ -53,27 +55,44 @@ static void cache_free(int size, void *ptr) {
   }
 }
 
-Object **table_lookup_ref_alloc(Table *tbl, char *key, TableEntry** first_free_ptr) {
-  if (tbl->entry.name == NULL) {
-    if (first_free_ptr) *first_free_ptr = &tbl->entry;
-    return NULL;
+Object **table_lookup_ref(TablePage *tbl, char *key) {
+  // printf("::%s\n", key);
+  TablePage *page = tbl;
+  do {
+    if (page->entries[0].name
+      && key[0] == page->entries[0].name[0]
+      && (!key[0] || key[1] == page->entries[0].name[1])
+      && strcmp(key, page->entries[0].name) == 0
+    ) return &page->entries[0].value;
+    page = page->next;
+  } while (page);
+  return NULL;
+}
+
+Object **table_lookup_ref_alloc(TablePage *tbl, char *key, TableEntry** first_free_ptr) {
+  // printf("::%s\n", key);
+  TablePage *page = tbl, *prev_page;
+  *first_free_ptr = NULL;
+  while (page) {
+    if (page->entries[0].name
+      && key[0] == page->entries[0].name[0]
+      && (!key[0] || key[1] == page->entries[0].name[1])
+      && strcmp(key, page->entries[0].name) == 0
+    ) return &page->entries[0].value;
+    if (!page->entries[0].name) *first_free_ptr = &page->entries[0];
+    prev_page = page;
+    page = page->next;
   }
-  TableEntry *entry = &tbl->entry, *prev_entry;
-  while (entry) {
-    if (key[0] == entry->name[0] && strcmp(key, entry->name) == 0) return &entry->value;
-    prev_entry = entry;
-    entry = entry->next;
-  }
-  if (first_free_ptr) {
-    TableEntry *new_entry = cache_alloc(sizeof(TableEntry));
-    prev_entry->next = new_entry;
-    *first_free_ptr = new_entry;
+  if (!*first_free_ptr) {
+    TablePage *new_page = cache_alloc(sizeof(TablePage));
+    prev_page->next = new_page;
+    *first_free_ptr = &new_page->entries[0];
   }
   return NULL;
 }
 
-Object *table_lookup(Table *tbl, char *key, bool *key_found_p) {
-  Object **ptr = table_lookup_ref_alloc(tbl, key, NULL);
+Object *table_lookup(TablePage *tbl, char *key, bool *key_found_p) {
+  Object **ptr = table_lookup_ref(tbl, key);
   if (ptr == NULL) { if (key_found_p) *key_found_p = false; return NULL; }
   if (key_found_p) *key_found_p = true;
   return *ptr;
@@ -99,26 +118,29 @@ void obj_mark(VMState *state, Object *obj) {
   
   obj_mark(state, obj->parent);
   
-  TableEntry *entry = &obj->tbl.entry;
-  while (entry) {
-    obj_mark(state, entry->value);
-    entry = entry->next;
+  TablePage *page = &obj->tbl;
+  while (page) {
+    obj_mark(state, page->entries[0].value);
+    page = page->next;
   }
   
-  bool cust_gc_found;
-  Object *cust_gc_obj = object_lookup(obj, "gc", &cust_gc_found);
-  if (cust_gc_found) {
+  Object *cust_gc_obj = NULL;
+  // gc must be first entry in table
+  if (obj->tbl.entries[0].name && obj->tbl.entries[0].name[0] == 'g' && obj->tbl.entries[0].name[1] == 'c' && obj->tbl.entries[0].name[2] == 0) {
+    cust_gc_obj = obj->tbl.entries[0].value;
+  }
+  if (cust_gc_obj) {
     CustomGCObject *cust_gc = (CustomGCObject*) cust_gc_obj;
     cust_gc->mark_fn(state, obj);
   }
 }
 
 void obj_free(Object *obj) {
-  TableEntry *entry = obj->tbl.entry.next;
-  while (entry) {
-    TableEntry *next = entry->next;
-    cache_free(sizeof(TableEntry), entry);
-    entry = next;
+  TablePage *page = obj->tbl.next;
+  while (page) {
+    TablePage *next = page->next;
+    cache_free(sizeof(TablePage), page);
+    page = next;
   }
   cache_free(obj->size, obj);
 }
@@ -142,7 +164,7 @@ char *object_set_existing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    Object **ptr = table_lookup_ref_alloc(&current->tbl, key, NULL);
+    Object **ptr = table_lookup_ref(&current->tbl, key);
     if (ptr != NULL) {
       if (current->flags & OBJ_IMMUTABLE) {
         char *error = NULL;
@@ -165,7 +187,7 @@ bool object_set_shadowing(Object *obj, char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    Object **ptr = table_lookup_ref_alloc(&current->tbl, key, NULL);
+    Object **ptr = table_lookup_ref(&current->tbl, key);
     if (ptr) {
       // so create it in obj (not current!)
       object_set(obj, key, value);

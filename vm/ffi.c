@@ -20,6 +20,7 @@ static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *handle_base = object_lookup(ffi, "handle", NULL);
   
   StringObject *sarg = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(sarg, "argument to ffi.open must be string!");
   
   char *file = sarg->value;
   void *dlptr = dlopen(file, RTLD_LAZY);

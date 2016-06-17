@@ -25,23 +25,23 @@ typedef struct _Object Object;
 struct _TableEntry;
 typedef struct _TableEntry TableEntry;
 
-struct _Table;
-typedef struct _Table Table;
+struct _TablePage;
+typedef struct _TablePage TablePage;
 
 struct _TableEntry {
   char *name;
   Object *value;
-  TableEntry *next;
 };
 
-struct _Table {
-  TableEntry entry;
+struct _TablePage {
+  TableEntry entries[1];
+  TablePage *next;
 };
 
 #define OBJ_KEEP_IDS 0
 
 struct _Object {
-  Table tbl;
+  TablePage tbl;
   Object *parent;
   int size;
   ObjectFlags flags;
