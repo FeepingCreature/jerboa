@@ -344,6 +344,15 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
   return PARSE_OK;
 }
 
+void build_op(FunctionBuilder *builder, char *op, RefValue *lhs_rv, RefValue rhs_expr) {
+  if (builder) {
+    int lhs_value = ref_access(builder, *lhs_rv);
+    int rhs_value = ref_access(builder, rhs_expr);
+    int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, op));
+    *lhs_rv = (RefValue) { addinstr_call1(builder, fn, lhs_value, rhs_value), -1, REFMODE_NONE };
+  }
+}
+
 /*
  * 0: == != < > <= >=
  * 1: + -
@@ -363,21 +372,13 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_string(&text, "*")) {
       res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (!builder) continue;
-      int lhs_value = ref_access(builder, *rv);
-      int mulfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "*"));
-      *rv = (RefValue) { addinstr_call1(builder, mulfn, lhs_value, rhs_value), -1, REFMODE_NONE };
+      build_op(builder, "*", rv, rhs_expr);
       continue;
     }
     if (eat_string(&text, "/")) {
       res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (!builder) continue;
-      int lhs_value = ref_access(builder, *rv);
-      int divfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "/"));
-      *rv = (RefValue) { addinstr_call1(builder, divfn, lhs_value, rhs_value), -1, REFMODE_NONE };
+      build_op(builder, "/", rv, rhs_expr);
       continue;
     }
     break;
@@ -389,21 +390,13 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_string(&text, "+")) {
       res = parse_expr(&text, builder, 2, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (!builder) continue;
-      int lhs_value = ref_access(builder, *rv);
-      int plusfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "+"));
-      *rv = (RefValue) { addinstr_call1(builder, plusfn, lhs_value, rhs_value), -1, REFMODE_NONE };
+      build_op(builder, "+", rv, rhs_expr);
       continue;
     }
     if (eat_string(&text, "-")) {
       res = parse_expr(&text, builder, 2, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (!builder) continue;
-      int lhs_value = ref_access(builder, *rv);
-      int minusfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "-"));
-      *rv = (RefValue) { addinstr_call1(builder, minusfn, lhs_value, rhs_value), -1, REFMODE_NONE };
+      build_op(builder, "-", rv, rhs_expr);
       continue;
     }
     break;
@@ -416,22 +409,12 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   if (eat_string(&text, "==")) {
     res = parse_expr(&text, builder, 1, &rhs_expr);
     if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-    int rhs_value = ref_access(builder, rhs_expr);
-    if (builder) {
-      int lhs_value = ref_access(builder, *rv);
-      int equalfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "=="));
-      *rv = (RefValue) { addinstr_call1(builder, equalfn, lhs_value, rhs_value), -1, REFMODE_NONE };
-    }
+    build_op(builder, "==", rv, rhs_expr);
   } else if (eat_string(&text, "!=")) {
     res = parse_expr(&text, builder, 1, &rhs_expr);
     if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-    int rhs_value = ref_access(builder, rhs_expr);
-    if (builder) {
-      int lhs_value = ref_access(builder, *rv);
-      int equalfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "=="));
-      *rv = (RefValue) { addinstr_call1(builder, equalfn, lhs_value, rhs_value), -1, REFMODE_NONE };
-      negate_expr = true;
-    }
+    build_op(builder, "==", rv, rhs_expr);
+    negate_expr = true;
   } else {
     if (eat_string(&text, "!")) {
       negate_expr = true;
@@ -439,39 +422,19 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_string(&text, "<=")) {
       res = parse_expr(&text, builder, 1, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (builder) {
-        int lhs_value = ref_access(builder, *rv);
-        int lefn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "<="));
-        *rv = (RefValue) { addinstr_call1(builder, lefn, lhs_value, rhs_value), -1, REFMODE_NONE };
-      }
+      build_op(builder, "<=", rv, rhs_expr);
     } else if (eat_string(&text, ">=")) {
       res = parse_expr(&text, builder, 1, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (builder) {
-        int lhs_value = ref_access(builder, *rv);
-        int gefn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, ">="));
-        *rv = (RefValue) { addinstr_call1(builder, gefn, lhs_value, rhs_value), -1, REFMODE_NONE };
-      }
+      build_op(builder, ">=", rv, rhs_expr);
     } else if (eat_string(&text, "<")) {
       res = parse_expr(&text, builder, 1, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (builder) {
-        int lhs_value = ref_access(builder, *rv);
-        int ltfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "<"));
-        *rv = (RefValue) { addinstr_call1(builder, ltfn, lhs_value, rhs_value), -1, REFMODE_NONE };
-      }
+      build_op(builder, "<", rv, rhs_expr);
     } else if (eat_string(&text, ">")) {
       res = parse_expr(&text, builder, 1, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      int rhs_value = ref_access(builder, rhs_expr);
-      if (builder) {
-        int lhs_value = ref_access(builder, *rv);
-        int gtfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, ">"));
-        *rv = (RefValue) { addinstr_call1(builder, gtfn, lhs_value, rhs_value), -1, REFMODE_NONE };
-      }
+      build_op(builder, ">", rv, rhs_expr);
     } else if (negate_expr) {
       log_parser_error(text, "expected comparison operator");
       return PARSE_ERROR;
@@ -509,7 +472,11 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder) {
   addinstr_test_branch(builder, testslot, &true_blk, &false_blk);
   
   *true_blk = new_block(builder);
-  parse_block(&text, builder);
+  
+  res = parse_block(&text, builder);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
+  
   addinstr_branch(builder, &end_blk);
   
   *false_blk = new_block(builder);
@@ -656,10 +623,9 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     if (res == PARSE_ERROR) return res;
     
     if (res == PARSE_OK && eat_string(&text2, "=")) {
+      // discard text2, redo with non-null builder
       res = parse_expr_base(&text, builder, &rv);
-      if (res == PARSE_ERROR) return res;
       assert(res == PARSE_OK);
-      
       if (!eat_string(&text, "=")) assert(false); // Internal inconsistency
       
       RefValue value_expr;
