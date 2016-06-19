@@ -362,6 +362,17 @@ Object *alloc_string(VMState *state, const char *value) {
   return (Object*) obj;
 }
 
+Object *alloc_string_foreign(VMState *state, char *value) {
+  Object *string_base = object_lookup(state->root, "string", NULL);
+  assert(string_base);
+  // allocate the string as part of the object, so that it gets freed with the object
+  StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
+  obj->base.parent = string_base;
+  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->value = value;
+  return (Object*) obj;
+}
+
 Object *alloc_array(VMState *state, Object **ptr, int length) {
   Object *array_base = object_lookup(state->root, "array", NULL);
   assert(array_base);

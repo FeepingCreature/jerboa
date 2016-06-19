@@ -20,6 +20,6 @@ void vm_remove_frame(VMState *state);
 
 void vm_error(VMState *state, char *fmt, ...);
 
-void vm_run(VMState *state, Object *root);
+void vm_run(VMState *state);
 
 #endif

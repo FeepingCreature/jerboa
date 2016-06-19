@@ -24,10 +24,12 @@ static void asprintf(char **outp, char *fmt, ...) {
 
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
+  Object *bool_base = object_lookup(root, "bool", NULL);
+  BoolObject *boolobj = (BoolObject*) obj_instance_of(thisptr, bool_base);
+  VM_ASSERT(boolobj, "internal error: bool negation called on wrong type of object");
   
-  state->result_value = alloc_bool(state, ! ((BoolObject*) thisptr)->value);
+  state->result_value = alloc_bool(state, !boolobj->value);
 }
 
 typedef enum {
@@ -39,8 +41,7 @@ typedef enum {
 
 static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   
   Object *int_base = object_lookup(root, "int", NULL);
   Object
@@ -101,10 +102,29 @@ static void int_div_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_DIV);
 }
 
+static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  
+  Object *string_base = object_lookup(root, "string", NULL);
+  
+  StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(sobj, "parameter to int.parse() must be string!");
+  char *text = sobj->value;
+  int base = 10;
+  if (text[0] && text[0] == '-') text++;
+  if (text[0] == '0' && text[1] == 'x') {
+    base = 16;
+    text += 2;
+  }
+  text = sobj->value;
+  int res = (int) strtol(text, NULL, base);
+  state->result_value = alloc_int(state, res);
+}
+
 static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
   
@@ -149,8 +169,7 @@ static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *bool_base = object_lookup(root, "bool", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
@@ -177,6 +196,24 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
   free(str3);
 }
 
+static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *string_base = object_lookup(root, "string", NULL);
+  
+  Object
+    *sobj1 = obj_instance_of(thisptr, string_base),
+    *sobj2 = obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(sobj1, "internal error: string compare function called on wrong type of object");
+  VM_ASSERT(sobj2, "can only compare strings with strings!");
+  
+  char
+    *str1 = ((StringObject*) sobj1)->value,
+    *str2 = ((StringObject*) sobj2)->value;
+  int res = strcmp(str1, str2);
+  state->result_value = alloc_bool(state, res == 0);
+}
+
 typedef enum {
   CMP_EQ,
   CMP_LT,
@@ -187,8 +224,7 @@ typedef enum {
 
 static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   
   Object *int_base = object_lookup(root, "int", NULL);
   Object
@@ -251,8 +287,7 @@ static void int_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **args
 
 static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   
   Object *int_base = object_lookup(root, "int", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
@@ -301,16 +336,14 @@ static void float_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 }
 
 static void closure_mark_fn(VMState *state, Object *obj) {
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *closure_base = object_lookup(root, "closure", NULL);
   ClosureObject *clobj = (ClosureObject*) obj_instance_of(obj, closure_base);
   if (clobj) obj_mark(state, clobj->context);
 }
 
 static void array_mark_fn(VMState *state, Object *obj) {
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
   if (arr_obj) { // else it's obj == array_base
@@ -322,8 +355,7 @@ static void array_mark_fn(VMState *state, Object *obj) {
 
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *pointer_base = object_lookup(root, "pointer", NULL);
   PointerObject *ptr_obj = (PointerObject*) obj_instance_of(thisptr, pointer_base);
   state->result_value = alloc_bool(state, ptr_obj->ptr == NULL);
@@ -331,8 +363,7 @@ static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object *
 
 static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
@@ -351,8 +382,7 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
 
 static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   VM_ASSERT(arr_obj, "internal error: push called on object that is not an array");
@@ -365,8 +395,7 @@ static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **
 
 static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   VM_ASSERT(arr_obj, "internal error: pop called on object that is not an array");
@@ -378,8 +407,7 @@ static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
@@ -393,8 +421,7 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
 
 static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+  Object *root = state->root;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *array_base = object_lookup(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
@@ -408,43 +435,119 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
   state->result_value = NULL;
 }
 
-static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  Object *root = state->stack_ptr[state->stack_len - 1].context;
-  while (root->parent) root = root->parent;
+static void print_fn_recursive(VMState *state, Object *obj) {
+  Object *root = state->root;
   Object *int_base = object_lookup(root, "int", NULL);
   Object *bool_base = object_lookup(root, "bool", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
+  Object *array_base = object_lookup(root, "array", NULL);
   Object *string_base = object_lookup(root, "string", NULL);
-  
+  Object
+    *iobj = obj_instance_of(obj, int_base),
+    *bobj = obj_instance_of(obj, bool_base),
+    *fobj = obj_instance_of(obj, float_base),
+    *sobj = obj_instance_of(obj, string_base),
+    *aobj = obj_instance_of(obj, array_base);
+  if (iobj) {
+    printf("%i", ((IntObject*)iobj)->value);
+    return;
+  }
+  if (bobj) {
+    if (((BoolObject*)bobj)->value) printf("true");
+    else printf("false");
+    return;
+  }
+  if (fobj) {
+    printf("%f", ((FloatObject*)fobj)->value);
+    return;
+  }
+  if (sobj) {
+    printf("%s", ((StringObject*)sobj)->value);
+    return;
+  }
+  if (aobj) {
+    printf("[ ");
+    ArrayObject *a_obj = (ArrayObject*) aobj;
+    for (int i = 0; i < a_obj->length; ++i) {
+      Object *child = a_obj->ptr[i];
+      if (i) printf(", ");
+      print_fn_recursive(state, child);
+      if (state->runstate == VM_ERRORED) return;
+    }
+    printf(" ]");
+    return;
+  }
+  Object *toString_fn = object_lookup(obj, "toString", NULL);
+  if (toString_fn) {
+    Object *function_base = object_lookup(root, "function", NULL);
+    Object *closure_base = object_lookup(root, "closure", NULL);
+    FunctionObject *fn_toString = (FunctionObject*) obj_instance_of(toString_fn, function_base);
+    ClosureObject *cl_toString = (ClosureObject*) obj_instance_of(toString_fn, closure_base);
+    VM_ASSERT(fn_toString || cl_toString, "'toString' property is neither function nor closure");
+    
+    VMState substate = {0};
+    substate.root = state->root;
+    substate.gcstate = state->gcstate;
+    
+    if (fn_toString) fn_toString->fn_ptr(&substate, obj, toString_fn, NULL, 0);
+    else cl_toString->base.fn_ptr(&substate, obj, toString_fn, NULL, 0);
+    
+    vm_run(&substate);
+    VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error);
+    
+    Object *str = substate.result_value;
+    if (str != NULL) {
+      print_fn_recursive(state, str);
+      return;
+    }
+  }
+  printf("[object %p", (void*) obj);
+  HashTable *tbl = &obj->tbl;
+  bool first = true;
+  for (int i = 0; i < tbl->entries_num; ++i) {
+    TableEntry *entry = &tbl->entries_ptr[i];
+    if (entry->name) {
+      if (first) { first = false; printf(" | "); }
+      else printf(", ");
+      printf("'%s': ", entry->name);
+      print_fn_recursive(state, entry->value);
+    }
+  }
+  printf("]");
+  // vm_error(state, "don't know how to print %p", obj);
+  return;
+}
+
+static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
-    Object
-      *iarg = obj_instance_of(arg, int_base),
-      *barg = obj_instance_of(arg, bool_base),
-      *farg = obj_instance_of(arg, float_base),
-      *sarg = obj_instance_of(arg, string_base);
-    if (iarg) {
-      printf("%i", ((IntObject*)iarg)->value);
-      continue;
-    }
-    if (barg) {
-      if (((BoolObject*)barg)->value) printf("true");
-      else printf("false");
-      continue;
-    }
-    if (farg) {
-      printf("%f", ((FloatObject*)farg)->value);
-      continue;
-    }
-    if (sarg) {
-      printf("%s", ((StringObject*)sarg)->value);
-      continue;
-    }
-    vm_error(state, "don't know how to print %p", arg);
-    return;
+    print_fn_recursive(state, arg);
+    if (state->runstate == VM_ERRORED) return;
   }
   printf("\n");
   state->result_value = NULL;
+}
+
+static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  gc_disable(state);
+  int res_len = 0;
+  Object *obj = args_ptr[0];
+  HashTable *tbl = &obj->tbl;
+  for (int i = 0; i < tbl->entries_num; ++i) {
+    TableEntry *entry = &tbl->entries_ptr[i];
+    if (entry->name) res_len ++;
+  }
+  Object **res_ptr = malloc(sizeof(Object*) * res_len);
+  int k = 0;
+  for (int i = 0; i < tbl->entries_num; ++i) {
+    TableEntry *entry = &tbl->entries_ptr[i];
+    if (entry->name) {
+      res_ptr[k++] = alloc_string(state, entry->name);
+    }
+  }
+  state->result_value = alloc_array(state, res_ptr, res_len);
+  gc_enable(state);
 }
 
 static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node, Object *element_node) {
@@ -547,6 +650,7 @@ Object *create_root(VMState *state) {
   object_set(int_obj, ">" , alloc_fn(state, int_gt_fn));
   object_set(int_obj, "<=", alloc_fn(state, int_le_fn));
   object_set(int_obj, ">=", alloc_fn(state, int_ge_fn));
+  object_set(int_obj, "parse" , alloc_fn(state, int_parse_fn));
   
   Object *float_obj = alloc_object(state, NULL);
   float_obj->flags |= OBJ_NOINHERIT;
@@ -579,6 +683,7 @@ Object *create_root(VMState *state) {
   string_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "string", string_obj);
   object_set(string_obj, "+", alloc_fn(state, string_add_fn));
+  object_set(string_obj, "==", alloc_fn(state, string_eq_fn));
   
   Object *array_obj = alloc_object(state, NULL);
   array_obj->flags |= OBJ_NOINHERIT;
@@ -596,6 +701,7 @@ Object *create_root(VMState *state) {
   object_set(ptr_obj, "null", alloc_fn(state, ptr_is_null_fn));
   
   object_set(root, "print", alloc_fn(state, print_fn));
+  object_set(root, "keys", alloc_fn(state, keys_fn));
   
   Object *xml_obj = alloc_object(state, NULL);
   object_set(xml_obj, "load", alloc_fn(state, xml_load_fn));

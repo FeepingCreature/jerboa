@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     assert(res == PARSE_OK);
     dump_fn(line_fn);
     call_function(&vmstate, root, line_fn, NULL, 0);
-    vm_run(&vmstate, root);
+    vm_run(&vmstate);
     if (vmstate.runstate == VM_ERRORED) {
       fprintf(stderr, "vm errored: %s\n", vmstate.error);
     } else {

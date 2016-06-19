@@ -238,7 +238,8 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   
   void *fnptr = dlsym(handle, fn_name_obj->value);
   char *error = dlerror();
-  VM_ASSERT(!error, "dlsym failed: %s", error);
+  // VM_ASSERT(!error, "dlsym failed: %s", error);
+  if (error) { state->result_value = NULL; return; }
   
   Object *ret_type = obj_instance_of(args_ptr[1], type_base);
   VM_ASSERT(ret_type, "return type must be ffi.type!");

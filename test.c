@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
   dump_fn(module);
   
   call_function(&vmstate, root, module, NULL, 0);
-  vm_run(&vmstate, root);
+  vm_run(&vmstate);
   
   if (vmstate.runstate == VM_ERRORED) {
     fprintf(stderr, "vm failure: %s\n", vmstate.error);

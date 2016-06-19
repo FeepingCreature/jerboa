@@ -70,7 +70,8 @@ void vm_remove_frame(VMState *state) {
   state->stack_len = state->stack_len - 1;
 }
 
-static void vm_step(VMState *state, Object *root, void **args_prealloc) {
+static void vm_step(VMState *state, void **args_prealloc) {
+  Object *root = state->root;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
 #ifndef NDEBUG
@@ -382,7 +383,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
   cf->instr_offs++;
 }
 
-void vm_run(VMState *state, Object *root) {
+void vm_run(VMState *state) {
   assert(state->runstate == VM_TERMINATED || state->runstate == VM_ERRORED);
   // no call queued, no need to run
   // (this can happen when we executed a native function,
@@ -394,7 +395,7 @@ void vm_run(VMState *state, Object *root) {
   void **args_prealloc = malloc(sizeof(void*) * 10);
   for (int i = 0; i < 10; ++i) { args_prealloc[i] = malloc(sizeof(Object*) * i); }
   while (state->runstate == VM_RUNNING) {
-    vm_step(state, root, args_prealloc);
+    vm_step(state, args_prealloc);
     if (state->stack_len == 0) state->runstate = VM_TERMINATED;
   }
 }
