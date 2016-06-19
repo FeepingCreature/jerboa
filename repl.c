@@ -18,6 +18,7 @@
 
 int main(int argc, char **argv) {
   VMState vmstate = {0};
+  vmstate.gcstate = (GCState*) calloc(sizeof(GCState), 1);
   vm_alloc_frame(&vmstate, 0);
   Object *root = create_root(&vmstate);
   vm_remove_frame(&vmstate);
@@ -39,7 +40,6 @@ int main(int argc, char **argv) {
     if (res == PARSE_ERROR) continue;
     assert(res == PARSE_OK);
     dump_fn(line_fn);
-    vmstate.stack_len = 0; // reset, TODO vm_reset_stack?
     call_function(&vmstate, root, line_fn, NULL, 0);
     vm_run(&vmstate, root);
     if (vmstate.runstate == VM_ERRORED) {

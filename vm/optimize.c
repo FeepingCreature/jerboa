@@ -87,6 +87,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         AccessStringKeyInstr *instr = malloc(sizeof(AccessStringKeyInstr));
         instr->base.type = INSTR_ACCESS_STRING_KEY;
         instr->obj_slot = acci->obj_slot;
+        instr->target_slot = acci->target_slot;
         instr->key = slot_table_ptr[acci->key_slot];
         addinstr(builder, (Instr*) instr);
         continue;

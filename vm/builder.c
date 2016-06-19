@@ -29,17 +29,13 @@ void addinstr(FunctionBuilder *builder, Instr *instr) {
 
 // use SAVE_RETURN so that ACCESS may generate a call internally
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
-  AccessInstr *instr1 = malloc(sizeof(AccessInstr));
-  instr1->base.type = INSTR_ACCESS;
-  instr1->obj_slot = obj_slot;
-  instr1->key_slot = key_slot;
-  addinstr(builder, (Instr*) instr1);
-  
-  SaveResultInstr *instr2 = malloc(sizeof(SaveResultInstr));
-  instr2->base.type = INSTR_SAVE_RESULT;
-  instr2->target_slot = builder->slot_base++;
-  addinstr(builder, (Instr*) instr2);
-  return instr2->target_slot;
+  AccessInstr *instr = malloc(sizeof(AccessInstr));
+  instr->base.type = INSTR_ACCESS;
+  instr->obj_slot = obj_slot;
+  instr->key_slot = key_slot;
+  instr->target_slot = builder->slot_base++;
+  addinstr(builder, (Instr*) instr);
+  return instr->target_slot;
 }
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type) {

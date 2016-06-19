@@ -98,14 +98,17 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
     case INSTR_ACCESS: case INSTR_ACCESS_STRING_KEY: {
       AccessInstr *access_instr = (AccessInstr*) instr;
       AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
-      int obj_slot;
+      int obj_slot, target_slot;
       if (instr->type == INSTR_ACCESS) {
         obj_slot = access_instr->obj_slot;
+        target_slot = access_instr->target_slot;
       } else {
         obj_slot = aski->obj_slot;
+        target_slot = aski->target_slot;
       }
       
       VM_ASSERT(obj_slot < cf->slots_len, "internal slot error");
+      VM_ASSERT(target_slot < cf->slots_len, "internal slot error");
       Object *obj = cf->slots_ptr[obj_slot];
       
       char *key;
@@ -130,7 +133,7 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
       bool object_found = false;
       if (has_char_key) {
         // fprintf(stderr, "> obj get %p . '%s'\n", (void*) obj, key);
-        state->result_value = object_lookup(obj, key, &object_found);
+        cf->slots_ptr[target_slot] = object_lookup(obj, key, &object_found);
       }
       if (!object_found) {
         Object *index_op = object_lookup(obj, "[]", NULL);
@@ -146,9 +149,19 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
           } else {
             key_obj = alloc_string(state, aski->key);
           }
-          if (fn_index_op) fn_index_op->fn_ptr(state, obj, index_op, &key_obj, 1);
-          else cl_index_op->base.fn_ptr(state, obj, index_op, &key_obj, 1);
-          if (state->runstate != VM_RUNNING) return;
+          
+          VMState substate = {0};
+          substate.root = state->root;
+          substate.gcstate = state->gcstate;
+          
+          if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
+          else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
+          
+          vm_run(&substate);
+          VM_ASSERT(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
+          
+          cf->slots_ptr[target_slot] = substate.result_value;
+          
           object_found = true; // rely on the [] call to error on its own, if key not found
         }
       }
@@ -371,6 +384,11 @@ static void vm_step(VMState *state, Object *root, void **args_prealloc) {
 
 void vm_run(VMState *state, Object *root) {
   assert(state->runstate == VM_TERMINATED || state->runstate == VM_ERRORED);
+  // no call queued, no need to run
+  // (this can happen when we executed a native function,
+  //  expecting to set up a vm call)
+  if (state->stack_len == 0) return;
+  assert(state->stack_len > 0);
   state->runstate = VM_RUNNING;
   state->error = NULL;
   void **args_prealloc = malloc(sizeof(void*) * 10);

@@ -39,8 +39,8 @@ void dump_instr(Instr *instr) {
       fprintf(stderr, "    close_object: %i\n", ((CloseObjectInstr*) instr)->slot);
       break;
     case INSTR_ACCESS:
-      fprintf(stderr, "    access: %i . %i\n",
-              ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key_slot);
+      fprintf(stderr, "    access: %i = %i . %i\n",
+              ((AccessInstr*) instr)->target_slot, ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key_slot);
       break;
     case INSTR_ASSIGN:
     {
@@ -75,8 +75,8 @@ void dump_instr(Instr *instr) {
               ((TestBranchInstr*) instr)->test_slot, ((TestBranchInstr*) instr)->true_blk, ((TestBranchInstr*) instr)->false_blk);
       break;
     case INSTR_ACCESS_STRING_KEY:
-      fprintf(stderr, "    access: %i . '%s' \t\t(opt: string key)\n",
-              ((AccessStringKeyInstr*) instr)->obj_slot, ((AccessStringKeyInstr*) instr)->key);
+      fprintf(stderr, "    access: %i = %i . '%s' \t\t(opt: string key)\n",
+              ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot, ((AccessStringKeyInstr*) instr)->key);
       break;
     case INSTR_ASSIGN_STRING_KEY:
     {

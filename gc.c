@@ -1,19 +1,19 @@
 #include "gc.h"
 
 void gc_add_roots(VMState *state, Object **objects, int num_objects, GCRootSet *set) {
-  GCRootSet *prevTail = state->gcstate.tail;
-  state->gcstate.tail = set;
-  if (prevTail) prevTail->next = state->gcstate.tail;
-  state->gcstate.tail->prev = prevTail;
-  state->gcstate.tail->next = NULL;
-  state->gcstate.tail->objects = objects;
-  state->gcstate.tail->num_objects = num_objects;
+  GCRootSet *prevTail = state->gcstate->tail;
+  state->gcstate->tail = set;
+  if (prevTail) prevTail->next = state->gcstate->tail;
+  state->gcstate->tail->prev = prevTail;
+  state->gcstate->tail->next = NULL;
+  state->gcstate->tail->objects = objects;
+  state->gcstate->tail->num_objects = num_objects;
   return;
 }
 
 void gc_remove_roots(VMState *state, GCRootSet *entry) {
-  if (entry == state->gcstate.tail) {
-    state->gcstate.tail = entry->prev;
+  if (entry == state->gcstate->tail) {
+    state->gcstate->tail = entry->prev;
   }
   // cut entry out
   if (entry->prev) entry->prev->next = entry->next;
@@ -24,7 +24,7 @@ void gc_remove_roots(VMState *state, GCRootSet *entry) {
 
 // mark roots
 static void gc_mark(VMState *state) {
-  GCRootSet *set = state->gcstate.tail;
+  GCRootSet *set = state->gcstate->tail;
   while (set) {
     for (int i = 0; i < set->num_objects; ++i) {
       obj_mark(state, set->objects[i]);
@@ -50,16 +50,16 @@ static void gc_sweep(VMState *state) {
 }
 
 void gc_disable(VMState *state) {
-  state->gcstate.disabledness ++;
+  state->gcstate->disabledness ++;
 }
 
 void gc_enable(VMState *state) {
-  assert(state->gcstate.disabledness > 0);
-  state->gcstate.disabledness --;
+  assert(state->gcstate->disabledness > 0);
+  state->gcstate->disabledness --;
 }
 
 void gc_run(VMState *state) {
-  if (state->gcstate.disabledness > 0) return;
+  if (state->gcstate->disabledness > 0) return;
   gc_mark(state);
   gc_sweep(state);
 }

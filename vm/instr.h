@@ -111,6 +111,7 @@ typedef struct {
 typedef struct {
   Instr base;
   int obj_slot, key_slot;
+  int target_slot;
 } AccessInstr;
 
 typedef struct {
@@ -150,6 +151,7 @@ typedef struct {
 typedef struct {
   Instr base;
   int obj_slot; char *key;
+  int target_slot;
 } AccessStringKeyInstr;
 
 typedef struct {
