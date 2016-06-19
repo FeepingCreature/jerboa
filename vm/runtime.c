@@ -8,6 +8,9 @@
 #include "vm/ffi.h"
 #include "gc.h"
 
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+
 static void asprintf(char **outp, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -444,6 +447,81 @@ static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_
   state->result_value = NULL;
 }
 
+static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node, Object *element_node) {
+  Object *res;
+  if (element->type == 1) {
+    res = alloc_object(state, element_node);
+    xmlNode *child = element->children;
+    int children_len = 0;
+    for (; child; child = child->next) children_len ++;
+    Object **children_ptr = malloc(sizeof(Object*) * children_len);
+    int i = 0;
+    for (child = element->children; child; child = child->next) {
+      children_ptr[i++] = xml_to_object(state, child, text_node, element_node);
+    }
+    Object *attr = alloc_object(state, NULL);
+    xmlAttr *xml_attr = element->properties;
+    for (; xml_attr; xml_attr = xml_attr->next) {
+      assert(xml_attr->type == 2); // attribute
+      assert(xml_attr->children && xml_attr->children->type == 3); // text (TODO handle other types?)
+      // TODO reference source document
+      // TODO string source reference handling
+      // clone xml_attr->name
+      int name_size = strlen((char*) xml_attr->name);
+      char *name2 = malloc(name_size + 1);
+      strncpy(name2, (char*) xml_attr->name, name_size + 1);
+      // printf("alloc_string(%lu)\n", strlen((char*) xml_attr->children->content));
+      object_set(attr, name2, alloc_string(state, (char*) xml_attr->children->content));
+    }
+    // printf("alloc_string(%lu)\n", strlen((char*) element->name));
+    object_set(res, "nodeName", alloc_string(state, (char*) element->name));
+    object_set(res, "attr", attr);
+    object_set(res, "children", alloc_array(state, children_ptr, children_len));
+  } else if (element->type == 3) {
+    res = alloc_object(state, text_node);
+    // printf("alloc_string(%lu)\n", strlen((char*) element->content));
+    object_set(res, "value", alloc_string(state, (char*) element->content));
+  } else assert(false);
+  return res;
+}
+
+static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *string_base = object_lookup(root, "string", NULL);
+  Object *node_base = object_lookup(object_lookup(root, "xml", NULL), "node", NULL);
+  
+  StringObject *str_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(str_obj, "parameter to xml.load must be string");
+  char *file = str_obj->value;
+  
+  LIBXML_TEST_VERSION
+  
+  xmlDoc *doc = xmlReadFile(file, NULL, 0);
+  VM_ASSERT(doc != NULL, "cannot read xml file");
+  
+  xmlNode *root_element = xmlDocGetRootElement(doc);
+  
+  gc_disable(state);
+  
+  Object *text_node = alloc_object(state, node_base);
+  object_set(text_node, "nodeName", alloc_string_foreign(state, ""));
+  object_set(text_node, "nodeType", alloc_int(state, 3));
+  object_set(text_node, "attr", alloc_object(state, NULL));
+  object_set(text_node, "children", alloc_array(state, NULL, 0));
+  
+  Object *element_node = alloc_object(state, node_base);
+  object_set(element_node, "nodeType", alloc_int(state, 1));
+  object_set(element_node, "value", NULL);
+  
+  state->result_value = xml_to_object(state, root_element, text_node, element_node);
+  gc_enable(state);
+  // letting it leak is actually _saving_ us memory
+  // at least until we can properly track the source resource in string allocation
+  xmlFreeDoc(doc);
+  xmlCleanupParser();
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -518,6 +596,12 @@ Object *create_root(VMState *state) {
   object_set(ptr_obj, "null", alloc_fn(state, ptr_is_null_fn));
   
   object_set(root, "print", alloc_fn(state, print_fn));
+  
+  Object *xml_obj = alloc_object(state, NULL);
+  object_set(xml_obj, "load", alloc_fn(state, xml_load_fn));
+  object_set(xml_obj, "node", alloc_object(state, NULL));
+  xml_obj->flags |= OBJ_IMMUTABLE;
+  object_set(root, "xml", xml_obj);
   
   ffi_setup_root(state, root);
   

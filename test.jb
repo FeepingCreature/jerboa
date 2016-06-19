@@ -3,6 +3,268 @@ var puts = libc_so.sym("puts", ffi.sint, [ffi.char_pointer]);
 var malloc = libc_so.sym("malloc", ffi.pointer, [ffi.sint]);
 puts("Hello World from libffi!");
 
+var gl_wrap = xml.load("gl_wrap.xml");
+function print_xml(node, depth) {
+  var spacing = "";
+  var i = 0;
+  while (i < depth) {
+    spacing = spacing + "  ";
+    i = i + 1;
+  }
+  if (node.nodeType == 1) {
+    var attrs = "";
+    var attr_names = keys(node.attr);
+    i = 0;
+    while (i < attr_names.length) {
+      attrs = attrs + " " + attr_names[i]+"='"+node.attr[attr_names[i]]+"'";
+      i = i + 1;
+    }
+    print(spacing, "<", node.nodeName, attrs, ">");
+    i = 0;
+    while (i < node.children.length) {
+      print_xml(node.children[i], depth + 1);
+      i = i + 1;
+    }
+    print(spacing, "</", node.nodeName, ">");
+  }
+}
+xml.node["toString"] = method() {
+  if (this.nodeType == 1) {
+    var res = "";
+    var attrs = "";
+    var attr_names = keys(this.attr);
+    var i = 0;
+    while (i < attr_names.length) {
+      attrs = attrs + " " + attr_names[i]+"='"+this.attr[attr_names[i]]+"'";
+      i = i + 1;
+    }
+    res = res + "<"+this.nodeName+attrs+">";
+    i = 0;
+    while (i < this.children.length) {
+      var str = this.children[i].toString();
+      if (str) res = res + str;
+      i = i + 1;
+    }
+    res = res + "</" + this.nodeName + ">";
+    return res;
+  }
+  return null;
+};
+var XmlResults = {
+  array: [],
+  length: 0,
+  "[]": method(i) { return this.array[i]; },
+  combine: method(res2) {
+    var array2 = [];
+    var i = 0;
+    while (i < this.array.length) {
+      array2.push(this.array[i]);
+      i = i + 1;
+    }
+    i = 0;
+    while (i < res2.array.length) {
+      array2.push(res2.array[i]);
+      i = i + 1;
+    }
+    return new XmlResults {
+      array: array2,
+      length: array2.length
+    };
+  },
+  filter: method(pred) {
+    var res = [];
+    var i = 0;
+    while (i < this.array.length) {
+      var entry = this.array[i];
+      if (pred(entry)) res.push(entry);
+      i = i + 1;
+    }
+    return new XmlResults {
+      array: res,
+      length: res.length
+    };
+  },
+  children: method(pred) {
+    var res = [];
+    var i = 0;
+    while (i < this.array.length) {
+      var entry = this.array[i];
+      var k = 0;
+      while (k < entry.children.length) {
+        var child = entry.children[k];
+        if (pred(child)) res.push(child);
+        k = k + 1;
+      }
+      i = i + 1;
+    }
+    return new XmlResults {
+      array: res,
+      length: res.length
+    };
+  },
+  find: method(pred) {
+    var res = new XmlResults;
+    var i = 0;
+    while (i < this.array.length) {
+      res = res.combine(this.array[i].find(pred));
+      i = i + 1;
+    }
+    return res;
+  },
+};
+xml.node["find"] = method(pred) {
+  var array = [];
+  function recurse(node) {
+    var i = 0;
+    if (pred(node)) array.push(node);
+    while (i < node.children.length) {
+      recurse(node.children[i]);
+      i = i + 1;
+    }
+  }
+  recurse(this);
+  return new XmlResults {
+    array: array,
+    length: array.length
+  };
+};
+function getAttr(node, name) {
+  // <attributelist><attribute></attribute></attributelist>
+  var firstSubNode = null;
+  var i = 0;
+  var children = node.children;
+  while (children[i].nodeType != 1) {
+    i = i + 1;
+    if (i == children.length) { print("fail"); (1/0); }
+  }
+  var attrs = children[i].children;
+  i = 0;
+  while (i < attrs.length) {
+    var attr = attrs[i];
+    if (attr.nodeName == "attribute") {
+      if (attr.attr["name"] == name) {
+        return attr.attr["value"];
+      }
+    }
+    i = i + 1;
+  }
+  print("fail");
+  (1/0);
+}
+print("select decls");
+var count = 0;
+var decls = gl_wrap.find(function(node) { count = count + 1; return node.nodeName == "cdecl"; });
+print("done. ", decls.length, " from ", count);
+print("filter typedefs");
+var typedefs = decls.filter(function(node) {
+  return getAttr(node, "kind") == "typedef";
+});
+print("done. ", typedefs.length);
+print("process typedefs");
+var i = 0;
+var typemap = {};
+while (i < typedefs.length) {
+  var typedef = typedefs[i];
+  typemap[getAttr(typedef, "name")] = getAttr(typedef, "type");
+  i = i + 1;
+}
+print("done.");
+function xml_type_to_ffi(type) {
+  if (type == "int") return ffi.sint;
+  if (type == "void") return ffi.void;
+  if (type == "float") return ffi.float;
+  if (type == "short") return null;
+  if (type == "double") return ffi.double;
+  if (type == "signed char") return null;
+  if (type == "unsigned int") return ffi.uint;
+  if (type == "unsigned char") return null;
+  if (type == "unsigned short") return null;
+  if (type == "q(const).GLubyte") return null;
+  if (type == "p.q(const).GLubyte") return ffi.pointer;
+  if (type == "p.GLubyte") return ffi.pointer;
+  if (type == "p.q(const).GLbyte") return ffi.pointer;
+  if (type == "p.GLbyte") return ffi.pointer;
+  if (type == "p.q(const).GLshort") return ffi.pointer;
+  if (type == "p.GLshort") return ffi.pointer;
+  if (type == "p.q(const).GLushort") return ffi.pointer;
+  if (type == "p.GLushort") return ffi.pointer;
+  if (type == "p.q(const).GLvoid") return ffi.pointer;
+  if (type == "p.p.GLvoid") return ffi.pointer;
+  if (type == "p.GLvoid") return ffi.pointer;
+  if (type == "p.q(const).GLboolean") return ffi.pointer;
+  if (type == "p.GLboolean") return ffi.pointer;
+  if (type == "p.q(const).GLfloat") return ffi.pointer;
+  if (type == "p.GLfloat") return ffi.pointer;
+  if (type == "p.q(const).GLint") return ffi.pointer;
+  if (type == "p.GLint") return ffi.pointer;
+  if (type == "p.q(const).GLuint") return ffi.pointer;
+  if (type == "p.GLuint") return ffi.pointer;
+  if (type == "p.q(const).GLdouble") return ffi.pointer;
+  if (type == "p.GLdouble") return ffi.pointer;
+  if (type == "p.q(const).GLclampf") return ffi.pointer;
+  if (type == "a(16).q(const).GLdouble") return null;
+  if (type == "a(16).q(const).GLfloat") return null;
+  return xml_type_to_ffi(typemap[type]);
+}
+var gl = {};
+var gl_so = ffi.open("libGL.so");
+print("select fn decls");
+var fndecls = decls.filter(function(node) {
+  return getAttr(node, "kind") == "function";
+});
+print("done.");
+i = 0;
+print("parse ", fndecls.length, " fn decls");
+while (i < fndecls.length) {
+  var decl = fndecls[i];
+  var ret_type = xml_type_to_ffi(getAttr(decl, "type"));
+  if (ret_type) {
+    var parms = decl.find(function(node) {
+      return node.nodeName == "parm";
+    });
+    var par_types = [];
+    var k = 0;
+    var good = true;
+    while (k < parms.length) {
+      var parm = parms[k];
+      var typestr = getAttr(parm, "type");
+      var skip = 0;
+      if (parms.length == 1) { if (typestr == "void") { skip = 1; } }
+      if (skip == 0) {
+        var type = xml_type_to_ffi(typestr);
+        if (type) { } else { good = false; }
+        par_types.push(type);
+      }
+      k = k + 1;
+    }
+    if (good) {
+      var name = getAttr(decl, "name");
+      var sym = gl_so.sym(name, ret_type, par_types);
+      if (sym) {
+        // print("+ ", name);
+        gl[name] = sym;
+      }
+    }
+  }
+  i = i + 1;
+}
+print("done.");
+print("filter constants");
+var constants = gl_wrap.find(function(node) { return node.nodeName == "constant"; });
+print("done.");
+i = 0;
+print("parse ", constants.length, " constants");
+while (i < constants.length) {
+  var constant = constants[i];
+  var name = getAttr(constant, "name");
+  var value = getAttr(constant, "value");
+  value = int.parse(value);
+  // print("+ '", name, "'");
+  gl[name] = value;
+  i = i + 1;
+}
+print("done.");
+
 var sdl_so = ffi.open("libSDL.so");
 var SDL_Init = sdl_so.sym("SDL_Init", ffi.sint, [ffi.uint32]);
 var SDL_SetVideoMode = sdl_so.sym("SDL_SetVideoMode", ffi.pointer, [ffi.sint, ffi.sint, ffi.sint, ffi.uint32]);
@@ -16,78 +278,55 @@ var SDL_OPENGL = 2;
 var SDL_RESIZABLE = 0x10;
 var SDL_QUIT = 12;
 
-var gl_so = ffi.open("libGL.so");
-var glClear = gl_so.sym("glClear", ffi.void, [ffi.uint]);
-var glLoadIdentity = gl_so.sym("glLoadIdentity", ffi.void, []);
-var glTranslatef = gl_so.sym("glTranslatef", ffi.void, [ffi.float, ffi.float, ffi.float]);
-var glBegin = gl_so.sym("glBegin", ffi.void, [ffi.uint]);
-var glEnd = gl_so.sym("glEnd", ffi.void, []);
-var glEnable = gl_so.sym("glEnable", ffi.void, [ffi.uint]);
-var glVertex3f = gl_so.sym("glVertex3f", ffi.void, [ffi.float, ffi.float, ffi.float]);
-var glShadeModel = gl_so.sym("glShadeModel", ffi.void, [ffi.uint]);
-var glDepthFunc = gl_so.sym("glDepthFunc", ffi.void, [ffi.uint]);
-var glClearColor = gl_so.sym("glClearColor", ffi.void, [ffi.float, ffi.float, ffi.float, ffi.float]);
-var glColor3f = gl_so.sym("glColor3f", ffi.void, [ffi.float, ffi.float, ffi.float]);
-var glClearDepth = gl_so.sym("glClearDepth", ffi.void, [ffi.double]);
-var glHint = gl_so.sym("glHint", ffi.void, [ffi.uint, ffi.uint]);
-var glViewport = gl_so.sym("glViewport", ffi.void, [ffi.sint, ffi.sint, ffi.uint, ffi.uint]);
-var glMatrixMode = gl_so.sym("glMatrixMode", ffi.void, [ffi.uint]);
-var GL_DEPTH_BUFFER_BIT = 0x00000100;
-var GL_COLOR_BUFFER_BIT = 0x00004000;
-var GL_TRIANGLES = 0x0004;
-var GL_QUADS = 0x0007;
-var GL_LEQUAL = 0x0203;
-var GL_DEPTH_TEST = 0x0B71;
-var GL_SMOOTH = 0x1D01;
-var GL_NICEST = 0x1102;
-var GL_MODELVIEW = 0x1700;
-var GL_PROJECTION = 0x1701;
-var GL_PERSPECTIVE_CORRECTION_HINT = 0x0C50;
+/*
+var glfw_so = ffi.open("libglfw.so");
+var glfwInit = glfw_so.sym("glfwInit", ffi.void, []);
+*/
 
 var glu_so = ffi.open("libGLU.so");
 var gluPerspective = glu_so.sym("gluPerspective", ffi.void, [ffi.double, ffi.double, ffi.double, ffi.double]);
 
 function drawGL() {
-  glViewport(0, 0, 800, 600);
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
+  gl.glViewport(0, 0, 800, 600);
+  gl.glMatrixMode(gl.GL_PROJECTION);
+  gl.glLoadIdentity();
   gluPerspective(45, 800.0/600, 0.1, 100);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
+  gl.glMatrixMode(gl.GL_MODELVIEW);
+  gl.glLoadIdentity();
   
-  glShadeModel(GL_SMOOTH);
-  glClearDepth(1);
-  glDepthFunc(GL_LEQUAL);
-  glEnable(GL_DEPTH_TEST);
-  glClearColor(0.2, 0.2, 0.2, 0);
-  glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+  gl.glShadeModel(gl.GL_SMOOTH);
+  gl.glClearDepth(1);
+  gl.glDepthFunc(gl.GL_LEQUAL);
+  gl.glEnable(gl.GL_DEPTH_TEST);
+  gl.glClearColor(0.2, 0.2, 0.2, 0);
+  gl.glHint(gl.GL_PERSPECTIVE_CORRECTION_HINT, gl.GL_NICEST);
   
   // TODO '|'
-  glClear(GL_COLOR_BUFFER_BIT + GL_DEPTH_BUFFER_BIT);
-  glLoadIdentity();
-  glTranslatef(-1.5, 0.0, -6.0);
-  glColor3f(1, 1, 1);
-  glBegin(GL_TRIANGLES);
-  glVertex3f( 0.0,  1.0, 0.0);
-  glVertex3f(-1.0, -1.0, 0.0);
-  glVertex3f( 1.0, -1.0, 0.0);
-  glEnd();
+  gl.glClear(gl.GL_COLOR_BUFFER_BIT + gl.GL_DEPTH_BUFFER_BIT);
+  gl.glLoadIdentity();
+  gl.glTranslatef(-1.5, 0.0, -6.0);
+  gl.glColor3f(1, 1, 1);
+  gl.glBegin(gl.GL_TRIANGLES);
+  gl.glVertex3f( 0.0,  1.0, 0.0);
+  gl.glVertex3f(-1.0, -1.0, 0.0);
+  gl.glVertex3f( 1.0, -1.0, 0.0);
+  gl.glEnd();
   
-  glTranslatef(3.0, 0.0, 0.0);
+  gl.glTranslatef(3.0, 0.0, 0.0);
   
-  glBegin(GL_QUADS);
-  glVertex3f(-1.0, 1.0, 0.0);
-  glVertex3f( 1.0, 1.0, 0.0);
-  glVertex3f( 1.0,-1.0, 0.0);
-  glVertex3f(-1.0,-1.0, 0.0);
-  glEnd();
+  gl.glBegin(gl.GL_QUADS);
+  gl.glVertex3f(-1.0, 1.0, 0.0);
+  gl.glVertex3f( 1.0, 1.0, 0.0);
+  gl.glVertex3f( 1.0,-1.0, 0.0);
+  gl.glVertex3f(-1.0,-1.0, 0.0);
+  gl.glEnd();
 }
 
 SDL_Init(SDL_INIT_EVERYTHING);
 // TODO '|'
 SDL_SetVideoMode(800, 600, 32, SDL_OPENGL + SDL_RESIZABLE);
 var event = malloc(64);
-var running = true;
+var running = false;
 while (running) {
   while (SDL_PollEvent(event)) {
     if (event.dereference(ffi.uint8) == SDL_QUIT) running = false;
@@ -96,6 +335,7 @@ while (running) {
   SDL_GL_SwapBuffers();
 }
 SDL_Quit();
+return 0;
 
 var obj = {a: 5, b: null, bar: method() { print(this.a - this.b); } };
 obj.b = /* test */ 7;
