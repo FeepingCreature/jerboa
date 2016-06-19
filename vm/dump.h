@@ -3,7 +3,7 @@
 
 #include "object.h"
 
-void dump_instr(Instr *instr);
+void dump_instr(Instr **instr);
 
 void dump_fn(UserFunction *fn);
 

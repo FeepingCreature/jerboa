@@ -1,6 +1,8 @@
 #ifndef VM_BUILDER_H
 #define VM_BUILDER_H
 
+#include <stddef.h>
+
 #include "object.h"
 
 typedef struct {
@@ -17,11 +19,19 @@ typedef struct {
   FunctionBody body;
 } FunctionBuilder;
 
+// instrs_ptr gets reallocated, so save pointer as an offset
+typedef struct {
+  int block;
+  ptrdiff_t distance;
+} IntVarRef;
+
 int new_block(FunctionBuilder *builder);
 
 void terminate(FunctionBuilder *builder);
 
-void addinstr(FunctionBuilder *builder, Instr *instr);
+void addinstr(FunctionBuilder *builder, int size, Instr *instr);
+
+void set_int_var(FunctionBuilder *builder, IntVarRef ref, int value);
 
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot);
 
@@ -51,9 +61,9 @@ int addinstr_call1(FunctionBuilder *builder, int fn, int this_slot, int arg0);
 
 int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, int arg1);
 
-void addinstr_test_branch(FunctionBuilder *builder, int test, int **truebranch, int **falsebranch);
+void addinstr_test_branch(FunctionBuilder *builder, int test, IntVarRef *truebranch, IntVarRef *falsebranch);
 
-void addinstr_branch(FunctionBuilder *builder, int **branch);
+void addinstr_branch(FunctionBuilder *builder, IntVarRef *branch);
 
 void addinstr_return(FunctionBuilder *builder, int slot);
 

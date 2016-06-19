@@ -72,8 +72,7 @@ typedef struct {
   Object *context;
   Object **slots_ptr; int slots_len;
   GCRootSet frameroot; // gc entry for the pinned slots array
-  InstrBlock *block;
-  int instr_offs;
+  Instr *instr_ptr;
 } Callframe;
 
 typedef enum {

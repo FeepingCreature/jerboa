@@ -42,8 +42,10 @@ typedef struct {
   InstrType type;
 } Instr;
 
+int instr_size(Instr*);
+
 typedef struct {
-  Instr** instrs_ptr; int instrs_len;
+  Instr* instrs_ptr, *instrs_ptr_end;
 } InstrBlock;
 
 typedef struct {

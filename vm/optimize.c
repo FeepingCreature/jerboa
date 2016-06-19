@@ -12,11 +12,12 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
-    for (int k = 0; k < block->instrs_len; ++k) {
-      Instr *instr = block->instrs_ptr[k];
-#define CASE(KEY, TY, VAR) } break; case KEY: { TY *VAR = (TY*) instr; (void) VAR;
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+#define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
+        case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
       switch (instr->type) {
-        case INSTR_INVALID: { assert(false);
+        case INSTR_INVALID: { assert(false); int _stepsize = -1;
           CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
           CASE(INSTR_GET_CONTEXT, GetContextInstr, get_context_instr)
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr, alloc_obj_instr)
@@ -43,6 +44,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_BR, BranchInstr, branch_instr)
           CASE(INSTR_TESTBR, TestBranchInstr, test_branch_instr)
             slots[test_branch_instr->test_slot] = false;
+          instr = (Instr*) ((char*) instr + _stepsize);
         } break;
         default: assert("Unhandled Instruction Type!" && false);
       }
@@ -63,8 +65,8 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
     InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    for (int k = 0; k < block->instrs_len; ++k) {
-      Instr *instr = block->instrs_ptr[k];
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
       AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
       AccessInstr *acci = (AccessInstr*) instr;
       AssignInstr *assi = (AssignInstr*) instr;
@@ -79,32 +81,36 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
           slot_table_len = asoi->target_slot + 1;
         }
         slot_table_ptr[asoi->target_slot] = asoi->value;
+        instr = (Instr*)(asoi + 1);
         continue; // no need to add, we're fully inlining this
       }
       if (instr->type == INSTR_ACCESS
         && acci->key_slot < slot_table_len && slot_table_ptr[acci->key_slot] != NULL)
       {
-        AccessStringKeyInstr *instr = malloc(sizeof(AccessStringKeyInstr));
-        instr->base.type = INSTR_ACCESS_STRING_KEY;
-        instr->obj_slot = acci->obj_slot;
-        instr->target_slot = acci->target_slot;
-        instr->key = slot_table_ptr[acci->key_slot];
-        addinstr(builder, (Instr*) instr);
+        AccessStringKeyInstr *aski = malloc(sizeof(AccessStringKeyInstr));
+        aski->base.type = INSTR_ACCESS_STRING_KEY;
+        aski->obj_slot = acci->obj_slot;
+        aski->target_slot = acci->target_slot;
+        aski->key = slot_table_ptr[acci->key_slot];
+        addinstr(builder, sizeof(*aski), (Instr*) aski);
+        instr = (Instr*)(acci + 1);
         continue;
       }
       if (instr->type == INSTR_ASSIGN
         && assi->key_slot < slot_table_len && slot_table_ptr[assi->key_slot] != NULL)
       {
-        AssignStringKeyInstr *instr = malloc(sizeof(AssignStringKeyInstr));
-        instr->base.type = INSTR_ASSIGN_STRING_KEY;
-        instr->obj_slot = assi->obj_slot;
-        instr->value_slot = assi->value_slot;
-        instr->key = slot_table_ptr[assi->key_slot];
-        instr->type = assi->type;
-        addinstr(builder, (Instr*) instr);
+        AssignStringKeyInstr *aski = malloc(sizeof(AssignStringKeyInstr));
+        aski->base.type = INSTR_ASSIGN_STRING_KEY;
+        aski->obj_slot = assi->obj_slot;
+        aski->value_slot = assi->value_slot;
+        aski->key = slot_table_ptr[assi->key_slot];
+        aski->type = assi->type;
+        addinstr(builder, sizeof(*aski), (Instr*) aski);
+        instr = (Instr*)(assi + 1);
         continue;
       }
-      addinstr(builder, instr);
+      addinstr(builder, instr_size(instr), instr);
+      instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
   // TODO abstract this out?

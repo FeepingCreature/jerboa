@@ -15,16 +15,32 @@ void terminate(FunctionBuilder *builder) {
   addinstr_return(builder, builder->slot_base++);
 }
 
-void addinstr(FunctionBuilder *builder, Instr *instr) {
+void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   assert(!builder->block_terminated);
   FunctionBody *body = &builder->body;
   InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
-  block->instrs_len ++;
-  block->instrs_ptr = realloc(block->instrs_ptr, block->instrs_len * sizeof(Instr*));
-  block->instrs_ptr[block->instrs_len - 1] = instr;
+  int current_len = (char*) block->instrs_ptr_end - (char*) block->instrs_ptr;
+  int new_len = current_len + size;
+  block->instrs_ptr = realloc(block->instrs_ptr, new_len);
+  block->instrs_ptr_end = (Instr*) ((char*) block->instrs_ptr + new_len);
+  memcpy((char*) block->instrs_ptr + current_len, instr, size);
   if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
     builder->block_terminated = true;
   }
+}
+
+static IntVarRef ref_to_instr_about_to_be_added(FunctionBuilder *builder, char *instr, char *ptr) {
+  FunctionBody *body = &builder->body;
+  InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
+  int current_len = (char*) block->instrs_ptr_end - (char*) block->instrs_ptr;
+  int delta = ptr - instr;
+  return (IntVarRef) { body->blocks_len - 1, current_len + delta };
+}
+
+void set_int_var(FunctionBuilder *builder, IntVarRef ref, int value) {
+  FunctionBody *body = &builder->body;
+  InstrBlock *block = &body->blocks_ptr[ref.block];
+  *(int*) ((char*) block->instrs_ptr + ref.distance) = value;
 }
 
 // use SAVE_RETURN so that ACCESS may generate a call internally
@@ -34,7 +50,7 @@ int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
   instr->obj_slot = obj_slot;
   instr->key_slot = key_slot;
   instr->target_slot = builder->slot_base++;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(AccessInstr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -45,21 +61,21 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
   instr->value_slot = slot;
   instr->key_slot = key_slot;
   instr->type = type;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
 void addinstr_close_object(FunctionBuilder *builder, int obj) {
   CloseObjectInstr *instr = malloc(sizeof(CloseObjectInstr));
   instr->base.type = INSTR_CLOSE_OBJECT;
   instr->slot = obj;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
 int addinstr_get_context(FunctionBuilder *builder) {
   GetContextInstr *instr = malloc(sizeof(GetContextInstr));
   instr->base.type = INSTR_GET_CONTEXT;
   instr->slot = builder->slot_base++;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->slot;
 }
 
@@ -68,7 +84,7 @@ int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
   instr->base.type = INSTR_ALLOC_OBJECT;
   instr->target_slot = builder->slot_base++;
   instr->parent_slot = parent;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -77,7 +93,7 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value) 
   instr->base.type = INSTR_ALLOC_INT_OBJECT;
   instr->target_slot = builder->slot_base++;
   instr->value = value;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -86,7 +102,7 @@ int addinstr_alloc_float_object(FunctionBuilder *builder, int ctxslot, float val
   instr->base.type = INSTR_ALLOC_FLOAT_OBJECT;
   instr->target_slot = builder->slot_base++;
   instr->value = value;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -94,7 +110,7 @@ int addinstr_alloc_array_object(FunctionBuilder *builder, int ctxslot) {
   AllocArrayObjectInstr *instr = malloc(sizeof(AllocArrayObjectInstr));
   instr->base.type = INSTR_ALLOC_ARRAY_OBJECT;
   instr->target_slot = builder->slot_base++;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -103,7 +119,7 @@ int addinstr_alloc_string_object(FunctionBuilder *builder, int ctxslot, char *va
   instr->base.type = INSTR_ALLOC_STRING_OBJECT;
   instr->target_slot = builder->slot_base++;
   instr->value = value;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -113,7 +129,7 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFun
   instr->target_slot = builder->slot_base++;
   instr->context_slot = ctxslot;
   instr->fn = fn;
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
 
@@ -124,12 +140,12 @@ int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr
   instr1->this_slot = this_slot;
   instr1->args_length = args_len;
   instr1->args_ptr = args_ptr;
-  addinstr(builder, (Instr*) instr1);
+  addinstr(builder, sizeof(*instr1), (Instr*) instr1);
   
   SaveResultInstr *instr2 = malloc(sizeof(SaveResultInstr));
   instr2->base.type = INSTR_SAVE_RESULT;
   instr2->target_slot = builder->slot_base++;
-  addinstr(builder, (Instr*) instr2);
+  addinstr(builder, sizeof(*instr2), (Instr*) instr2);
   return instr2->target_slot;
 }
 
@@ -150,22 +166,22 @@ int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, in
   return addinstr_call(builder, fn, this_slot, args, 2);
 }
 
-void addinstr_test_branch(FunctionBuilder *builder, int test, int **truebranch, int **falsebranch) {
+void addinstr_test_branch(FunctionBuilder *builder, int test, IntVarRef *truebranch, IntVarRef *falsebranch) {
   TestBranchInstr *instr = malloc(sizeof(TestBranchInstr));
   instr->base.type = INSTR_TESTBR;
   instr->test_slot = test;
-  *truebranch = &instr->true_blk;
-  *falsebranch = &instr->false_blk;
+  *truebranch = ref_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->true_blk);
+  *falsebranch = ref_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->false_blk);
   
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
-void addinstr_branch(FunctionBuilder *builder, int **branch) {
+void addinstr_branch(FunctionBuilder *builder, IntVarRef *branch) {
   BranchInstr *instr = malloc(sizeof(BranchInstr));
   instr->base.type = INSTR_BR;
-  *branch = &instr->blk;
+  *branch = ref_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->blk);
   
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
 void addinstr_return(FunctionBuilder *builder, int slot) {
@@ -173,7 +189,7 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
   instr->base.type = INSTR_RETURN;
   instr->ret_slot = slot;
   
-  addinstr(builder, (Instr*) instr);
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
 UserFunction *build_function(FunctionBuilder *builder) {

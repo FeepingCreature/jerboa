@@ -475,10 +475,10 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder) {
     log_parser_error(text, "if expected closing paren");
     return PARSE_ERROR;
   }
-  int *true_blk, *false_blk, *end_blk;
+  IntVarRef true_blk, false_blk, end_blk;
   addinstr_test_branch(builder, testslot, &true_blk, &false_blk);
   
-  *true_blk = new_block(builder);
+  set_int_var(builder, true_blk, new_block(builder));
   
   res = parse_block(&text, builder);
   if (res == PARSE_ERROR) return PARSE_ERROR;
@@ -486,15 +486,17 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder) {
   
   addinstr_branch(builder, &end_blk);
   
-  *false_blk = new_block(builder);
+  int false_blk_idx = new_block(builder);
+  set_int_var(builder, false_blk, false_blk_idx);
   if (eat_keyword(&text, "else")) {
     parse_block(&text, builder);
-    int *end_blk2;
+    IntVarRef end_blk2;
     addinstr_branch(builder, &end_blk2);
-    *end_blk2 = new_block(builder);
-    *end_blk = *end_blk2;
+    int blk_idx = new_block(builder);
+    set_int_var(builder, end_blk2, blk_idx);
+    set_int_var(builder, end_blk, blk_idx);
   } else {
-    *end_blk = *false_blk;
+    set_int_var(builder, end_blk, false_blk_idx);
   }
   *textp = text;
   return PARSE_OK;
@@ -507,11 +509,12 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder) {
     return PARSE_ERROR;
   }
   
-  int *test_blk;
+  IntVarRef test_blk;
   addinstr_branch(builder, &test_blk);
-  *test_blk = new_block(builder);
+  int test_blk_idx = new_block(builder);
+  set_int_var(builder, test_blk, test_blk_idx);
   
-  int *loop_blk, *end_blk;
+  IntVarRef loop_blk, end_blk;
   
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, 0, &test_expr);
@@ -525,13 +528,14 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder) {
   }
   addinstr_test_branch(builder, testslot, &loop_blk, &end_blk);
   
-  *loop_blk = new_block(builder);
+  set_int_var(builder, loop_blk, new_block(builder));
   parse_block(&text, builder);
-  int *test_blk2;
+  IntVarRef test_blk2;
   addinstr_branch(builder, &test_blk2);
-  *test_blk2 = *test_blk;
   
-  *end_blk = new_block(builder);
+  set_int_var(builder, test_blk2, test_blk_idx);
+  set_int_var(builder, end_blk, new_block(builder));
+  
   *textp = text;
   return PARSE_OK;
 }
