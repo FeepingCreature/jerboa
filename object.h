@@ -27,25 +27,30 @@ typedef struct _Object Object;
 struct _TableEntry;
 typedef struct _TableEntry TableEntry;
 
-struct _TablePage;
-typedef struct _TablePage TablePage;
+struct _VMState;
+typedef struct _VMState VMState;
 
 struct _TableEntry {
   const char *name;
   Object *value;
 };
 
-struct _TablePage {
-  TableEntry entries[1];
-  TablePage *next;
-};
+// TODO actually use
+#define TBL_GRAVESTONE = ((const char*) -1);
+
+typedef struct {
+  TableEntry *entries_ptr;
+  int entries_num;
+  int entries_stored;
+} HashTable;
 
 struct _Object {
-  TablePage tbl;
+  HashTable tbl;
   Object *parent;
   short int size;
   ObjectFlags flags;
   Object *prev; // for gc
+  void (*mark_fn)(VMState *state, Object *obj); // for gc
 };
 
 struct _GCRootSet;
@@ -77,7 +82,7 @@ typedef enum {
   VM_ERRORED
 } VMRunState;
 
-typedef struct {
+struct _VMState {
   Callframe *stack_ptr; int stack_len;
   Object *root;
   Object *result_value;
@@ -86,10 +91,10 @@ typedef struct {
   char *error;
   
   // memory handling
-  GCState gcstate;
+  GCState *gcstate;
   Object *last_obj_allocated;
   int num_obj_allocated, next_gc_run;
-} VMState;
+};
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);
 
@@ -153,11 +158,6 @@ typedef struct {
   Object base;
   void *ptr;
 } PointerObject;
-
-typedef struct {
-  Object base;
-  void (*mark_fn)(VMState *state, Object *obj);
-} CustomGCObject;
 
 Object *alloc_object(VMState *state, Object *parent);
 

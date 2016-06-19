@@ -485,11 +485,8 @@ Object *create_root(VMState *state) {
   
   Object *closure_obj = alloc_object(state, NULL);
   closure_obj->flags |= OBJ_NOINHERIT;
+  closure_obj->mark_fn = closure_mark_fn;
   object_set(root, "closure", closure_obj);
-  
-  Object *closure_gc = alloc_custom_gc(state);
-  ((CustomGCObject*) closure_gc)->mark_fn = closure_mark_fn;
-  object_set(closure_obj, "gc", closure_gc); // note: gc must be first entry in object
   
   Object *bool_obj = alloc_object(state, NULL);
   bool_obj->flags |= OBJ_NOINHERIT;
@@ -507,10 +504,8 @@ Object *create_root(VMState *state) {
   
   Object *array_obj = alloc_object(state, NULL);
   array_obj->flags |= OBJ_NOINHERIT;
+  array_obj->mark_fn = array_mark_fn;
   object_set(root, "array", array_obj);
-  Object *array_gc =  alloc_custom_gc(state);
-  ((CustomGCObject*) array_gc)->mark_fn = array_mark_fn;
-  object_set(array_obj, "gc", array_gc); // note: gc must be first entry in object
   object_set(array_obj, "resize", alloc_fn(state, array_resize_fn));
   object_set(array_obj, "push", alloc_fn(state, array_push_fn));
   object_set(array_obj, "pop", alloc_fn(state, array_pop_fn));

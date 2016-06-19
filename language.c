@@ -64,6 +64,13 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
   char *text = *textp;
   while (!eat_string(&text, "}")) {
     char *key_name = parse_identifier(&text);
+    if (!key_name) {
+      ParseResult res = parse_string(&text, &key_name);
+      if (res != PARSE_OK) {
+        log_parser_error(text, "identifier or identifier literal expected");
+        return PARSE_ERROR;
+      }
+    }
     if (!eat_string(&text, ":")) {
       log_parser_error(text, "object literal expects 'name: value'");
       return PARSE_ERROR;
@@ -482,8 +489,10 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder) {
   *false_blk = new_block(builder);
   if (eat_keyword(&text, "else")) {
     parse_block(&text, builder);
-    addinstr_branch(builder, &end_blk);
-    *end_blk = new_block(builder);
+    int *end_blk2;
+    addinstr_branch(builder, &end_blk2);
+    *end_blk2 = new_block(builder);
+    *end_blk = *end_blk2;
   } else {
     *end_blk = *false_blk;
   }
