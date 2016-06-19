@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-String readfile(char *filename) {
+TextRange readfile(char *filename) {
   int file = open(filename, O_RDONLY);
   if (file == -1) { fprintf(stderr, "cannot open file '%s': %s\n", filename, strerror(errno)); assert(false); }
   char *res_ptr = NULL; int res_len = 0;
@@ -21,7 +21,7 @@ String readfile(char *filename) {
     if (numitems == -1) { fprintf(stderr, "cannot read from file: %s\n", strerror(errno)); assert(false); }
     if (numitems == 0) {
       res_ptr[bytes_read] = 0;
-      return (String){res_ptr, bytes_read};
+      return (TextRange){res_ptr, res_ptr + bytes_read};
     }
     bytes_read += numitems;
   } while (true);

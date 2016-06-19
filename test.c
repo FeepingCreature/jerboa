@@ -26,12 +26,12 @@ int main(int argc, char **argv) {
   GCRootSet set;
   gc_add_roots(&vmstate, &root, 1, &set);
   
-  String source = readfile(argv[1]);
+  TextRange source = readfile(argv[1]);
+  register_file(source, argv[1], 0, 0);
   
   UserFunction *module;
-  ParseResult res = parse_module(&source.ptr, &module);
+  ParseResult res = parse_module(&source.start, &module);
   if (res != PARSE_OK) {
-    fprintf(stderr, "parse failed!");
     return 1;
   }
   assert(res == PARSE_OK);

@@ -2,10 +2,9 @@
 #define UTIL_H
 
 typedef struct {
-  char *ptr;
-  int len;
-} String;
+  char *start, *end;
+} TextRange;
 
-String readfile(char *filename);
+TextRange readfile(char *filename);
 
 #endif
