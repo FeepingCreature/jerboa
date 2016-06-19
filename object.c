@@ -21,12 +21,14 @@ static void *cache_alloc(int size) {
         int_freelist = *(void**) int_freelist;
       }
       break;
+#if __LP64__
     case sizeof(TableEntry) * 4:
       if (table4_freelist) {
         res = table4_freelist;
         table4_freelist = *(void**) table4_freelist;
       }
       break;
+#endif
     case sizeof(TableEntry) * 8:
       if (table8_freelist) {
         res = table8_freelist;
@@ -59,10 +61,13 @@ static void cache_free(int size, void *ptr) {
       *(void**) ptr = int_freelist;
       int_freelist = ptr;
       break;
+// else collides with IntObject
+#if __LP64__
     case sizeof(TableEntry) * 4:
       *(void**) ptr = table4_freelist;
       table4_freelist = ptr;
       break;
+#endif
     case sizeof(TableEntry) * 8:
       *(void**) ptr = table8_freelist;
       table8_freelist = ptr;

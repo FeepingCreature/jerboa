@@ -123,11 +123,11 @@ void dump_fn(UserFunction *fn) {
     InstrBlock *block = &body->blocks_ptr[i];
     Instr *instr = block->instrs_ptr;
     while (instr != block->instrs_ptr_end) {
-      dump_instr(&instr);
       if (instr->type == INSTR_ALLOC_CLOSURE_OBJECT) {
         other_fns_ptr = realloc(other_fns_ptr, sizeof(UserFunction*) * ++other_fns_len);
         other_fns_ptr[other_fns_len - 1] = ((AllocClosureObjectInstr*) instr)->fn;
       }
+      dump_instr(&instr);
     }
     fprintf(stderr, "  ]\n");
   }
