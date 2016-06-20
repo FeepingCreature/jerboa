@@ -359,6 +359,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
   ProfilerRecord *record_entries = calloc(sizeof(ProfilerRecord), num_records);
   
   int max_samples_direct = 0, max_samples_indirect = 0;
+  int sum_samples_direct = 0, sum_samples_indirect = 0;
   int k = 0;
   for (int i = 0; i < direct_table->entries_num; ++i) {
     TableEntry *entry = &direct_table->entries_ptr[i];
@@ -367,6 +368,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       int samples = *(int*) &entry->value;
       // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_direct) max_samples_direct = samples;
+      sum_samples_direct += samples;
       record_entries[k++] = (ProfilerRecord) { range->text_from, range->text_to, samples, true };
     }
   }
@@ -377,6 +379,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       int samples = *(int*) &entry->value;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_indirect) max_samples_indirect = samples;
+      sum_samples_indirect += samples;
       record_entries[k++] = (ProfilerRecord) { range->text_from, range->text_to, samples, false };
     }
   }
@@ -417,16 +420,22 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       }
       int samples_dir = samples_dir_p ? *samples_dir_p : 0;
       int samples_indir = samples_indir_p ? *samples_indir_p : 0;
-      int hex_dir = 255 - (samples_dir * 255) / max_samples_direct;
-      // int hex_indir = 255 - (samples_indir * 255) / max_samples_indirect;
-      int weight_indir = 100 + (800LL * samples_indir) / max_samples_indirect;
-      float border_indir = samples_indir * 3.0f / max_samples_indirect;
+      double percent_dir = (samples_dir * 100.0) / sum_samples_direct;
+      double percent_indir = (samples_indir * 100.0) / sum_samples_indirect;
+      int hex_dir = 255 - (samples_dir * 255LL) / max_samples_direct;
+      // int hex_indir = 255 - (samples_indir * 255LL) / max_samples_indirect;
+      int weight_indir = 100 + (samples_indir * 800LL) / max_samples_indirect;
+      float border_indir = samples_indir * 3.0 / max_samples_indirect;
+      int fontsize_indir = 100 + (samples_indir * 10LL) / max_samples_indirect;
       /*printf("%li with %li: open tag %i and %i over %i and %i: %02x and %i / %f\n",
              CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from,
              samples_dir, samples_indir,
              max_samples_direct, max_samples_indirect,
              hex_dir, weight_indir, border_indir);*/
-      dprintf(fd, "<span style=\"background-color: #ff%02x%02x; font-weight: %i; border-bottom: %fpx solid black; \">", hex_dir, hex_dir, weight_indir, border_indir);
+      dprintf(fd, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
+        "style=\"background-color:#ff%02x%02x;font-weight:%i;border-bottom:%fpx solid black;font-size: %i%%;\">",
+        percent_dir, percent_indir,
+        hex_dir, hex_dir, weight_indir, border_indir, fontsize_indir);
       cur_entry_id ++;
     }
     // close all 0-size new
@@ -437,6 +446,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
     }
     if (*cur_char == '<') dprintf(fd, "&lt;");
     else if (*cur_char == '>') dprintf(fd, "&gt;");
+    // else if (*cur_char == '\n') dprintf(fd, "</pre>\n<pre>");
     else dprintf(fd, "%c", *cur_char);
     cur_char ++;
   }

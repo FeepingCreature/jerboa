@@ -1,6 +1,5 @@
 #include "call.h"
 
-#include <time.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include "gc.h"
@@ -71,61 +70,95 @@ void vm_remove_frame(VMState *state) {
   state->stack_len = state->stack_len - 1;
 }
 
+const long long sample_stepsize = 200000LL; // 0.2ms
+
+static void vm_record_profile(VMState *state) {
+  state->profstate->next_prof_check = cyclecount + 1024;
+  struct timespec prof_time;
+  long long ns_diff = get_clock_and_difference(&prof_time, &state->profstate->last_prof_time);
+  if (ns_diff > sample_stepsize) {
+    state->profstate->last_prof_time = prof_time;
+    
+    HashTable *direct_tbl = &state->profstate->direct_table;
+    HashTable *indirect_tbl = &state->profstate->indirect_table;
+    
+    VMState *curstate = state;
+    // fprintf(stderr, "generate backtrace\n");
+    int k = 0;
+    size_t range_bloom = 0;
+    while (curstate) {
+      for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
+        Callframe *curf = &curstate->stack_ptr[i];
+        Instr *instr = curf->instr_ptr;
+        // ranges are unique (and instrs must live as long as the vm state lives anyways)
+        // so we can just use the pointer stored in the instr as the key
+        char *key_ptr = (char*) &instr->belongs_to;
+        int key_len = sizeof(instr->belongs_to);
+        
+        size_t key_hash = hash(key_ptr, key_len);
+        
+        if (k == 0) {
+          void **freeptr;
+          void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_hash, key_ptr, key_len, &freeptr);
+          if (entry_p) (*(int*) entry_p) ++;
+          else (*(int*) freeptr) = 1;
+        }
+        
+        // don't double-count ranges in case of recursion
+        bool range_already_counted = false;
+        if ((range_bloom & key_hash) == key_hash) {
+          // bloom filter: we've _maybe_ seen that range before?
+          // reluctantly, fall back to O(n^2) check
+          VMState *curstate2 = state;
+          int k2 = 0;
+          while (curstate2) {
+            for (int i2 = curstate2->stack_len - 1; i2 >= 0; --i2, ++k2) {
+              if (k2 == k) {
+                goto break_outer2;
+              }
+              if (instr->belongs_to == curstate2->stack_ptr[i2].instr_ptr->belongs_to) {
+                range_already_counted = true;
+                goto break_outer2;
+              }
+            }
+            curstate2 = curstate2->parent;
+          }
+        } // bloom filter failed: we've _definitely_ not seen that range yet
+break_outer2:
+        
+        if (!range_already_counted) {
+          range_bloom |= key_hash;
+          void **freeptr;
+          void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_hash, key_ptr, key_len, &freeptr);
+          if (entry_p) (*(int*) entry_p) ++;
+          else (*(int*) freeptr) = 1;
+        }
+        
+        /*
+        const char *file;
+        TextRange line;
+        int row, col;
+        bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
+        assert(found);
+        fprintf(stderr, "%i: %.*s\n", k, (int) (line.end - line.start - 1), line.start);
+        */
+      }
+      curstate = curstate->parent;
+    }
+    long long ns_taken = get_clock_and_difference(NULL, &prof_time);
+    if (ns_taken > sample_stepsize / 10) {
+      fprintf(stderr, "warning: collecting profiling info took %lli%% of the last step.\n", ns_taken * 100LL / sample_stepsize);
+    }
+  }
+}
+
 static void vm_step(VMState *state, void **args_prealloc) {
   Object *root = state->root;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
   cyclecount ++;
   if (UNLIKELY(state->profstate && cyclecount > state->profstate->next_prof_check)) {
-    state->profstate->next_prof_check = cyclecount + 1024;
-    struct timespec prof_time;
-    int res = clock_gettime(CLOCK_MONOTONIC, &prof_time);
-    if (res != 0) assert(false);
-    long ns_diff = prof_time.tv_nsec - state->profstate->last_prof_time.tv_nsec;
-    int s_diff = prof_time.tv_sec - state->profstate->last_prof_time.tv_sec;
-    long long ns_total_diff = (long long) s_diff * 1000000000LL + (long long) ns_diff;
-    if (ns_total_diff > 100000LL) { // 0.1ms
-      state->profstate->last_prof_time = prof_time;
-      
-      HashTable *direct_tbl = &state->profstate->direct_table;
-      HashTable *indirect_tbl = &state->profstate->indirect_table;
-      
-      VMState *curstate = state;
-      // fprintf(stderr, "generate backtrace\n");
-      int k = 0;
-      while (curstate) {
-        for (int i = curstate->stack_len - 1; i >= 0; --i) {
-          Callframe *curf = &curstate->stack_ptr[i];
-          Instr *instr = curf->instr_ptr;
-          // ranges are unique (and instrs must live as long as the vm state lives anyways)
-          // so we can just use the pointer stored in the instr as the key
-          char *key_ptr = (char*) &instr->belongs_to;
-          int key_len = sizeof(instr->belongs_to);
-          if (k == 0) {
-            void **freeptr;
-            void **entry_p = table_lookup_ref_alloc(direct_tbl, key_ptr, key_len, &freeptr);
-            if (entry_p) (*(int*) entry_p) ++;
-            else (*(int*) freeptr) = 1;
-          } else { // todo properly compute "part of the callstack"
-            void **freeptr;
-            void **entry_p = table_lookup_ref_alloc(indirect_tbl, key_ptr, key_len, &freeptr);
-            if (entry_p) (*(int*) entry_p) ++;
-            else (*(int*) freeptr) = 1;
-          }
-          
-          /*
-          const char *file;
-          TextRange line;
-          int row, col;
-          bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
-          assert(found);
-          fprintf(stderr, "%i: %.*s\n", k, (int) (line.end - line.start - 1), line.start);
-          */
-          k = k + 1;
-        }
-        curstate = curstate->parent;
-      }
-    }
+    vm_record_profile(state);
   }
   Instr *instr = cf->instr_ptr;
   Instr *next_instr = NULL;

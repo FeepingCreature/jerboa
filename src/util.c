@@ -77,3 +77,14 @@ bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_
   }
   return false;
 }
+
+long long get_clock_and_difference(struct timespec *target_clock, struct timespec *compare_clock) {
+  struct timespec holder;
+  if (!target_clock) target_clock = &holder;
+  
+  int res = clock_gettime(CLOCK_MONOTONIC, target_clock);
+  if (res != 0) abort();
+  long ns_diff = target_clock->tv_nsec - compare_clock->tv_nsec;
+  int s_diff = target_clock->tv_sec - compare_clock->tv_sec;
+  return (long long) s_diff * 1000000000LL + (long long) ns_diff;
+}

@@ -2,20 +2,11 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stddef.h>
 
 void *cache_alloc(int size);
 
 void cache_free(int size, void *ptr);
-
-// thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
-static unsigned long djb2(const char *ptr, int len) {
-  unsigned long hash = 5381;
-  for (int i = 0; i < len; ++i) {
-    int c = ptr[i];
-    hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-  }
-  return hash;
-} 
 
 void **table_lookup_ref(HashTable *tbl, const char *key_ptr, int key_len) {
   assert(key_ptr != NULL);
@@ -34,7 +25,7 @@ void **table_lookup_ref(HashTable *tbl, const char *key_ptr, int key_len) {
     }
   } else {
     int entries_mask = entries_num - 1;
-    int base = djb2(key_ptr, key_len);
+    int base = hash(key_ptr, key_len);
     for (int i = 0; i < entries_num; ++i) {
       int k = (base + i) & entries_mask;
       TableEntry *entry = &tbl->entries_ptr[k];
@@ -52,15 +43,19 @@ void **table_lookup_ref(HashTable *tbl, const char *key_ptr, int key_len) {
 
 // if the key was not found, return null but allocate a mapping in first_free_ptr
 void **table_lookup_ref_alloc(HashTable *tbl, const char *key_ptr, int key_len, void*** first_free_ptr) {
+  size_t key_hash = tbl->entries_num?hash(key_ptr, key_len):0;
+  return table_lookup_ref_alloc_with_hash(tbl, key_hash, key_ptr, key_len, first_free_ptr);
+}
+
+void **table_lookup_ref_alloc_with_hash(HashTable *tbl, size_t key_hash, const char *key_ptr, int key_len, void*** first_free_ptr) {
   assert(key_ptr != NULL);
   *first_free_ptr = NULL;
   // printf(":: %s into %i having %i\n", key, tbl->entries_num, tbl->entries_stored);
   int entries_num = tbl->entries_num;
   int entries_mask = entries_num - 1;
-  int base = entries_num?djb2(key_ptr, key_len):0;
   TableEntry *free_ptr;
   for (int i = 0; i < entries_num; ++i) {
-    int k = (base + i) & entries_mask;
+    int k = (key_hash + i) & entries_mask;
     TableEntry *entry = &tbl->entries_ptr[k];
     if (entry->name_ptr
       && entry->name_len == key_len
