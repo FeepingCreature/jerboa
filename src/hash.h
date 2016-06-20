@@ -1,13 +1,15 @@
 #ifndef HASH_H
 #define HASH_H
 
+#include <stddef.h>
 #include <stdbool.h>
 
 struct _TableEntry;
 typedef struct _TableEntry TableEntry;
 
 struct _TableEntry {
-  const char *name;
+  const char *name_ptr;
+  size_t name_len;
   void *value;
 };
 
@@ -20,11 +22,11 @@ typedef struct {
   int entries_stored;
 } HashTable;
 
-void **table_lookup_ref(HashTable *tbl, const char *key);
+void **table_lookup_ref(HashTable *tbl, const char *key_ptr, int key_len);
 
 // if the key was not found, return null but allocate a mapping in first_free_ptr
-void **table_lookup_ref_alloc(HashTable *tbl, const char *key, void*** first_free_ptr);
+void **table_lookup_ref_alloc(HashTable *tbl, const char *key_ptr, int key_len, void*** first_free_ptr);
 
-void *table_lookup(HashTable *tbl, const char *key, bool *key_found_p);
+void *table_lookup(HashTable *tbl, const char *key_ptr, int key_len, bool *key_found_p);
 
 #endif

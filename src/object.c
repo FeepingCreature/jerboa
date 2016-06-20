@@ -20,14 +20,12 @@ void *cache_alloc(int size) {
         int_freelist = *(void**) int_freelist;
       }
       break;
-#if __LP64__
     case sizeof(TableEntry) * 4:
       if (table4_freelist) {
         res = table4_freelist;
         table4_freelist = *(void**) table4_freelist;
       }
       break;
-#endif
     case sizeof(TableEntry) * 8:
       if (table8_freelist) {
         res = table8_freelist;
@@ -60,13 +58,10 @@ void cache_free(int size, void *ptr) {
       *(void**) ptr = int_freelist;
       int_freelist = ptr;
       break;
-// else collides with IntObject
-#if __LP64__
     case sizeof(TableEntry) * 4:
       *(void**) ptr = table4_freelist;
       table4_freelist = ptr;
       break;
-#endif
     case sizeof(TableEntry) * 8:
       *(void**) ptr = table8_freelist;
       table8_freelist = ptr;
@@ -88,7 +83,7 @@ void cache_free(int size, void *ptr) {
 Object *object_lookup(Object *obj, const char *key, bool *key_found_p) {
   while (obj) {
     bool key_found;
-    Object *value = table_lookup(&obj->tbl, key, &key_found);
+    Object *value = table_lookup(&obj->tbl, key, strlen(key), &key_found);
     if (key_found) { if (key_found_p) *key_found_p = true; return value; }
     obj = obj->parent;
   }
@@ -108,7 +103,7 @@ void obj_mark(VMState *state, Object *obj) {
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name) {
+    if (entry->name_ptr) {
       obj_mark(state, entry->value);
     }
   }
@@ -146,7 +141,7 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    Object **ptr = (Object**) table_lookup_ref(&current->tbl, key);
+    Object **ptr = (Object**) table_lookup_ref(&current->tbl, key, strlen(key));
     if (ptr != NULL) {
       if (current->flags & OBJ_IMMUTABLE) {
         char *error = NULL;
@@ -169,7 +164,7 @@ bool object_set_shadowing(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    Object **ptr = (Object**) table_lookup_ref(&current->tbl, key);
+    Object **ptr = (Object**) table_lookup_ref(&current->tbl, key, strlen(key));
     if (ptr) {
       // so create it in obj (not current!)
       object_set(obj, key, value);
@@ -183,7 +178,7 @@ bool object_set_shadowing(Object *obj, const char *key, Object *value) {
 void object_set(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   void **freeptr;
-  Object **ptr = (Object **) table_lookup_ref_alloc(&obj->tbl, key, &freeptr);
+  Object **ptr = (Object **) table_lookup_ref_alloc(&obj->tbl, key, strlen(key), &freeptr);
   if (ptr) {
     assert(!(obj->flags & OBJ_IMMUTABLE));
   } else {

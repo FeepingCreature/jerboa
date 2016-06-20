@@ -507,10 +507,10 @@ static void print_fn_recursive(VMState *state, Object *obj) {
   bool first = true;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name) {
+    if (entry->name_ptr) {
       if (first) { first = false; printf(" | "); }
       else printf(", ");
-      printf("'%s': ", entry->name);
+      printf("'%.*s': ", (int) entry->name_len, entry->name_ptr);
       print_fn_recursive(state, entry->value);
     }
   }
@@ -537,14 +537,14 @@ static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name) res_len ++;
+    if (entry->name_ptr) res_len ++;
   }
   Object **res_ptr = malloc(sizeof(Object*) * res_len);
   int k = 0;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name) {
-      res_ptr[k++] = alloc_string(state, entry->name);
+    if (entry->name_ptr) {
+      res_ptr[k++] = alloc_string(state, entry->name_ptr);
     }
   }
   state->result_value = alloc_array(state, res_ptr, res_len);
