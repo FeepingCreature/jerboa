@@ -92,7 +92,9 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         aski->obj_slot = acci->obj_slot;
         aski->target_slot = acci->target_slot;
         aski->key = slot_table_ptr[acci->key_slot];
+        use_range_start(builder, acci->base.belongs_to);
         addinstr(builder, sizeof(*aski), (Instr*) aski);
+        use_range_end(builder, acci->base.belongs_to);
         instr = (Instr*)(acci + 1);
         continue;
       }
@@ -105,11 +107,16 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         aski->value_slot = assi->value_slot;
         aski->key = slot_table_ptr[assi->key_slot];
         aski->type = assi->type;
+        use_range_start(builder, assi->base.belongs_to);
         addinstr(builder, sizeof(*aski), (Instr*) aski);
+        use_range_end(builder, assi->base.belongs_to);
         instr = (Instr*)(assi + 1);
         continue;
       }
+      use_range_start(builder, instr->belongs_to);
       addinstr(builder, instr_size(instr), instr);
+      use_range_end(builder, instr->belongs_to);
+      
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }

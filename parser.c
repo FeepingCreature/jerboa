@@ -7,57 +7,6 @@
 #include <assert.h>
 #include <stdbool.h>
 
-struct _FileRecord;
-typedef struct _FileRecord FileRecord;
-
-struct _FileRecord {
-  FileRecord *prev;
-  TextRange text;
-  const char *name;
-  int row_start, col_start;
-};
-
-// TODO mutex the shit out of this
-FileRecord *record = NULL;
-
-void register_file(TextRange text, const char *name, int row_start, int col_start) {
-  FileRecord *newrecord = malloc(sizeof(FileRecord));
-  newrecord->prev = record;
-  newrecord->text = text;
-  newrecord->name = name;
-  newrecord->row_start = row_start;
-  newrecord->col_start = col_start;
-  record = newrecord;
-}
-
-bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
-  FileRecord *rec = record;
-  while (rec) {
-    if (text >= rec->text.start && text < rec->text.end) {
-      *name_p = rec->name;
-      
-      int row_nr = 0;
-      TextRange line = (TextRange) { rec->text.start, rec->text.start };
-      while (line.start < rec->text.end) {
-        while (line.end < rec->text.end && *line.end != '\n') line.end ++; // scan to newline
-        if (line.end < rec->text.end) line.end ++; // scan past newline
-        if (text >= line.start && text < line.end) {
-          int col_nr = text - line.start;
-          *line_p = line;
-          *row_p = row_nr + rec->row_start;
-          *col_p = col_nr + ((row_nr == 0) ? rec->col_start : 0);
-          return true;
-        }
-        line.start = line.end;
-        row_nr ++;
-      }
-      assert(false); // logic error, wtf - text in range but not in any line??
-    }
-    rec = rec->prev;
-  }
-  return false;
-}
-
 static bool starts_with(char **textp, char *cmp) {
   char *text = *textp;
   while (*cmp) {

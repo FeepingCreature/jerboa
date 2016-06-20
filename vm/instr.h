@@ -39,7 +39,14 @@ typedef enum {
 } AssignType;
 
 typedef struct {
+  char *file;
+  int row_from, col_from;
+  int row_to, col_to;
+} FileRange;
+
+typedef struct {
   InstrType type;
+  FileRange *belongs_to;
 } Instr;
 
 int instr_size(Instr*);

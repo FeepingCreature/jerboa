@@ -16,6 +16,8 @@ typedef struct {
   
   bool block_terminated;
   
+  FileRange *current_range;
+  
   FunctionBody body;
 } FunctionBuilder;
 
@@ -24,6 +26,16 @@ typedef struct {
   int block;
   ptrdiff_t distance;
 } IntVarRef;
+
+void record_start(char *text, FileRange *range);
+
+void record_end(char *text, FileRange *range);
+
+void use_range_start(FunctionBuilder *builder, FileRange *range);
+
+void use_range_end(FunctionBuilder *builder, FileRange *range);
+
+FileRange *alloc_and_record_start(char *text);
 
 int new_block(FunctionBuilder *builder);
 
