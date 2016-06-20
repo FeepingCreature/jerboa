@@ -191,8 +191,8 @@ void object_set(Object *obj, const char *key, Object *value) {
 static void *alloc_object_internal(VMState *state, int size) {
   if (state->num_obj_allocated > state->next_gc_run) {
     gc_run(state);
-    // run gc after 20% growth or 10000 allocated or thereabouts
-    state->next_gc_run = (int) (state->num_obj_allocated * 1.2) + 10000;
+    // run gc after 50% growth or 10000 allocated or thereabouts
+    state->next_gc_run = (int) (state->num_obj_allocated * 1.5) + 10000;
   }
   
   Object *res = cache_alloc(size);

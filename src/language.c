@@ -314,9 +314,11 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   return PARSE_ERROR;
 }
 
-static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr) {
+static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefValue *expr, FileRange *expr_range_dyn) {
   char *text = *textp;
   FileRange *call_range = alloc_and_record_start(text);
+  FileRange *expr_range = malloc(sizeof(FileRange));
+  *expr_range = *expr_range_dyn;
   
   if (!eat_string(&text, "(")) {
     free(call_range);
@@ -351,13 +353,15 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
     if (expr->key) this_slot = expr->base;
     else this_slot = builder->slot_base++; /* null slot */
     
-    use_range_start(builder, call_range);
+    // use_range_start(builder, call_range);
+    use_range_start(builder, expr_range);
     *expr = (RefValue) {
       addinstr_call(builder, ref_access(builder, *expr), this_slot, args_ptr, args_len),
       -1,
       REFMODE_NONE
     };
-    use_range_end(builder, call_range);
+    // use_range_end(builder, call_range);
+    use_range_end(builder, expr_range);
   }
   return PARSE_OK;
 }
@@ -416,12 +420,17 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
 }
 
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv) {
+  FileRange *expr_range = alloc_and_record_start(*textp);
   ParseResult res = parse_expr_stem(textp, builder, rv);
-  if (res == PARSE_ERROR) return PARSE_ERROR;
+  if (res == PARSE_ERROR) {
+    free(expr_range);
+    return PARSE_ERROR;
+  }
   assert(res == PARSE_OK);
   
   while (true) {
-    if ((res = parse_cont_call(textp, builder, rv)) == PARSE_OK) continue;
+    record_end(*textp, expr_range);
+    if ((res = parse_cont_call(textp, builder, rv, expr_range)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
     if ((res = parse_prop_access(textp, builder, rv)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
@@ -889,11 +898,12 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
               │  )  │
               └─────┘
   */
+  FileRange *fnframe_range = alloc_and_record_start(text);
   if (!eat_string(&text, "(")) {
     log_parser_error(text, "opening paren for parameter list expected");
+    free(fnframe_range);
     return PARSE_ERROR;
   }
-  FileRange *fnframe_range = alloc_and_record_start(text);
   
   char **arg_list_ptr = NULL, arg_list_len = 0;
   while (!eat_string(&text, ")")) {
