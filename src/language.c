@@ -758,6 +758,7 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     return parse_if(textp, builder, keyword_range);
   }
   if (eat_keyword(&text, "return")) {
+    record_end(text, keyword_range);
     *textp = text;
     return parse_return(textp, builder, keyword_range);
   }
