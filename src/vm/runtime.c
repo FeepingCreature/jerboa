@@ -11,7 +11,7 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-static void asprintf(char **outp, char *fmt, ...) {
+static void my_asprintf(char **outp, char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   int len = vsnprintf(NULL, 0, fmt, ap);
@@ -184,13 +184,13 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
   VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
   
   char *str1 = ((StringObject*) sobj1)->value, *str2;
-  if (sobj2) asprintf(&str2, "%s", ((StringObject*) sobj2)->value);
-  else if (fobj2) asprintf(&str2, "%f", ((FloatObject*) fobj2)->value);
-  else if (iobj2) asprintf(&str2, "%i", ((IntObject*) iobj2)->value);
-  else if (bobj2) if (((BoolObject*)bobj2)->value) asprintf(&str2, "%s", "true"); else asprintf(&str2, "%s", "false");
+  if (sobj2) my_asprintf(&str2, "%s", ((StringObject*) sobj2)->value);
+  else if (fobj2) my_asprintf(&str2, "%f", ((FloatObject*) fobj2)->value);
+  else if (iobj2) my_asprintf(&str2, "%i", ((IntObject*) iobj2)->value);
+  else if (bobj2) if (((BoolObject*)bobj2)->value) my_asprintf(&str2, "%s", "true"); else my_asprintf(&str2, "%s", "false");
   else VM_ASSERT(false, "don't know how to format object: %p", args_ptr[0]);
   char *str3;
-  asprintf(&str3, "%s%s", str1, str2);
+  my_asprintf(&str3, "%s%s", str1, str2);
   free(str2);
   state->result_value = alloc_string(state, str3);
   free(str3);
@@ -486,6 +486,7 @@ static void print_fn_recursive(VMState *state, Object *obj) {
     VM_ASSERT(fn_toString || cl_toString, "'toString' property is neither function nor closure");
     
     VMState substate = {0};
+    substate.parent = state;
     substate.root = state->root;
     substate.gcstate = state->gcstate;
     

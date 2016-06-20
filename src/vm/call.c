@@ -1,10 +1,11 @@
-#define _GNU_SOURCE
 #include "call.h"
 
+#include <time.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include "gc.h"
 #include "dump.h"
+#include "util.h"
 
 int cyclecount = 0;
 
@@ -150,6 +151,7 @@ static void vm_step(VMState *state, void **args_prealloc) {
           }
           
           VMState substate = {0};
+          substate.parent = state;
           substate.root = state->root;
           substate.gcstate = state->gcstate;
           

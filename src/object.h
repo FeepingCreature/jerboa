@@ -1,11 +1,13 @@
 #ifndef OBJECT_H
 #define OBJECT_H
 
+#include <time.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
 
+#include "hash.h"
 #include "vm/instr.h"
 
 typedef enum {
@@ -24,25 +26,8 @@ typedef short int ObjectFlags;
 struct _Object;
 typedef struct _Object Object;
 
-struct _TableEntry;
-typedef struct _TableEntry TableEntry;
-
 struct _VMState;
 typedef struct _VMState VMState;
-
-struct _TableEntry {
-  const char *name;
-  Object *value;
-};
-
-// TODO actually use
-#define TBL_GRAVESTONE = ((const char*) -1);
-
-typedef struct {
-  TableEntry *entries_ptr;
-  int entries_num;
-  int entries_stored;
-} HashTable;
 
 struct _Object {
   HashTable tbl;
@@ -82,6 +67,8 @@ typedef enum {
 } VMRunState;
 
 struct _VMState {
+  VMState *parent;
+  
   Callframe *stack_ptr; int stack_len;
   Object *root;
   Object *result_value;

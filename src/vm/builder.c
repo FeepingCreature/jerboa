@@ -6,6 +6,7 @@
 void record_start(char *text, FileRange *range) {
   TextRange line;
   eat_filler(&text); // record at the start of the [whatever], not on the end of the previous
+  range->text_from = text;
   bool found = find_text_pos(text, (const char**) &range->file, &line, &range->row_from, &range->col_from);
   assert(found);
 }
@@ -13,6 +14,7 @@ void record_start(char *text, FileRange *range) {
 void record_end(char *text, FileRange *range) {
   TextRange line;
   const char *file;
+  range->text_to = text;
   bool found = find_text_pos(text, &file, &line, &range->row_to, &range->col_to);
   assert(found);
   assert(strcmp(file, range->file) == 0);
