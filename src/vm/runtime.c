@@ -489,6 +489,7 @@ static void print_fn_recursive(VMState *state, Object *obj) {
     substate.parent = state;
     substate.root = state->root;
     substate.gcstate = state->gcstate;
+    substate.profstate = state->profstate;
     
     if (fn_toString) fn_toString->fn_ptr(&substate, obj, toString_fn, NULL, 0);
     else cl_toString->base.fn_ptr(&substate, obj, toString_fn, NULL, 0);

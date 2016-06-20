@@ -17,7 +17,8 @@ int main(int argc, char **argv) {
   assert(argc == 2);
   
   VMState vmstate = {0};
-  vmstate.gcstate = (GCState*) calloc(sizeof(GCState), 1);
+  vmstate.gcstate = calloc(sizeof(GCState), 1);
+  vmstate.profstate = calloc(sizeof(VMProfileState), 1);
   
   vm_alloc_frame(&vmstate, 0);
   Object *root = create_root(&vmstate);
@@ -30,7 +31,8 @@ int main(int argc, char **argv) {
   register_file(source, argv[1], 0, 0);
   
   UserFunction *module;
-  ParseResult res = parse_module(&source.start, &module);
+  char *text = source.start;
+  ParseResult res = parse_module(&text, &module);
   if (res != PARSE_OK) {
     return 1;
   }
@@ -39,6 +41,8 @@ int main(int argc, char **argv) {
   
   call_function(&vmstate, root, module, NULL, 0);
   vm_run(&vmstate);
+  
+  save_profile_output("profile.html", source, vmstate.profstate);
   
   if (vmstate.runstate == VM_ERRORED) {
     fprintf(stderr, "vm failure: %s\n", vmstate.error);

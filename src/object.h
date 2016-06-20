@@ -8,6 +8,7 @@
 #include <stdbool.h>
 
 #include "hash.h"
+#include "util.h"
 #include "vm/instr.h"
 
 typedef enum {
@@ -66,6 +67,16 @@ typedef enum {
   VM_ERRORED
 } VMRunState;
 
+typedef struct {
+  struct timespec last_prof_time;
+  int next_prof_check;
+  
+  HashTable direct_table;
+  HashTable indirect_table;
+} VMProfileState;
+
+void save_profile_output(char *file, TextRange source, VMProfileState *profile_state);
+
 struct _VMState {
   VMState *parent;
   
@@ -80,6 +91,8 @@ struct _VMState {
   GCState *gcstate;
   Object *last_obj_allocated;
   int num_obj_allocated, next_gc_run;
+  
+  VMProfileState *profstate;
 };
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);

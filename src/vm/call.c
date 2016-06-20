@@ -76,6 +76,57 @@ static void vm_step(VMState *state, void **args_prealloc) {
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
   cyclecount ++;
+  if (UNLIKELY(state->profstate && cyclecount > state->profstate->next_prof_check)) {
+    state->profstate->next_prof_check = cyclecount + 1024;
+    struct timespec prof_time;
+    int res = clock_gettime(CLOCK_MONOTONIC, &prof_time);
+    if (res != 0) assert(false);
+    long ns_diff = prof_time.tv_nsec - state->profstate->last_prof_time.tv_nsec;
+    int s_diff = prof_time.tv_sec - state->profstate->last_prof_time.tv_sec;
+    long long ns_total_diff = (long long) s_diff * 1000000000LL + (long long) ns_diff;
+    if (ns_total_diff > 100000LL) { // 0.1ms
+      state->profstate->last_prof_time = prof_time;
+      
+      HashTable *direct_tbl = &state->profstate->direct_table;
+      HashTable *indirect_tbl = &state->profstate->indirect_table;
+      
+      VMState *curstate = state;
+      // fprintf(stderr, "generate backtrace\n");
+      int k = 0;
+      while (curstate) {
+        for (int i = curstate->stack_len - 1; i >= 0; --i) {
+          Callframe *curf = &curstate->stack_ptr[i];
+          Instr *instr = curf->instr_ptr;
+          // ranges are unique (and instrs must live as long as the vm state lives anyways)
+          // so we can just use the pointer stored in the instr as the key
+          char *key_ptr = (char*) &instr->belongs_to;
+          int key_len = sizeof(instr->belongs_to);
+          if (k == 0) {
+            void **freeptr;
+            void **entry_p = table_lookup_ref_alloc(direct_tbl, key_ptr, key_len, &freeptr);
+            if (entry_p) (*(int*) entry_p) ++;
+            else (*(int*) freeptr) = 1;
+          } else { // todo properly compute "part of the callstack"
+            void **freeptr;
+            void **entry_p = table_lookup_ref_alloc(indirect_tbl, key_ptr, key_len, &freeptr);
+            if (entry_p) (*(int*) entry_p) ++;
+            else (*(int*) freeptr) = 1;
+          }
+          
+          /*
+          const char *file;
+          TextRange line;
+          int row, col;
+          bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
+          assert(found);
+          fprintf(stderr, "%i: %.*s\n", k, (int) (line.end - line.start - 1), line.start);
+          */
+          k = k + 1;
+        }
+        curstate = curstate->parent;
+      }
+    }
+  }
   Instr *instr = cf->instr_ptr;
   Instr *next_instr = NULL;
   switch (instr->type) {
@@ -154,6 +205,7 @@ static void vm_step(VMState *state, void **args_prealloc) {
           substate.parent = state;
           substate.root = state->root;
           substate.gcstate = state->gcstate;
+          substate.profstate = state->profstate;
           
           if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
           else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
