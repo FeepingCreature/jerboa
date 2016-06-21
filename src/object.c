@@ -152,7 +152,6 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
         if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was immutable.", key, (void*) current)) abort();
         return error;
       }
-      assert(!(current->flags & OBJ_IMMUTABLE));
       *ptr = value;
       return NULL;
     }
@@ -394,11 +393,13 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
   
   dprintf(fd, "<!DOCTYPE html>\n");
   dprintf(fd, "<html><head>\n");
-  dprintf(fd, "<style>span { border: 1px solid gray60; }</style>\n");
+  // dprintf(fd, "<style>span { border-left: 1px solid #eee; border-right: 1px solid #ddd; border-bottom: 1px solid #fff; }</style>\n");
+  dprintf(fd, "<style>span { position: relative; }</style>\n");
   dprintf(fd, "</head><body>\n");
   dprintf(fd, "<pre>\n");
   
   char *cur_char = source.start;
+  int zindex = 100000; // if there's more spans than this we are anyways fucked
   while (cur_char != source.end) {
     // close all extant
     while (open_range_head && open_range_head->record->text_to == cur_char) {
@@ -424,7 +425,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       double percent_indir = (samples_indir * 100.0) / sum_samples_indirect;
       int hex_dir = 255 - (samples_dir * 255LL) / max_samples_direct;
       // int hex_indir = 255 - (samples_indir * 255LL) / max_samples_indirect;
-      int weight_indir = 100 + (samples_indir * 800LL) / max_samples_indirect;
+      int weight_indir = 100 + 100 * ((samples_indir * 8LL) / max_samples_indirect);
       float border_indir = samples_indir * 3.0 / max_samples_indirect;
       int fontsize_indir = 100 + (samples_indir * 10LL) / max_samples_indirect;
       /*printf("%li with %li: open tag %i and %i over %i and %i: %02x and %i / %f\n",
@@ -433,9 +434,16 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
              max_samples_direct, max_samples_indirect,
              hex_dir, weight_indir, border_indir);*/
       dprintf(fd, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
-        "style=\"background-color:#ff%02x%02x;font-weight:%i;border-bottom:%fpx solid black;font-size: %i%%;\">",
-        percent_dir, percent_indir,
-        hex_dir, hex_dir, weight_indir, border_indir, fontsize_indir);
+        " style=\"",
+        percent_dir, percent_indir);
+      if (hex_dir <= 250/* || hex_dir <= 250*/) {
+        dprintf(fd, "background-color:#ff%02x%02x;",
+          hex_dir, hex_dir);
+      }
+      dprintf(fd, "font-weight:%i;border-bottom:%fpx solid black;font-size: %i%%;",
+              weight_indir, border_indir, fontsize_indir);
+      dprintf(fd, "z-index: %i;", --zindex);
+      dprintf(fd, "\">");
       cur_entry_id ++;
     }
     // close all 0-size new

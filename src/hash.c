@@ -53,26 +53,26 @@ void **table_lookup_ref_alloc_with_hash(HashTable *tbl, size_t key_hash, const c
   // printf(":: %s into %i having %i\n", key, tbl->entries_num, tbl->entries_stored);
   int entries_num = tbl->entries_num;
   int entries_mask = entries_num - 1;
-  TableEntry *free_ptr;
-  for (int i = 0; i < entries_num; ++i) {
-    int k = (key_hash + i) & entries_mask;
-    TableEntry *entry = &tbl->entries_ptr[k];
-    if (entry->name_ptr
-      && entry->name_len == key_len
-      && (key_len == 0 || key_ptr[0] == entry->name_ptr[0])
-      && (key_len == 1 || key_ptr[1] == entry->name_ptr[1])
-      && strncmp(key_ptr, entry->name_ptr, key_len) == 0
-    ) return &entry->value;
-    if (entry->name_ptr == NULL) {
-      free_ptr = entry;
-      break;
-    }
-  }
   int newlen;
   if (entries_num == 0) {
     // definitely resize
     newlen = 4;
   } else {
+    TableEntry *free_ptr;
+    for (int i = 0; i < entries_num; ++i) {
+      int k = (key_hash + i) & entries_mask;
+      TableEntry *entry = &tbl->entries_ptr[k];
+      if (entry->name_ptr
+        && entry->name_len == key_len
+        && (key_len == 0 || key_ptr[0] == entry->name_ptr[0])
+        && (key_len == 1 || key_ptr[1] == entry->name_ptr[1])
+        && strncmp(key_ptr, entry->name_ptr, key_len) == 0
+      ) return &entry->value;
+      if (entry->name_ptr == NULL) {
+        free_ptr = entry;
+        break;
+      }
+    }
     int fillrate = (tbl->entries_stored * 100) / entries_num;
     if (fillrate < 70) {
       // printf("--%p:   fillrate is okay with %i, set %li to %s\n", (void*) tbl, fillrate, free_ptr - tbl->entries_ptr, key);
@@ -89,16 +89,18 @@ void **table_lookup_ref_alloc_with_hash(HashTable *tbl, size_t key_hash, const c
   newtable.entries_ptr = cache_alloc(sizeof(TableEntry) * newlen);
   newtable.entries_num = newlen;
   newtable.entries_stored = 0;
-  for (int i = 0; i < entries_num; ++i) {
-    TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr) {
-      void **freeptr;
-      void **nope = table_lookup_ref_alloc(&newtable, entry->name_ptr, entry->name_len, &freeptr);
-      assert(nope == NULL); // double entry??
-      *freeptr = entry->value;
+  if (tbl->entries_stored) {
+    for (int i = 0; i < entries_num; ++i) {
+      TableEntry *entry = &tbl->entries_ptr[i];
+      if (entry->name_ptr) {
+        void **freeptr;
+        void **nope = table_lookup_ref_alloc(&newtable, entry->name_ptr, entry->name_len, &freeptr);
+        assert(nope == NULL); // double entry??
+        *freeptr = entry->value;
+      }
     }
   }
-  cache_free(sizeof(TableEntry) * tbl->entries_num, tbl->entries_ptr);
+  if (tbl->entries_ptr) cache_free(sizeof(TableEntry) * tbl->entries_num, tbl->entries_ptr);
   *tbl = newtable;
   // and redo with new size!
   return table_lookup_ref_alloc(tbl, key_ptr, key_len, first_free_ptr);

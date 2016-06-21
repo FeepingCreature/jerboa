@@ -73,7 +73,6 @@ void vm_remove_frame(VMState *state) {
 const long long sample_stepsize = 200000LL; // 0.2ms
 
 static void vm_record_profile(VMState *state) {
-  state->profstate->next_prof_check = cyclecount + 1024;
   struct timespec prof_time;
   long long ns_diff = get_clock_and_difference(&prof_time, &state->profstate->last_prof_time);
   if (ns_diff > sample_stepsize) {
@@ -85,7 +84,6 @@ static void vm_record_profile(VMState *state) {
     VMState *curstate = state;
     // fprintf(stderr, "generate backtrace\n");
     int k = 0;
-    size_t range_bloom = 0;
     while (curstate) {
       for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
         Callframe *curf = &curstate->stack_ptr[i];
@@ -105,29 +103,10 @@ static void vm_record_profile(VMState *state) {
         }
         
         // don't double-count ranges in case of recursion
-        bool range_already_counted = false;
-        if ((range_bloom & key_hash) == key_hash) {
-          // bloom filter: we've _maybe_ seen that range before?
-          // reluctantly, fall back to O(n^2) check
-          VMState *curstate2 = state;
-          int k2 = 0;
-          while (curstate2) {
-            for (int i2 = curstate2->stack_len - 1; i2 >= 0; --i2, ++k2) {
-              if (k2 == k) {
-                goto break_outer2;
-              }
-              if (instr->belongs_to == curstate2->stack_ptr[i2].instr_ptr->belongs_to) {
-                range_already_counted = true;
-                goto break_outer2;
-              }
-            }
-            curstate2 = curstate2->parent;
-          }
-        } // bloom filter failed: we've _definitely_ not seen that range yet
-break_outer2:
+        bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
+        instr->belongs_to->last_cycle_seen = cyclecount;
         
         if (!range_already_counted) {
-          range_bloom |= key_hash;
           void **freeptr;
           void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_hash, key_ptr, key_len, &freeptr);
           if (entry_p) (*(int*) entry_p) ++;
@@ -158,6 +137,7 @@ static void vm_step(VMState *state, void **args_prealloc) {
   
   cyclecount ++;
   if (UNLIKELY(state->profstate && cyclecount > state->profstate->next_prof_check)) {
+    state->profstate->next_prof_check = cyclecount + 1021;
     vm_record_profile(state);
   }
   Instr *instr = cf->instr_ptr;

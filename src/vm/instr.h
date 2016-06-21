@@ -42,6 +42,7 @@ typedef struct {
   char *file;
   char *text_from; int row_from, col_from;
   char *text_to;   int row_to  , col_to  ;
+  int last_cycle_seen;
 } FileRange;
 
 typedef struct {
