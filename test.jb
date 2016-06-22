@@ -354,11 +354,3 @@ print("2 !> 2 = "+(2 !> 2));
 print("2 !<= 2 = "+(2 !<= 2));
 print("2 !>= 2 = "+(2 !>= 2));
 var i = 0; while (i < 10) { print("i = "+i); i = i + 1; }
-function ack(m, n) {
-  var np = n + 1, nm = n - 1, mm;
-  mm = m - 1;
-  if (m < 0.5) return np;
-  if (n == 0) return ack(mm, 1);
-  return ack(mm, ack(m, nm));
-}
-print("ack(3, 7) = "+ack(3, 7));
