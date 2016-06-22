@@ -257,16 +257,16 @@ Object *alloc_float(VMState *state, float value) {
   return (Object*) obj;
 }
 
-Object *alloc_string(VMState *state, const char *value) {
+Object *alloc_string(VMState *state, const char *ptr, int len) {
   Object *string_base = object_lookup(state->root, "string", NULL);
   assert(string_base);
-  int len = strlen(value);
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
   obj->base.parent = string_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = ((char*) obj) + sizeof(StringObject);
-  strncpy(obj->value, value, len + 1);
+  strncpy(obj->value, ptr, len);
+  obj->value[len] = 0;
   return (Object*) obj;
 }
 

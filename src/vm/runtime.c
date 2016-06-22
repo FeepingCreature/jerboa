@@ -192,7 +192,7 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
   char *str3;
   my_asprintf(&str3, "%s%s", str1, str2);
   free(str2);
-  state->result_value = alloc_string(state, str3);
+  state->result_value = alloc_string(state, str3, strlen(str3));
   free(str3);
 }
 
@@ -212,6 +212,58 @@ static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **a
     *str2 = ((StringObject*) sobj2)->value;
   int res = strcmp(str1, str2);
   state->result_value = alloc_bool(state, res == 0);
+}
+
+static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *string_base = object_lookup(root, "string", NULL);
+  
+  Object
+    *sobj1 = obj_instance_of(thisptr, string_base),
+    *sobj2 = obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(sobj1, "internal error: string.startsWith() called on wrong type of object");
+  VM_ASSERT(sobj2, "string.startsWith() expects string as parameter");
+  
+  char
+    *str1 = ((StringObject*) sobj1)->value,
+    *str2 = ((StringObject*) sobj2)->value;
+  int len1 = strlen(str1);
+  int len2 = strlen(str2);
+  int res;
+  if (len2 > len1) res = -1;
+  else res = strncmp(str1, str2, len2);
+  if (res == 0) {
+    state->result_value = alloc_string(state, str1 + len2, strlen(str1) - len2);
+  } else {
+    state->result_value = NULL;
+  }
+}
+
+static void string_endswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *string_base = object_lookup(root, "string", NULL);
+  
+  Object
+    *sobj1 = obj_instance_of(thisptr, string_base),
+    *sobj2 = obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(sobj1, "internal error: string.endsWith() called on wrong type of object");
+  VM_ASSERT(sobj2, "string.endsWith() expects string as parameter");
+  
+  char
+    *str1 = ((StringObject*) sobj1)->value,
+    *str2 = ((StringObject*) sobj2)->value;
+  int len1 = strlen(str1);
+  int len2 = strlen(str2);
+  int res;
+  if (len2 > len1) res = -1;
+  else res = strncmp(str1 + len1 - len2, str2, len2);
+  if (res == 0) {
+    state->result_value = alloc_string(state, str1, strlen(str1) - len2);
+  } else {
+    state->result_value = NULL;
+  }
 }
 
 typedef enum {
@@ -547,7 +599,7 @@ static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
     if (entry->name_ptr) {
-      res_ptr[k++] = alloc_string(state, entry->name_ptr);
+      res_ptr[k++] = alloc_string(state, entry->name_ptr, strlen(entry->name_ptr));
     }
   }
   state->result_value = alloc_array(state, res_ptr, (IntObject*) alloc_int(state, res_len));
@@ -578,17 +630,19 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
       char *name2 = malloc(name_size + 1);
       strncpy(name2, (char*) xml_attr->name, name_size + 1);
       // printf("alloc_string(%lu)\n", strlen((char*) xml_attr->children->content));
-      object_set(attr, name2, alloc_string(state, (char*) xml_attr->children->content));
+      char *content = (char*) xml_attr->children->content;
+      object_set(attr, name2, alloc_string(state, content, strlen(content)));
     }
     // printf("alloc_string(%lu)\n", strlen((char*) element->name));
     IntObject *children_len_obj = (IntObject*) alloc_int(state, children_len);
-    object_set(res, "nodeName", alloc_string(state, (char*) element->name));
+    object_set(res, "nodeName", alloc_string(state, (char*) element->name, strlen((char*) element->name)));
     object_set(res, "attr", attr);
     object_set(res, "children", alloc_array(state, children_ptr, children_len_obj));
   } else if (element->type == 3) {
     res = alloc_object(state, text_node);
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
-    object_set(res, "value", alloc_string(state, (char*) element->content));
+    char *content = (char*) element->content;
+    object_set(res, "value", alloc_string(state, content, strlen(content)));
   } else assert(false);
   return res;
 }
@@ -761,6 +815,8 @@ Object *create_root(VMState *state) {
   object_set(root, "string", string_obj);
   object_set(string_obj, "+", alloc_fn(state, string_add_fn));
   object_set(string_obj, "==", alloc_fn(state, string_eq_fn));
+  object_set(string_obj, "startsWith", alloc_fn(state, string_startswith_fn));
+  object_set(string_obj, "endsWith", alloc_fn(state, string_endswith_fn));
   
   Object *array_obj = alloc_object(state, NULL);
   array_obj->flags |= OBJ_NOINHERIT;

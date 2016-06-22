@@ -173,7 +173,7 @@ Object *alloc_int(VMState *state, int value);
 
 Object *alloc_float(VMState *state, float value);
 
-Object *alloc_string(VMState *state, const char *value);
+Object *alloc_string(VMState *state, const char *ptr, int len);
 
 Object *alloc_string_foreign(VMState *state, char *value);
 

@@ -187,6 +187,7 @@ static void vm_step(VMState *state) {
         VM_ASSERT(key_obj, "key is null");
         StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
         if (skey) {
+          gc_add_perm(state, key_obj);
           key = skey->value;
           has_char_key = true;
         }
@@ -211,7 +212,7 @@ static void vm_step(VMState *state) {
           if (instr->type == INSTR_ACCESS) {
             key_obj = cf->slots_ptr[access_instr->key_slot];
           } else {
-            key_obj = alloc_string(state, aski->key);
+            key_obj = alloc_string(state, aski->key, strlen(aski->key));
           }
           
           VMState substate = {0};
@@ -261,6 +262,9 @@ static void vm_step(VMState *state) {
         StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
         if (skey) {
           key = skey->value;
+          // Not sure how to correctly handle "key leakage".
+          // TODO figure out better.
+          gc_add_perm(state, key_obj);
           assign_type = assign_instr->type;
           has_char_key = true;
         }
@@ -366,7 +370,7 @@ static void vm_step(VMState *state) {
       int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
       VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
       if (UNLIKELY(!alloc_string_obj_instr->str_obj)) {
-        Object *obj = alloc_string(state, value);
+        Object *obj = alloc_string(state, value, strlen(value));
         alloc_string_obj_instr->str_obj = obj;
         gc_add_perm(state, obj);
       }
