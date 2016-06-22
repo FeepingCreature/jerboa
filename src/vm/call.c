@@ -131,7 +131,7 @@ static void vm_record_profile(VMState *state) {
   }
 }
 
-static void vm_step(VMState *state, void **args_prealloc) {
+static void vm_step(VMState *state) {
   Object *root = state->root;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
@@ -357,7 +357,7 @@ static void vm_step(VMState *state, void **args_prealloc) {
       AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) instr;
       int target_slot = alloc_array_obj_instr->target_slot;
       VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
-      Object *obj = alloc_array(state, NULL, 0);
+      Object *obj = alloc_array(state, NULL, (IntObject*) state->vcache->int_zero);
       cf->slots_ptr[target_slot] = obj;
       next_instr = (Instr*)(alloc_array_obj_instr + 1);
     } break;
@@ -407,7 +407,7 @@ static void vm_step(VMState *state, void **args_prealloc) {
       // form args array from slots
       
       Object **args;
-      if (args_length < 10) { args = args_prealloc[args_length]; }
+      if (args_length < 10) { args = state->vcache->args_prealloc[args_length]; }
       else { args = malloc(sizeof(Object*) * args_length); }
       
       for (int i = 0; i < args_length; ++i) {
@@ -498,12 +498,20 @@ void vm_run(VMState *state) {
   assert(state->stack_len > 0);
   state->runstate = VM_RUNNING;
   state->error = NULL;
-  void **args_prealloc = malloc(sizeof(void*) * 10);
-  for (int i = 0; i < 10; ++i) { args_prealloc[i] = malloc(sizeof(Object*) * i); }
+  // TODO move to state init
+  if (!state->vcache->args_prealloc) {
+    state->vcache->args_prealloc = malloc(sizeof(Object**) * 10);
+    for (int i = 0; i < 10; ++i) { state->vcache->args_prealloc[i] = malloc(sizeof(Object*) * i); }
+  }
+  // this should, frankly, really be done in vm_step
+  // but meh, it's faster to only do it once
+  GCRootSet result_set;
+  gc_add_roots(state, &state->result_value, 1, &result_set);
   while (state->runstate == VM_RUNNING) {
-    vm_step(state, args_prealloc);
+    vm_step(state);
     if (state->stack_len == 0) state->runstate = VM_TERMINATED;
   }
+  gc_remove_roots(state, &result_set);
 }
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {

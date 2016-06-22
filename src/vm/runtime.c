@@ -550,7 +550,7 @@ static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
       res_ptr[k++] = alloc_string(state, entry->name_ptr);
     }
   }
-  state->result_value = alloc_array(state, res_ptr, res_len);
+  state->result_value = alloc_array(state, res_ptr, (IntObject*) alloc_int(state, res_len));
   gc_enable(state);
 }
 
@@ -581,9 +581,10 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
       object_set(attr, name2, alloc_string(state, (char*) xml_attr->children->content));
     }
     // printf("alloc_string(%lu)\n", strlen((char*) element->name));
+    IntObject *children_len_obj = (IntObject*) alloc_int(state, children_len);
     object_set(res, "nodeName", alloc_string(state, (char*) element->name));
     object_set(res, "attr", attr);
-    object_set(res, "children", alloc_array(state, children_ptr, children_len));
+    object_set(res, "children", alloc_array(state, children_ptr, children_len_obj));
   } else if (element->type == 3) {
     res = alloc_object(state, text_node);
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
@@ -615,7 +616,7 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   object_set(text_node, "nodeName", alloc_string_foreign(state, ""));
   object_set(text_node, "nodeType", alloc_int(state, 3));
   object_set(text_node, "attr", alloc_object(state, NULL));
-  object_set(text_node, "children", alloc_array(state, NULL, 0));
+  object_set(text_node, "children", alloc_array(state, NULL, (IntObject*) state->vcache->int_zero));
   
   Object *element_node = alloc_object(state, node_base);
   object_set(element_node, "nodeType", alloc_int(state, 1));
@@ -687,9 +688,12 @@ static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, 
   Object *function_base = object_lookup(root, "function", NULL);
   
   Object **array_ptr = NULL; int array_length = 0;
+  gc_disable(state);
   xml_node_find_recurse(state, thisptr, args_ptr[0], &array_ptr, &array_length,
                         function_base, closure_base, bool_base, array_base);
-  state->result_value = alloc_array(state, array_ptr, array_length);
+  IntObject *array_len_obj = (IntObject*) alloc_int(state, array_length);
+  state->result_value = alloc_array(state, array_ptr, array_len_obj);
+  gc_enable(state);
 }
 
 Object *create_root(VMState *state) {
@@ -718,6 +722,7 @@ Object *create_root(VMState *state) {
   object_set(int_obj, "<=", alloc_fn(state, int_le_fn));
   object_set(int_obj, ">=", alloc_fn(state, int_ge_fn));
   object_set(int_obj, "parse" , alloc_fn(state, int_parse_fn));
+  state->vcache->int_zero = alloc_int(state, 0);
   
   Object *float_obj = alloc_object(state, NULL);
   float_obj->flags |= OBJ_NOINHERIT;

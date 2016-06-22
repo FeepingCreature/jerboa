@@ -47,8 +47,13 @@ struct _GCRootSet {
 
 typedef struct {
   GCRootSet *tail;
+  
+  Object *last_obj_allocated;
+  int num_obj_allocated, next_gc_run;
+  
   GCRootSet permanents; // objects that never get freed, globals, instr-cached objects, etc.
   int disabledness;
+  bool missed_gc; // tried to run gc when it was disabled
 } GCState;
 
 typedef struct {
@@ -77,6 +82,8 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
 
 typedef struct {
   Object *bool_false, *bool_true;
+  Object *int_zero; // TODO array
+  Object ***args_prealloc;
 } ValueCache;
 
 struct _VMState {
@@ -91,8 +98,6 @@ struct _VMState {
   
   // memory handling
   GCState *gcstate;
-  Object *last_obj_allocated;
-  int num_obj_allocated, next_gc_run;
   
   VMProfileState *profstate;
   
@@ -178,7 +183,7 @@ Object *alloc_bool(VMState *state, bool value);
 // returns newly allocated bool object (used to initialize value_cache)
 Object *alloc_bool_uncached(VMState *state, bool value);
 
-Object *alloc_array(VMState *state, Object **ptr, int length);
+Object *alloc_array(VMState *state, Object **ptr, IntObject *length);
 
 Object *alloc_ptr(VMState *state, void *ptr); // TODO unify with alloc_fn
 

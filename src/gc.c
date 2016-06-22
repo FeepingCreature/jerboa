@@ -35,12 +35,12 @@ static void gc_mark(VMState *state) {
 
 // scan all allocated objects, freeing those without OBJ_GC_MARK flag
 static void gc_sweep(VMState *state) {
-  Object **curp = &state->last_obj_allocated;
+  Object **curp = &state->gcstate->last_obj_allocated;
   while (*curp) {
     if (!((*curp)->flags & OBJ_GC_MARK)) {
       Object *prev = (*curp)->prev;
       obj_free(*curp);
-      state->num_obj_allocated --;
+      state->gcstate->num_obj_allocated --;
       *curp = prev; // update pointer
     } else {
       (*curp)->flags &= ~OBJ_GC_MARK; // remove flag for next run
@@ -56,10 +56,17 @@ void gc_disable(VMState *state) {
 void gc_enable(VMState *state) {
   assert(state->gcstate->disabledness > 0);
   state->gcstate->disabledness --;
+  if (state->gcstate->disabledness == 0 && state->gcstate->missed_gc) {
+    state->gcstate->missed_gc = false;
+    gc_run(state); // catch up
+  }
 }
 
 void gc_run(VMState *state) {
-  if (state->gcstate->disabledness > 0) return;
+  if (state->gcstate->disabledness > 0) {
+    state->gcstate->missed_gc = true;
+    return;
+  }
   gc_mark(state);
   gc_sweep(state);
 }

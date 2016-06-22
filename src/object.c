@@ -192,17 +192,17 @@ void object_set(Object *obj, const char *key, Object *value) {
 }
 
 static void *alloc_object_internal(VMState *state, int size) {
-  if (state->num_obj_allocated > state->next_gc_run) {
+  if (state->gcstate->num_obj_allocated > state->gcstate->next_gc_run) {
     gc_run(state);
     // run gc after 50% growth or 10000 allocated or thereabouts
-    state->next_gc_run = (int) (state->num_obj_allocated * 1.5) + 10000;
+    state->gcstate->next_gc_run = (int) (state->gcstate->num_obj_allocated * 1.5) + 10000;
   }
   
   Object *res = cache_alloc(size);
-  res->prev = state->last_obj_allocated;
+  res->prev = state->gcstate->last_obj_allocated;
   res->size = size;
-  state->last_obj_allocated = res;
-  state->num_obj_allocated ++;
+  state->gcstate->last_obj_allocated = res;
+  state->gcstate->num_obj_allocated ++;
   
 #if DEBUG_MEM
   fprintf(stderr, "alloc object %p\n", (void*) obj);
@@ -281,16 +281,14 @@ Object *alloc_string_foreign(VMState *state, char *value) {
   return (Object*) obj;
 }
 
-Object *alloc_array(VMState *state, Object **ptr, int length) {
+Object *alloc_array(VMState *state, Object **ptr, IntObject *length) {
   Object *array_base = object_lookup(state->root, "array", NULL);
   assert(array_base);
   ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
   obj->base.parent = array_base;
   obj->ptr = ptr;
-  obj->length = length;
-  gc_disable(state);
-  object_set((Object*) obj, "length", alloc_int(state, length));
-  gc_enable(state);
+  obj->length = length->value;
+  object_set((Object*) obj, "length", (Object*) length);
   return (Object*) obj;
 }
 
