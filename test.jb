@@ -113,16 +113,7 @@ var XmlResults = {
   },
 };
 xml.node["find"] = method(pred) {
-  var array = [];
-  function recurse(node) {
-    var i = 0;
-    if (pred(node)) array.push(node);
-    while (i < node.children.length) {
-      recurse(node.children[i]);
-      i = i + 1;
-    }
-  }
-  recurse(this);
+  var array = this.find_array(pred);
   return new XmlResults {
     array: array,
     length: array.length

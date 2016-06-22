@@ -100,18 +100,18 @@ static void vm_record_profile(VMState *state) {
           void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_hash, key_ptr, key_len, &freeptr);
           if (entry_p) (*(int*) entry_p) ++;
           else (*(int*) freeptr) = 1;
+        } else {
+          // don't double-count ranges in case of recursion
+          bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
+          
+          if (!range_already_counted) {
+            void **freeptr;
+            void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_hash, key_ptr, key_len, &freeptr);
+            if (entry_p) (*(int*) entry_p) ++;
+            else (*(int*) freeptr) = 1;
+          }
         }
-        
-        // don't double-count ranges in case of recursion
-        bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
         instr->belongs_to->last_cycle_seen = cyclecount;
-        
-        if (!range_already_counted) {
-          void **freeptr;
-          void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_hash, key_ptr, key_len, &freeptr);
-          if (entry_p) (*(int*) entry_p) ++;
-          else (*(int*) freeptr) = 1;
-        }
         
         /*
         const char *file;
@@ -402,6 +402,19 @@ static void vm_step(VMState *state, void **args_prealloc) {
       else { free(args); }
       
       next_instr = (Instr*)(call_instr + 1);
+      
+      // continue straight to INSTR_SAVE_RESULT (only if fn_obj was an intrinsic)
+      if (state->stack_len == prev_stacklen && next_instr->type == INSTR_SAVE_RESULT) {
+        instr = next_instr;
+      } else break;
+    }
+    case INSTR_SAVE_RESULT: {
+      SaveResultInstr *save_instr = (SaveResultInstr*) instr;
+      int save_slot = save_instr->target_slot;
+      VM_ASSERT(save_slot < cf->slots_len, "slot numbering error");
+      cf->slots_ptr[save_slot] = state->result_value;
+      state->result_value = NULL;
+      next_instr = (Instr*)(save_instr + 1);
     } break;
     case INSTR_RETURN: {
       ReturnInstr *ret_instr = (ReturnInstr*) instr;
@@ -412,14 +425,6 @@ static void vm_step(VMState *state, void **args_prealloc) {
       vm_remove_frame(state);
       state->result_value = res;
       next_instr = (Instr*)(ret_instr + 1);
-    } break;
-    case INSTR_SAVE_RESULT: {
-      SaveResultInstr *save_instr = (SaveResultInstr*) instr;
-      int save_slot = save_instr->target_slot;
-      VM_ASSERT(save_slot < cf->slots_len, "slot numbering error");
-      cf->slots_ptr[save_slot] = state->result_value;
-      state->result_value = NULL;
-      next_instr = (Instr*)(save_instr + 1);
     } break;
     case INSTR_BR: {
       BranchInstr *br_instr = (BranchInstr*) instr;

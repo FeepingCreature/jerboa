@@ -627,6 +627,68 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   xmlCleanupParser();
 }
 
+static bool xml_node_check_pred(VMState *state, Object *node, Object *pred,
+                                Object *function_base, Object *closure_base, Object *bool_base)
+{
+  FunctionObject *fn_pred = (FunctionObject*) obj_instance_of(pred, function_base);
+  ClosureObject *cl_pred = (ClosureObject*) obj_instance_of(pred, closure_base);
+  VM_ASSERT(fn_pred || cl_pred, "predicate is neither function nor closure") false;
+  
+  VMState substate = {0};
+  substate.parent = state;
+  substate.root = state->root;
+  substate.gcstate = state->gcstate;
+  substate.profstate = state->profstate;
+  
+  if (fn_pred) fn_pred->fn_ptr(&substate, node, pred, &node, 1);
+  else cl_pred->base.fn_ptr(&substate, node, pred, &node, 1);
+  
+  vm_run(&substate);
+  VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error) false;
+  
+  // TODO truthy()
+  BoolObject *b_res = (BoolObject*) obj_instance_of(substate.result_value, bool_base);
+  VM_ASSERT(b_res, "predicate must return bool") false;
+  
+  return b_res->value;
+}
+
+static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Object ***array_p_p, int *array_l_p,
+                                  Object *function_base, Object *closure_base, Object *bool_base, Object *array_base)
+{
+  bool res = xml_node_check_pred(state, node, pred, function_base, closure_base, bool_base);
+  if (state->runstate == VM_ERRORED) return;
+  if (res) {
+    (*array_p_p) = realloc((void*) *array_p_p, sizeof(Object*) * ++(*array_l_p));
+    (*array_p_p)[(*array_l_p) - 1] = node;
+  }
+  
+  Object *children_obj = object_lookup(node, "children", NULL);
+  VM_ASSERT(children_obj, "missing 'children' property in node");
+  ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
+  VM_ASSERT(children_aobj, "'children' property in node is not an array");
+  for (int i = 0; i < children_aobj->length; ++i) {
+    Object *child = children_aobj->ptr[i];
+    xml_node_find_recurse(state, child, pred, array_p_p, array_l_p,
+                          function_base, closure_base, bool_base, array_base);
+    if (state->runstate == VM_ERRORED) return;
+  }
+}
+
+static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *bool_base = object_lookup(root, "bool", NULL);
+  Object *array_base = object_lookup(root, "array", NULL);
+  Object *closure_base = object_lookup(root, "closure", NULL);
+  Object *function_base = object_lookup(root, "function", NULL);
+  
+  Object **array_ptr = NULL; int array_length = 0;
+  xml_node_find_recurse(state, thisptr, args_ptr[0], &array_ptr, &array_length,
+                        function_base, closure_base, bool_base, array_base);
+  state->result_value = alloc_array(state, array_ptr, array_length);
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -707,7 +769,9 @@ Object *create_root(VMState *state) {
   
   Object *xml_obj = alloc_object(state, NULL);
   object_set(xml_obj, "load", alloc_fn(state, xml_load_fn));
-  object_set(xml_obj, "node", alloc_object(state, NULL));
+  Object *node_obj = alloc_object(state, NULL);
+  object_set(xml_obj, "node", node_obj);
+  object_set(node_obj, "find_array", alloc_fn(state, xml_node_find_array_fn));
   xml_obj->flags |= OBJ_IMMUTABLE;
   object_set(root, "xml", xml_obj);
   

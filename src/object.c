@@ -422,16 +422,19 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       int samples_dir = samples_dir_p ? *samples_dir_p : 0;
       int samples_indir = samples_indir_p ? *samples_indir_p : 0;
       double percent_dir = (samples_dir * 100.0) / sum_samples_direct;
-      double percent_indir = (samples_indir * 100.0) / sum_samples_indirect;
       int hex_dir = 255 - (samples_dir * 255LL) / max_samples_direct;
-      // int hex_indir = 255 - (samples_indir * 255LL) / max_samples_indirect;
-      int weight_indir = 100 + 100 * ((samples_indir * 8LL) / max_samples_indirect);
-      float border_indir = samples_indir * 3.0 / max_samples_indirect;
-      int fontsize_indir = 100 + (samples_indir * 10LL) / max_samples_indirect;
-      /*printf("%li with %li: open tag %i and %i over %i and %i: %02x and %i / %f\n",
+      // sum direct == max indirect
+      double percent_indir = (samples_indir * 100.0) / sum_samples_direct;
+      // int hex_indir = 255 - (samples_indir * 255LL) / sum_samples_direct;
+      int weight_indir = 100 + 100 * ((samples_indir * 8LL) / sum_samples_direct);
+      float border_indir = samples_indir * 3.0 / sum_samples_direct;
+      int fontsize_indir = 100 + (samples_indir * 10LL) / sum_samples_direct;
+      int bordercol_indir = 15 - (int)(15*((border_indir < 1)?border_indir:1));
+      /*printf("%li with %li: open tag %i and %i over (%i, %i) and (%i, %i): %02x and %i / %f\n",
              CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from,
              samples_dir, samples_indir,
-             max_samples_direct, max_samples_indirect,
+             max_samples_direct, sum_samples_direct,
+             max_samples_indirect, sum_samples_indirect,
              hex_dir, weight_indir, border_indir);*/
       dprintf(fd, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
         " style=\"",
@@ -440,8 +443,8 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
         dprintf(fd, "background-color:#ff%02x%02x;",
           hex_dir, hex_dir);
       }
-      dprintf(fd, "font-weight:%i;border-bottom:%fpx solid black;font-size: %i%%;",
-              weight_indir, border_indir, fontsize_indir);
+      dprintf(fd, "font-weight:%i;border-bottom:%fpx solid #%1x%1x%1x;font-size: %i%%;",
+              weight_indir, border_indir, bordercol_indir, bordercol_indir, bordercol_indir, fontsize_indir);
       dprintf(fd, "z-index: %i;", --zindex);
       dprintf(fd, "\">");
       cur_entry_id ++;
