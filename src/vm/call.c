@@ -72,6 +72,25 @@ void vm_remove_frame(VMState *state) {
 
 const long long sample_stepsize = 200000LL; // 0.2ms
 
+void vm_print_backtrace(VMState *state) {
+  VMState *curstate = state;
+  int k = 0;
+  while (curstate) {
+    for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
+      Callframe *curf = &curstate->stack_ptr[i];
+      Instr *instr = curf->instr_ptr;
+      
+      const char *file;
+      TextRange line;
+      int row, col;
+      bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
+      assert(found);
+      fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
+    }
+    curstate = curstate->parent;
+  }
+}
+
 static void vm_record_profile(VMState *state) {
   struct timespec prof_time;
   long long ns_diff = get_clock_and_difference(&prof_time, &state->profstate->last_prof_time);
@@ -112,15 +131,6 @@ static void vm_record_profile(VMState *state) {
           }
         }
         instr->belongs_to->last_cycle_seen = cyclecount;
-        
-        /*
-        const char *file;
-        TextRange line;
-        int row, col;
-        bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
-        assert(found);
-        fprintf(stderr, "%i: %.*s\n", k, (int) (line.end - line.start - 1), line.start);
-        */
       }
       curstate = curstate->parent;
     }

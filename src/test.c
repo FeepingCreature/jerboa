@@ -47,6 +47,8 @@ int main(int argc, char **argv) {
   save_profile_output("profile.html", source, vmstate.profstate);
   
   if (vmstate.runstate == VM_ERRORED) {
+    fprintf(stderr, "at:\n");
+    vm_print_backtrace(&vmstate);
     fprintf(stderr, "vm failure: %s\n", vmstate.error);
   }
   
