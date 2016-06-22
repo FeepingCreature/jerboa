@@ -487,9 +487,11 @@ static void print_fn_recursive(VMState *state, Object *obj) {
     
     VMState substate = {0};
     substate.parent = state;
+    // TODO factor this out
     substate.root = state->root;
     substate.gcstate = state->gcstate;
     substate.profstate = state->profstate;
+    substate.vcache = state->vcache;
     
     if (fn_toString) fn_toString->fn_ptr(&substate, obj, toString_fn, NULL, 0);
     else cl_toString->base.fn_ptr(&substate, obj, toString_fn, NULL, 0);
@@ -639,6 +641,7 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred,
   substate.root = state->root;
   substate.gcstate = state->gcstate;
   substate.profstate = state->profstate;
+  substate.vcache = state->vcache;
   
   if (fn_pred) fn_pred->fn_ptr(&substate, node, pred, &node, 1);
   else cl_pred->base.fn_ptr(&substate, node, pred, &node, 1);
@@ -738,8 +741,13 @@ Object *create_root(VMState *state) {
   bool_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "bool", bool_obj);
   object_set(bool_obj, "!", alloc_fn(state, bool_not_fn));
-  object_set(root, "true", alloc_bool(state, true));
-  object_set(root, "false", alloc_bool(state, false));
+  Object
+    *true_obj = alloc_bool_uncached(state, true),
+    *false_obj = alloc_bool_uncached(state, false);
+  object_set(root, "true", true_obj);
+  object_set(root, "false", false_obj);
+  state->vcache->bool_false = false_obj;
+  state->vcache->bool_true = true_obj;
   
   object_set(root, "null", NULL);
   

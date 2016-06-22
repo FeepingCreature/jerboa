@@ -19,6 +19,8 @@ int main(int argc, char **argv) {
   VMState vmstate = {0};
   vmstate.gcstate = calloc(sizeof(GCState), 1);
   vmstate.profstate = calloc(sizeof(VMProfileState), 1);
+  vmstate.vcache = calloc(sizeof(ValueCache), 1);
+  gc_init(&vmstate);
   
   vm_alloc_frame(&vmstate, 0);
   Object *root = create_root(&vmstate);

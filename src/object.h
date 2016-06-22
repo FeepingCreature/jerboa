@@ -24,9 +24,6 @@ typedef enum {
 
 typedef short int ObjectFlags;
 
-struct _Object;
-typedef struct _Object Object;
-
 struct _VMState;
 typedef struct _VMState VMState;
 
@@ -50,6 +47,7 @@ struct _GCRootSet {
 
 typedef struct {
   GCRootSet *tail;
+  GCRootSet permanents; // objects that never get freed, globals, instr-cached objects, etc.
   int disabledness;
 } GCState;
 
@@ -77,6 +75,10 @@ typedef struct {
 
 void save_profile_output(char *file, TextRange source, VMProfileState *profile_state);
 
+typedef struct {
+  Object *bool_false, *bool_true;
+} ValueCache;
+
 struct _VMState {
   VMState *parent;
   
@@ -93,6 +95,8 @@ struct _VMState {
   int num_obj_allocated, next_gc_run;
   
   VMProfileState *profstate;
+  
+  ValueCache *vcache;
 };
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);
@@ -168,7 +172,11 @@ Object *alloc_string(VMState *state, const char *value);
 
 Object *alloc_string_foreign(VMState *state, char *value);
 
-Object *alloc_bool(VMState *state, int value);
+// returns bool object from value cache
+Object *alloc_bool(VMState *state, bool value);
+
+// returns newly allocated bool object (used to initialize value_cache)
+Object *alloc_bool_uncached(VMState *state, bool value);
 
 Object *alloc_array(VMState *state, Object **ptr, int length);
 

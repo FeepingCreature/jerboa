@@ -222,13 +222,14 @@ Object *alloc_int(VMState *state, int value) {
   assert(int_base);
   IntObject *obj = alloc_object_internal(state, sizeof(IntObject));
   obj->base.parent = int_base;
-  // why though?
+  // prevent variations and modifications, allowing all equal numbers to be interchangeable
+  // TODO do we actually need this?
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
 
-Object *alloc_bool(VMState *state, int value) {
+Object *alloc_bool_uncached(VMState *state, bool value) {
   Object *bool_base = object_lookup(state->root, "bool", NULL);
   assert(bool_base);
   BoolObject *obj = alloc_object_internal(state, sizeof(BoolObject));
@@ -236,6 +237,14 @@ Object *alloc_bool(VMState *state, int value) {
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
+}
+
+Object *alloc_bool(VMState *state, bool value) {
+  if (value == true) {
+    return state->vcache->bool_true;
+  } else {
+    return state->vcache->bool_false;
+  }
 }
 
 Object *alloc_float(VMState *state, float value) {

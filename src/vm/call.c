@@ -219,6 +219,7 @@ static void vm_step(VMState *state, void **args_prealloc) {
           substate.root = state->root;
           substate.gcstate = state->gcstate;
           substate.profstate = state->profstate;
+          substate.vcache = state->vcache;
           
           if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
           else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
@@ -324,13 +325,31 @@ static void vm_step(VMState *state, void **args_prealloc) {
       AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) instr;
       int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
       VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
-      cf->slots_ptr[target_slot] = alloc_int(state, value);
+      if (UNLIKELY(!alloc_int_obj_instr->int_obj)) {
+        Object *obj = alloc_int(state, value);
+        alloc_int_obj_instr->int_obj = obj;
+        gc_add_perm(state, obj);
+      }
+      cf->slots_ptr[target_slot] = alloc_int_obj_instr->int_obj;
       next_instr = (Instr*)(alloc_int_obj_instr + 1);
     } break;
     case INSTR_ALLOC_FLOAT_OBJECT:{
       AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) instr;
       int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
       VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
+      // okay so
+      // enabling this is slower
+      // just HAVING IT IN THE CODE makes it slower
+      // even for scripts that never use floats
+      // what the fuck
+      /*
+      if (UNLIKELY(!alloc_float_obj_instr->float_obj)) {
+        Object *obj = alloc_float(state, value);
+        alloc_float_obj_instr->float_obj = obj;
+        gc_add_perm(state, obj);
+      }
+      cf->slots_ptr[target_slot] = alloc_float_obj_instr->float_obj;
+      */
       cf->slots_ptr[target_slot] = alloc_float(state, value);
       next_instr = (Instr*)(alloc_float_obj_instr + 1);
     } break;
@@ -346,7 +365,12 @@ static void vm_step(VMState *state, void **args_prealloc) {
       AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) instr;
       int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
       VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
-      cf->slots_ptr[target_slot] = alloc_string(state, value);
+      if (UNLIKELY(!alloc_string_obj_instr->str_obj)) {
+        Object *obj = alloc_string(state, value);
+        alloc_string_obj_instr->str_obj = obj;
+        gc_add_perm(state, obj);
+      }
+      cf->slots_ptr[target_slot] = alloc_string_obj_instr->str_obj;
       next_instr = (Instr*)(alloc_string_obj_instr + 1);
     } break;
     case INSTR_ALLOC_CLOSURE_OBJECT:{

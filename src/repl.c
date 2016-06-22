@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
   Object *root = create_root(&vmstate);
   vm_remove_frame(&vmstate);
   vmstate.root = root;
+  vmstate.vcache = calloc(sizeof(ValueCache), 1);
   
   GCRootSet set;
   gc_add_roots(&vmstate, &root, 1, &set);

@@ -139,6 +139,7 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value) 
   instr->base.belongs_to = NULL;
   instr->target_slot = builder->slot_base++;
   instr->value = value;
+  instr->int_obj = NULL;
   addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
@@ -149,6 +150,7 @@ int addinstr_alloc_float_object(FunctionBuilder *builder, int ctxslot, float val
   instr->base.belongs_to = NULL;
   instr->target_slot = builder->slot_base++;
   instr->value = value;
+  instr->float_obj = NULL;
   addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }
@@ -168,6 +170,7 @@ int addinstr_alloc_string_object(FunctionBuilder *builder, int ctxslot, char *va
   instr->base.belongs_to = NULL;
   instr->target_slot = builder->slot_base++;
   instr->value = value;
+  instr->str_obj = NULL;
   addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;
 }

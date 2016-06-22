@@ -63,3 +63,13 @@ void gc_run(VMState *state) {
   gc_mark(state);
   gc_sweep(state);
 }
+
+void gc_init(VMState *state) {
+  gc_add_roots(state, NULL, 0, &state->gcstate->permanents);
+}
+
+void gc_add_perm(VMState *state, Object *obj) {
+  GCRootSet *permanents = &state->gcstate->permanents;
+  permanents->objects = realloc(permanents->objects, sizeof(Object*) * ++permanents->num_objects);
+  permanents->objects[permanents->num_objects - 1] = obj;
+}
