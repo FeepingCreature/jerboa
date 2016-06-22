@@ -38,14 +38,28 @@ static ffi_type *type_to_ffi_ptr(Object *ffi, Object *obj) {
   Object *uint_obj = object_lookup(ffi, "uint", NULL);
   Object *float_obj = object_lookup(ffi, "float", NULL);
   Object *double_obj = object_lookup(ffi, "double", NULL);
+  Object *int8_obj = object_lookup(ffi, "int8", NULL);
+  Object *int16_obj = object_lookup(ffi, "int16", NULL);
+  Object *int32_obj = object_lookup(ffi, "int32", NULL);
+  Object *int64_obj = object_lookup(ffi, "int64", NULL);
+  Object *uint8_obj = object_lookup(ffi, "uint8", NULL);
+  Object *uint16_obj = object_lookup(ffi, "uint16", NULL);
   Object *uint32_obj = object_lookup(ffi, "uint32", NULL);
+  Object *uint64_obj = object_lookup(ffi, "uint64", NULL);
   Object *pointer = object_lookup(ffi, "pointer", NULL);
   if (obj_instance_of_or_equal(obj, void_obj)) return &ffi_type_void;
   if (obj_instance_of_or_equal(obj, uint_obj)) return &ffi_type_uint;
   if (obj_instance_of_or_equal(obj, sint_obj)) return &ffi_type_sint;
   if (obj_instance_of_or_equal(obj, float_obj)) return &ffi_type_float;
   if (obj_instance_of_or_equal(obj, double_obj)) return &ffi_type_double;
+  if (obj_instance_of_or_equal(obj, int8_obj)) return &ffi_type_uint8;
+  if (obj_instance_of_or_equal(obj, int16_obj)) return &ffi_type_uint16;
+  if (obj_instance_of_or_equal(obj, int32_obj)) return &ffi_type_uint32;
+  if (obj_instance_of_or_equal(obj, int64_obj)) return &ffi_type_uint64;
+  if (obj_instance_of_or_equal(obj, uint8_obj)) return &ffi_type_uint8;
+  if (obj_instance_of_or_equal(obj, uint16_obj)) return &ffi_type_uint16;
   if (obj_instance_of_or_equal(obj, uint32_obj)) return &ffi_type_uint32;
+  if (obj_instance_of_or_equal(obj, uint64_obj)) return &ffi_type_uint64;
   if (obj_instance_of_or_equal(obj, pointer)) return &ffi_type_pointer;
   assert("Unknown type." && false);
 }
@@ -278,8 +292,14 @@ void ffi_setup_root(VMState *state, Object *root) {
     *ffi_void_obj = alloc_object(state, type_obj),
     *ffi_sint_obj = alloc_object(state, type_obj),
     *ffi_uint_obj = alloc_object(state, type_obj),
+    *ffi_int8_obj = alloc_object(state, type_obj),
+    *ffi_int16_obj = alloc_object(state, type_obj),
+    *ffi_int32_obj = alloc_object(state, type_obj),
+    *ffi_int64_obj = alloc_object(state, type_obj),
     *ffi_uint8_obj = alloc_object(state, type_obj),
+    *ffi_uint16_obj = alloc_object(state, type_obj),
     *ffi_uint32_obj = alloc_object(state, type_obj),
+    *ffi_uint64_obj = alloc_object(state, type_obj),
     *ffi_float_obj = alloc_object(state, type_obj),
     *ffi_double_obj = alloc_object(state, type_obj),
     *ffi_ptr_obj = alloc_object(state, type_obj),
@@ -287,10 +307,16 @@ void ffi_setup_root(VMState *state, Object *root) {
   object_set(ffi_obj, "void", ffi_void_obj);
   object_set(ffi_obj, "sint", ffi_sint_obj);
   object_set(ffi_obj, "uint", ffi_uint_obj);
-  object_set(ffi_obj, "uint8", ffi_uint8_obj);
   object_set(ffi_obj, "float", ffi_float_obj);
   object_set(ffi_obj, "double", ffi_double_obj);
+  object_set(ffi_obj, "int8", ffi_int8_obj);
+  object_set(ffi_obj, "int16", ffi_int16_obj);
+  object_set(ffi_obj, "int32", ffi_int32_obj);
+  object_set(ffi_obj, "int64", ffi_int64_obj);
+  object_set(ffi_obj, "uint8", ffi_uint8_obj);
+  object_set(ffi_obj, "uint16", ffi_uint16_obj);
   object_set(ffi_obj, "uint32", ffi_uint32_obj);
+  object_set(ffi_obj, "uint64", ffi_uint64_obj);
   object_set(ffi_obj, "pointer", ffi_ptr_obj);
   object_set(ffi_obj, "char_pointer", ffi_char_ptr_obj);
   
