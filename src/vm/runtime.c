@@ -489,6 +489,10 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
 
 static void print_fn_recursive(VMState *state, Object *obj) {
   Object *root = state->root;
+  if (obj == NULL) {
+    printf("(null)");
+    return;
+  }
   Object *int_base = object_lookup(root, "int", NULL);
   Object *bool_base = object_lookup(root, "bool", NULL);
   Object *float_base = object_lookup(root, "float", NULL);
@@ -750,6 +754,47 @@ static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, 
   gc_enable(state);
 }
 
+static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *name, Object ***array_p_p, int *array_l_p,
+                                  Object *string_base, Object *array_base)
+{
+  Object *node_name = object_lookup(node, "nodeName", NULL);
+  VM_ASSERT(node_name, "missing 'nodeName' property in node");
+  StringObject *nodeName_str = (StringObject*) obj_instance_of(node_name, string_base);
+  if (strcmp(nodeName_str->value, name) == 0) {
+    (*array_p_p) = realloc((void*) *array_p_p, sizeof(Object*) * ++(*array_l_p));
+    (*array_p_p)[(*array_l_p) - 1] = node;
+  }
+  
+  Object *children_obj = object_lookup(node, "children", NULL);
+  VM_ASSERT(children_obj, "missing 'children' property in node");
+  ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
+  VM_ASSERT(children_aobj, "'children' property in node is not an array");
+  for (int i = 0; i < children_aobj->length; ++i) {
+    Object *child = children_aobj->ptr[i];
+    xml_node_find_by_name_recurse(state, child, name, array_p_p, array_l_p,
+                          string_base, array_base);
+    if (state->runstate == VM_ERRORED) return;
+  }
+}
+
+static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *array_base = object_lookup(root, "array", NULL);
+  Object *string_base = object_lookup(root, "string", NULL);
+  
+  StringObject *name_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(name_obj, "parameter to find_array_by_name must be string!");
+  
+  Object **array_ptr = NULL; int array_length = 0;
+  gc_disable(state);
+  xml_node_find_by_name_recurse(state, thisptr, name_obj->value, &array_ptr, &array_length,
+                                string_base, array_base);
+  IntObject *array_len_obj = (IntObject*) alloc_int(state, array_length);
+  state->result_value = alloc_array(state, array_ptr, array_len_obj);
+  gc_enable(state);
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -841,6 +886,7 @@ Object *create_root(VMState *state) {
   Object *node_obj = alloc_object(state, NULL);
   object_set(xml_obj, "node", node_obj);
   object_set(node_obj, "find_array", alloc_fn(state, xml_node_find_array_fn));
+  object_set(node_obj, "find_array_by_name", alloc_fn(state, xml_node_find_by_name_array_fn));
   xml_obj->flags |= OBJ_IMMUTABLE;
   object_set(root, "xml", xml_obj);
   
