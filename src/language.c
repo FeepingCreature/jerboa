@@ -215,12 +215,13 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   if (parse_float(&text, &f_value)) {
     *textp = text;
     record_end(text, range);
+    int slot = 0;
     if (builder) {
       use_range_start(builder, range);
-      int slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
+      slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
       use_range_end(builder, range);
-      *rv = (RefValue) {slot, -1, REFMODE_NONE};
     }
+    *rv = (RefValue) {slot, -1, REFMODE_NONE};
     return PARSE_OK;
   }
   
@@ -228,12 +229,13 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   if (parse_int(&text, &i_value)) {
     *textp = text;
     record_end(text, range);
+    int slot = 0;
     if (builder) {
       use_range_start(builder, range);
-      int slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
+      slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
       use_range_end(builder, range);
-      *rv = (RefValue) {slot, -1, REFMODE_NONE};
     }
+    *rv = (RefValue) {slot, -1, REFMODE_NONE};
     return PARSE_OK;
   }
   
@@ -241,16 +243,17 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   
   char *t_value;
   if ((res = parse_string(&text, &t_value)) != PARSE_NONE) {
+    int slot = 0;
     if (res == PARSE_OK) {
       *textp = text;
       record_end(text, range);
       if (builder) {
         use_range_start(builder, range);
-        int slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
+        slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
         use_range_end(builder, range);
-        *rv = (RefValue) {slot, -1, REFMODE_NONE};
       }
     }
+    *rv = (RefValue) {slot, -1, REFMODE_NONE};
     return res;
   }
   
@@ -292,13 +295,14 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     assert(res == PARSE_OK);
     *textp = text;
     
+    int slot = 0;
     if (builder) {
       fn->is_method = is_method;
       use_range_start(builder, range); // count the closure allocation under 'function'
-      int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
+      slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
       use_range_end(builder, range);
-      *rv = (RefValue) {slot, -1, REFMODE_NONE};
     }
+    *rv = (RefValue) {slot, -1, REFMODE_NONE};
     return PARSE_OK;
   }
   
@@ -436,6 +440,64 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
   return PARSE_OK;
 }
 
+void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs_expr, RefValue rhs_expr, FileRange *range) {
+  if (builder) {
+    use_range_start(builder, range);
+    int lhs_value = ref_access(builder, lhs_expr);
+    int rhs_value = ref_access(builder, rhs_expr);
+    int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, op));
+    *res_rv = (RefValue) { addinstr_call1(builder, fn, lhs_value, rhs_value), -1, REFMODE_NONE };
+    use_range_end(builder, range);
+  }
+}
+
+static bool assign_value(FunctionBuilder *builder, RefValue rv, int value, FileRange *assign_range) {
+  switch (rv.mode) {
+    case REFMODE_NONE:
+      use_range_end(builder, assign_range);
+      free(assign_range);
+      return false;
+    case REFMODE_VARIABLE: ref_assign_existing(builder, rv, value); break;
+    case REFMODE_OBJECT: ref_assign_shadowing(builder, rv, value); break;
+    case REFMODE_INDEX: ref_assign(builder, rv, value); break;
+    default: assert(false);
+  }
+  use_range_end(builder, assign_range);
+  return true;
+}
+
+static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefValue *rv) {
+  char *text = *textp;
+  FileRange *op_range = alloc_and_record_start(text);
+  char *op = NULL;
+  if (eat_string(&text, "++")) {
+    op = "+";
+  } else if (eat_string(&text, "--")) {
+    op = "-";
+  } else return PARSE_NONE;
+  
+  record_end(text, op_range);
+  
+  use_range_start(builder, op_range);
+  int prev_slot = 0, one_slot = 0;
+  if (builder) {
+    prev_slot = ref_access(builder, *rv);
+    one_slot = addinstr_alloc_int_object(builder, builder->scope, 1);
+  }
+  use_range_end(builder, op_range);
+  
+  RefValue sum;
+  build_op(builder, op, &sum, *rv, (RefValue) {one_slot, -1, REFMODE_NONE}, op_range);
+  use_range_start(builder, op_range);
+  if (!assign_value(builder, *rv, ref_access(builder, sum), op_range)) {
+    log_parser_error(*textp, "post-inc/dec cannot assign to non-reference expression!");
+    return PARSE_ERROR;
+  }
+  *textp = text;
+  *rv = (RefValue) {prev_slot, -1, REFMODE_NONE};
+  return PARSE_OK;
+}
+
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv) {
   FileRange *expr_range = alloc_and_record_start(*textp);
   ParseResult res = parse_expr_stem(textp, builder, rv);
@@ -453,20 +515,11 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
     if (res == PARSE_ERROR) return res;
     if ((res = parse_array_access(textp, builder, rv)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
+    if ((res = parse_postincdec(textp, builder, rv)) == PARSE_OK) continue;
+    if (res == PARSE_ERROR) return res;
     break;
   }
   return PARSE_OK;
-}
-
-void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs_expr, RefValue rhs_expr, FileRange *range) {
-  if (builder) {
-    use_range_start(builder, range);
-    int lhs_value = ref_access(builder, lhs_expr);
-    int rhs_value = ref_access(builder, rhs_expr);
-    int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, op));
-    *res_rv = (RefValue) { addinstr_call1(builder, fn, lhs_value, rhs_value), -1, REFMODE_NONE };
-    use_range_end(builder, range);
-  }
 }
 
 /*
@@ -770,19 +823,10 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
   use_range_start(builder, assign_range);
   int value = ref_access(builder, value_expr);
   
-  switch (rv.mode) {
-    case REFMODE_NONE:
-      use_range_end(builder, assign_range);
-      free(assign_range);
-      log_parser_error(text, "cannot assign to non-reference expression!");
-      return PARSE_ERROR;
-    case REFMODE_VARIABLE: ref_assign_existing(builder, rv, value); break;
-    case REFMODE_OBJECT: ref_assign_shadowing(builder, rv, value); break;
-    case REFMODE_INDEX: ref_assign(builder, rv, value); break;
-    default: assert(false);
+  if (!assign_value(builder, rv, value, assign_range)) {
+    log_parser_error(text, "cannot assign to non-reference expression!");
+    return PARSE_ERROR;
   }
-  
-  use_range_end(builder, assign_range);
   
   *textp = text;
   return PARSE_OK;
@@ -861,7 +905,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   set_int_var(builder, loop_blk, new_block(builder));
   parse_block(&text, builder);
   
-  res = parse_assign(&text_step, builder);
+  res = parse_semicolon_statement(&text_step, builder);
   assert(res == PARSE_OK); // what? this already worked above...
   
   use_range_start(builder, range);
@@ -967,7 +1011,8 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     return parse_for(textp, builder, keyword_range);
   }
   ParseResult res = parse_semicolon_statement(&text, builder);
-  if (res != PARSE_NONE) {
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  if (res == PARSE_OK) {
     if (!eat_string(&text, ";")) {
       log_parser_error(text, "';' expected after statement");
       return PARSE_ERROR;
