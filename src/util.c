@@ -50,7 +50,22 @@ void register_file(TextRange text, const char *name, int row_start, int col_star
   record = newrecord;
 }
 
+// most find_text_pos calls are in the same line as last time
+static __thread TextRange last_line = {0};
+static __thread FileRecord *last_record = NULL;
+static __thread int last_row_nr;
+
 bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
+  // cache lookup
+  if (text >= last_line.start && text < last_line.end) {
+    int col_nr = text - last_line.start;
+    *name_p = last_record->name;
+    *line_p = last_line;
+    *row_p = last_row_nr + last_record->row_start;
+    *col_p = col_nr + ((last_row_nr == 0) ? last_record->col_start : 0);
+    return true;
+  }
+  
   FileRecord *rec = record;
   while (rec) {
     if (text >= rec->text.start && text < rec->text.end) {
@@ -62,6 +77,10 @@ bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_
         while (line.end < rec->text.end && *line.end != '\n') line.end ++; // scan to newline
         if (line.end < rec->text.end) line.end ++; // scan past newline
         if (text >= line.start && text < line.end) {
+          last_line = line;
+          last_record = rec;
+          last_row_nr = row_nr;
+          
           int col_nr = text - line.start;
           *line_p = line;
           *row_p = row_nr + rec->row_start;
