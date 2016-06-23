@@ -222,12 +222,18 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     state->result_value = alloc_int(state, *(int*) ret_ptr);
   } else if (obj_instance_of_or_equal(ret_type, ffi_uint)) {
     state->result_value = alloc_int(state, *(unsigned int*) ret_ptr);
+  } else if (obj_instance_of_or_equal(ret_type, ffi_uint32)) {
+    state->result_value = alloc_int(state, *(uint32_t*) ret_ptr);
   } else if (obj_instance_of_or_equal(ret_type, ffi_charptr)) {
     state->result_value = alloc_string(state, *(char**) ret_ptr, strlen(*(char**) ret_ptr));
   } else if (obj_instance_of_or_equal(ret_type, ffi_pointer)) {
-    Object *ptr = alloc_ptr(state, *(void**) ret_ptr);
-    object_set(ptr, "dereference", alloc_fn(state, ffi_ptr_dereference));
-    state->result_value = ptr;
+    if (*(void**) ret_ptr == NULL) {
+      state->result_value = NULL;
+    } else {
+      Object *ptr = alloc_ptr(state, *(void**) ret_ptr);
+      object_set(ptr, "dereference", alloc_fn(state, ffi_ptr_dereference));
+      state->result_value = ptr;
+    }
   } else VM_ASSERT(false, "unknown return type");
 }
 
