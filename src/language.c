@@ -777,6 +777,8 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
   return PARSE_OK;
 }
 
+static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *builder);
+
 static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *range) {
   char *text = *textp;
   if (!eat_string(&text, "(")) {
@@ -825,8 +827,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   char *text_step = text; // keep a text pointer to the step statement
   {
     // skip ahead to the loop statement
-    // TODO use parse_semicolon_statement
-    res = parse_assign(&text, NULL);
+    res = parse_semicolon_statement(&text, NULL);
     if (res == PARSE_ERROR) return PARSE_ERROR;
     if (res == PARSE_NONE) {
       log_parser_error(text, "'for' expected assignment");
@@ -875,11 +876,7 @@ static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRang
   
   use_range_start(builder, keywd_range);
   int value = ref_access(builder, ret_value);
-  if (!eat_string(textp, ";")) {
-    use_range_end(builder, keywd_range);
-    log_parser_error(*textp, "semicolon expected");
-    return PARSE_ERROR;
-  }
+  
   addinstr_return(builder, value);
   new_block(builder);
   use_range_end(builder, keywd_range);
@@ -905,6 +902,36 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   return PARSE_OK;
 }
 
+static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *builder) {
+  char *text = *textp;
+  FileRange *keyword_range = alloc_and_record_start(text);
+  ParseResult res;
+  if (eat_keyword(&text, "return")) {
+    record_end(text, keyword_range);
+    res = parse_return(&text, builder, keyword_range);
+  }
+  else if (eat_keyword(&text, "var")) {
+    record_end(text, keyword_range);
+    res = parse_vardecl(&text, builder, keyword_range);
+  }
+  else {
+    res = parse_assign(&text, builder);
+    if (res == PARSE_NONE) {
+      // expr as statement
+      RefValue rv;
+      res = parse_expr_base(&text, builder, &rv);
+      if (res == PARSE_NONE) {
+        return PARSE_NONE;
+      }
+    }
+  }
+  
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
+  *textp = text;
+  return PARSE_OK;
+}
+
 static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
   char *text = *textp;
   FileRange *keyword_range = alloc_and_record_start(text);
@@ -912,23 +939,6 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     record_end(text, keyword_range);
     *textp = text;
     return parse_if(textp, builder, keyword_range);
-  }
-  if (eat_keyword(&text, "return")) {
-    record_end(text, keyword_range);
-    *textp = text;
-    return parse_return(textp, builder, keyword_range);
-  }
-  if (eat_keyword(&text, "var")) {
-    record_end(text, keyword_range);
-    ParseResult res = parse_vardecl(&text, builder, keyword_range);
-    if (res == PARSE_ERROR) return PARSE_ERROR;
-    assert(res == PARSE_OK);
-    if (!eat_string(&text, ";")) {
-      log_parser_error(text, "';' expected to close 'var' decl");
-      return PARSE_ERROR;
-    }
-    *textp = text;
-    return PARSE_OK;
   }
   if (eat_keyword(&text, "function")) {
     record_end(text, keyword_range);
@@ -945,30 +955,14 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     *textp = text;
     return parse_for(textp, builder, keyword_range);
   }
-  {
-    ParseResult res = parse_assign(&text, builder);
-    if (res == PARSE_OK) {
-      if (!eat_string(&text, ";")) {
-        log_parser_error(text, "';' expected to close assignment");
-        return PARSE_ERROR;
-      }
-      *textp = text;
-    }
-    if (res == PARSE_OK || res == PARSE_ERROR) return res;
-  }
-  {
-    // expr as statement
-    RefValue rv;
-    ParseResult res = parse_expr_base(&text, builder, &rv);
-    if (res == PARSE_ERROR) return res;
-    assert(res == PARSE_OK);
-    
+  ParseResult res = parse_semicolon_statement(&text, builder);
+  if (res != PARSE_NONE) {
     if (!eat_string(&text, ";")) {
-      log_parser_error(text, "';' expected to terminate expression");
+      log_parser_error(text, "';' expected after statement");
       return PARSE_ERROR;
     }
-    *textp = text;
-    return PARSE_OK;
+    if (res == PARSE_OK) *textp = text;
+    return res;
   }
   log_parser_error(text, "unknown statement");
   return PARSE_ERROR;
