@@ -45,6 +45,10 @@ struct _GCRootSet {
   GCRootSet *prev, *next;
 };
 
+void *cache_alloc(int size);
+
+void cache_free(int size, void *ptr);
+
 typedef struct {
   GCRootSet *tail;
   

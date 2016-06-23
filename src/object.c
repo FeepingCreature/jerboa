@@ -14,74 +14,33 @@ void *int_freelist = NULL;
 void *obj_freelist = NULL;
 void *table4_freelist = NULL, *table8_freelist = NULL, *table16_freelist = NULL;
 
+void *freelist[128] = {0};
+
 void *cache_alloc(int size) {
   // return calloc(size, 1);
   void *res = NULL;
-  switch (size) {
-    case sizeof(IntObject):
-      if (int_freelist) {
-        res = int_freelist;
-        int_freelist = *(void**) int_freelist;
-      }
-      break;
-    case sizeof(TableEntry) * 4:
-      if (table4_freelist) {
-        res = table4_freelist;
-        table4_freelist = *(void**) table4_freelist;
-      }
-      break;
-    case sizeof(TableEntry) * 8:
-      if (table8_freelist) {
-        res = table8_freelist;
-        table8_freelist = *(void**) table8_freelist;
-      }
-      break;
-    case sizeof(TableEntry) * 16:
-      if (table16_freelist) {
-        res = table16_freelist;
-        table16_freelist = *(void**) table16_freelist;
-      }
-      break;
-    case sizeof(Object):
-      if (obj_freelist) {
-        res = obj_freelist;
-        obj_freelist = *(void**) obj_freelist;
-      }
-      break;
-    default: break;
+  if (size >= sizeof(void*) && size < 128) {
+    if (freelist[size]) {
+      res = freelist[size];
+      freelist[size] = *(void**) freelist[size];
+    }
   }
-  if (!res) return calloc(size, 1);
+  if (!res) {
+    // printf("::alloc %i\n", size);
+    return calloc(size, 1);
+  }
   memset(res, 0, size);
   return res;
 }
 
 void cache_free(int size, void *ptr) {
   // free(ptr); return;
-  switch (size) {
-    case sizeof(IntObject):
-      *(void**) ptr = int_freelist;
-      int_freelist = ptr;
-      break;
-    case sizeof(TableEntry) * 4:
-      *(void**) ptr = table4_freelist;
-      table4_freelist = ptr;
-      break;
-    case sizeof(TableEntry) * 8:
-      *(void**) ptr = table8_freelist;
-      table8_freelist = ptr;
-      break;
-    case sizeof(TableEntry) * 16:
-      *(void**) ptr = table16_freelist;
-      table16_freelist = ptr;
-      break;
-    case sizeof(Object):
-      *(void**) ptr = obj_freelist;
-      obj_freelist = ptr;
-      break;
-    default:
-      free(ptr);
-      break;
+  if (size >= sizeof(void*) && size < 128) {
+    *(void**) ptr = freelist[size];
+    freelist[size] = ptr;
+    return;
   }
+  free(ptr);
 }
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found_p) {

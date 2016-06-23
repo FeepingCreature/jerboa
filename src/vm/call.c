@@ -48,7 +48,7 @@ Callframe *vm_alloc_frame(VMState *state, int slots) {
   state->stack_len = state->stack_len + 1;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   cf->slots_len = slots;
-  cf->slots_ptr = calloc(sizeof(Object*), cf->slots_len);
+  cf->slots_ptr = cache_alloc(sizeof(Object*)*cf->slots_len);
   return cf;
 }
 
@@ -65,7 +65,7 @@ void vm_error(VMState *state, char *fmt, ...) {
 
 void vm_remove_frame(VMState *state) {
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
-  free(cf->slots_ptr);
+  cache_free(sizeof(Object*)*cf->slots_len, cf->slots_ptr);
   // TODO shrink memory?
   state->stack_len = state->stack_len - 1;
 }
