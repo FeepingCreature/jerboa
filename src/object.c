@@ -151,17 +151,17 @@ void object_set(Object *obj, const char *key, Object *value) {
 }
 
 static void *alloc_object_internal(VMState *state, int size) {
-  if (state->gcstate->num_obj_allocated > state->gcstate->next_gc_run) {
+  if (state->shared->gcstate.num_obj_allocated > state->shared->gcstate.next_gc_run) {
     gc_run(state);
     // run gc after 50% growth or 10000 allocated or thereabouts
-    state->gcstate->next_gc_run = (int) (state->gcstate->num_obj_allocated * 1.5) + 10000;
+    state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + 10000;
   }
   
   Object *res = cache_alloc(size);
-  res->prev = state->gcstate->last_obj_allocated;
+  res->prev = state->shared->gcstate.last_obj_allocated;
   res->size = size;
-  state->gcstate->last_obj_allocated = res;
-  state->gcstate->num_obj_allocated ++;
+  state->shared->gcstate.last_obj_allocated = res;
+  state->shared->gcstate.num_obj_allocated ++;
   
 #if DEBUG_MEM
   fprintf(stderr, "alloc object %p\n", (void*) obj);
@@ -200,9 +200,9 @@ Object *alloc_bool_uncached(VMState *state, bool value) {
 
 Object *alloc_bool(VMState *state, bool value) {
   if (value == true) {
-    return state->vcache->bool_true;
+    return state->shared->vcache.bool_true;
   } else {
-    return state->vcache->bool_false;
+    return state->shared->vcache.bool_false;
   }
 }
 

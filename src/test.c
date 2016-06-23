@@ -17,9 +17,7 @@ int main(int argc, char **argv) {
   assert(argc == 2);
   
   VMState vmstate = {0};
-  vmstate.gcstate = calloc(sizeof(GCState), 1);
-  vmstate.profstate = calloc(sizeof(VMProfileState), 1);
-  vmstate.vcache = calloc(sizeof(ValueCache), 1);
+  vmstate.shared = calloc(sizeof(VMSharedState), 1);
   gc_init(&vmstate);
   
   vm_alloc_frame(&vmstate, 0);
@@ -44,7 +42,7 @@ int main(int argc, char **argv) {
   call_function(&vmstate, root, module, NULL, 0);
   vm_run(&vmstate);
   
-  save_profile_output("profile.html", source, vmstate.profstate);
+  save_profile_output("profile.html", source, &vmstate.shared->profstate);
   
   if (vmstate.runstate == VM_ERRORED) {
     fprintf(stderr, "at:\n");
@@ -52,7 +50,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "vm failure: %s\n", vmstate.error);
   }
   
-  printf("(%i cycles)\n", cyclecount);
+  printf("(%i cycles)\n", vmstate.shared->cyclecount);
   
   gc_remove_roots(&vmstate, &set);
   

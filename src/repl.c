@@ -17,8 +17,7 @@
 
 int main(int argc, char **argv) {
   VMState vmstate = {0};
-  vmstate.gcstate = (GCState*) calloc(sizeof(GCState), 1);
-  vmstate.vcache = calloc(sizeof(ValueCache), 1);
+  vmstate.shared = calloc(sizeof(VMSharedState), 1);
   vm_alloc_frame(&vmstate, 0);
   Object *root = create_root(&vmstate);
   vm_remove_frame(&vmstate);

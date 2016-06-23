@@ -90,8 +90,18 @@ typedef struct {
   Object ***args_prealloc;
 } ValueCache;
 
+// shared between parent and child VMs
+typedef struct {
+  GCState gcstate;
+  VMProfileState profstate;
+  ValueCache vcache;
+  int cyclecount;
+} VMSharedState;
+
 struct _VMState {
   VMState *parent;
+  
+  VMSharedState *shared;
   
   Callframe *stack_ptr; int stack_len;
   Object *root;
@@ -99,13 +109,6 @@ struct _VMState {
   
   VMRunState runstate;
   char *error;
-  
-  // memory handling
-  GCState *gcstate;
-  
-  VMProfileState *profstate;
-  
-  ValueCache *vcache;
 };
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);

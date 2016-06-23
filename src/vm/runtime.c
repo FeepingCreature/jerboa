@@ -543,11 +543,8 @@ static void print_fn_recursive(VMState *state, Object *obj) {
     
     VMState substate = {0};
     substate.parent = state;
-    // TODO factor this out
     substate.root = state->root;
-    substate.gcstate = state->gcstate;
-    substate.profstate = state->profstate;
-    substate.vcache = state->vcache;
+    substate.shared = state->shared;
     
     if (fn_toString) fn_toString->fn_ptr(&substate, obj, toString_fn, NULL, 0);
     else cl_toString->base.fn_ptr(&substate, obj, toString_fn, NULL, 0);
@@ -674,7 +671,7 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   object_set(text_node, "nodeName", alloc_string_foreign(state, ""));
   object_set(text_node, "nodeType", alloc_int(state, 3));
   object_set(text_node, "attr", alloc_object(state, NULL));
-  object_set(text_node, "children", alloc_array(state, NULL, (IntObject*) state->vcache->int_zero));
+  object_set(text_node, "children", alloc_array(state, NULL, (IntObject*) state->shared->vcache.int_zero));
   
   Object *element_node = alloc_object(state, node_base);
   object_set(element_node, "nodeType", alloc_int(state, 1));
@@ -698,9 +695,7 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred,
   VMState substate = {0};
   substate.parent = state;
   substate.root = state->root;
-  substate.gcstate = state->gcstate;
-  substate.profstate = state->profstate;
-  substate.vcache = state->vcache;
+  substate.shared = state->shared;
   
   if (fn_pred) fn_pred->fn_ptr(&substate, node, pred, &node, 1);
   else cl_pred->base.fn_ptr(&substate, node, pred, &node, 1);
@@ -821,7 +816,7 @@ Object *create_root(VMState *state) {
   object_set(int_obj, "<=", alloc_fn(state, int_le_fn));
   object_set(int_obj, ">=", alloc_fn(state, int_ge_fn));
   object_set(int_obj, "parse" , alloc_fn(state, int_parse_fn));
-  state->vcache->int_zero = alloc_int(state, 0);
+  state->shared->vcache.int_zero = alloc_int(state, 0);
   
   Object *float_obj = alloc_object(state, NULL);
   float_obj->flags |= OBJ_NOINHERIT;
@@ -850,8 +845,8 @@ Object *create_root(VMState *state) {
     *false_obj = alloc_bool_uncached(state, false);
   object_set(root, "true", true_obj);
   object_set(root, "false", false_obj);
-  state->vcache->bool_false = false_obj;
-  state->vcache->bool_true = true_obj;
+  state->shared->vcache.bool_false = false_obj;
+  state->shared->vcache.bool_true = true_obj;
   
   object_set(root, "null", NULL);
   

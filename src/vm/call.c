@@ -6,8 +6,6 @@
 #include "dump.h"
 #include "util.h"
 
-int cyclecount = 0;
-
 #define UNLIKELY(X) __builtin_expect(X, 0)
 
 Callframe *vm_alloc_frame(VMState *state, int slots) {
@@ -93,12 +91,12 @@ void vm_print_backtrace(VMState *state) {
 
 static void vm_record_profile(VMState *state) {
   struct timespec prof_time;
-  long long ns_diff = get_clock_and_difference(&prof_time, &state->profstate->last_prof_time);
+  long long ns_diff = get_clock_and_difference(&prof_time, &state->shared->profstate.last_prof_time);
   if (ns_diff > sample_stepsize) {
-    state->profstate->last_prof_time = prof_time;
+    state->shared->profstate.last_prof_time = prof_time;
     
-    HashTable *direct_tbl = &state->profstate->direct_table;
-    HashTable *indirect_tbl = &state->profstate->indirect_table;
+    HashTable *direct_tbl = &state->shared->profstate.direct_table;
+    HashTable *indirect_tbl = &state->shared->profstate.indirect_table;
     
     VMState *curstate = state;
     // fprintf(stderr, "generate backtrace\n");
@@ -121,7 +119,7 @@ static void vm_record_profile(VMState *state) {
           else (*(int*) freeptr) = 1;
         } else {
           // don't double-count ranges in case of recursion
-          bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
+          bool range_already_counted = instr->belongs_to->last_cycle_seen == state->shared->cyclecount;
           
           if (!range_already_counted) {
             void **freeptr;
@@ -130,7 +128,7 @@ static void vm_record_profile(VMState *state) {
             else (*(int*) freeptr) = 1;
           }
         }
-        instr->belongs_to->last_cycle_seen = cyclecount;
+        instr->belongs_to->last_cycle_seen = state->shared->cyclecount;
       }
       curstate = curstate->parent;
     }
@@ -145,9 +143,9 @@ static void vm_step(VMState *state) {
   Object *root = state->root;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
-  cyclecount ++;
-  if (UNLIKELY(state->profstate && cyclecount > state->profstate->next_prof_check)) {
-    state->profstate->next_prof_check = cyclecount + 1021;
+  state->shared->cyclecount ++;
+  if (UNLIKELY(state->shared->cyclecount > state->shared->profstate.next_prof_check)) {
+    state->shared->profstate.next_prof_check = state->shared->cyclecount + 1021;
     vm_record_profile(state);
   }
   Instr *instr = cf->instr_ptr;
@@ -228,9 +226,7 @@ static void vm_step(VMState *state) {
           VMState substate = {0};
           substate.parent = state;
           substate.root = state->root;
-          substate.gcstate = state->gcstate;
-          substate.profstate = state->profstate;
-          substate.vcache = state->vcache;
+          substate.shared = state->shared;
           
           if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
           else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
@@ -371,7 +367,7 @@ static void vm_step(VMState *state) {
       AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) instr;
       int target_slot = alloc_array_obj_instr->target_slot;
       VM_ASSERT(target_slot < cf->slots_len, "slot numbering error");
-      Object *obj = alloc_array(state, NULL, (IntObject*) state->vcache->int_zero);
+      Object *obj = alloc_array(state, NULL, (IntObject*) state->shared->vcache.int_zero);
       cf->slots_ptr[target_slot] = obj;
       next_instr = (Instr*)(alloc_array_obj_instr + 1);
     } break;
@@ -421,7 +417,7 @@ static void vm_step(VMState *state) {
       // form args array from slots
       
       Object **args;
-      if (args_length < 10) { args = state->vcache->args_prealloc[args_length]; }
+      if (args_length < 10) { args = state->shared->vcache.args_prealloc[args_length]; }
       else { args = malloc(sizeof(Object*) * args_length); }
       
       for (int i = 0; i < args_length; ++i) {
@@ -513,9 +509,9 @@ void vm_run(VMState *state) {
   state->runstate = VM_RUNNING;
   state->error = NULL;
   // TODO move to state init
-  if (!state->vcache->args_prealloc) {
-    state->vcache->args_prealloc = malloc(sizeof(Object**) * 10);
-    for (int i = 0; i < 10; ++i) { state->vcache->args_prealloc[i] = malloc(sizeof(Object*) * i); }
+  if (!state->shared->vcache.args_prealloc) {
+    state->shared->vcache.args_prealloc = malloc(sizeof(Object**) * 10);
+    for (int i = 0; i < 10; ++i) { state->shared->vcache.args_prealloc[i] = malloc(sizeof(Object*) * i); }
   }
   // this should, frankly, really be done in vm_step
   // but meh, it's faster to only do it once
