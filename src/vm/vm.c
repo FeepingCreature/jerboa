@@ -145,10 +145,6 @@ static void vm_step(VMState *state) {
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
   state->shared->cyclecount ++;
-  if (UNLIKELY(state->shared->cyclecount > state->shared->profstate.next_prof_check)) {
-    state->shared->profstate.next_prof_check = state->shared->cyclecount + 1021;
-    vm_record_profile(state);
-  }
   Instr *instr = cf->instr_ptr;
   Instr *next_instr = NULL;
   switch (instr->type) {
@@ -496,6 +492,10 @@ static void vm_step(VMState *state) {
       break;
   }
   if (state->runstate == VM_ERRORED) return;
+  if (UNLIKELY(state->shared->cyclecount > state->shared->profstate.next_prof_check)) {
+    state->shared->profstate.next_prof_check = state->shared->cyclecount + 1021;
+    vm_record_profile(state);
+  }
   // printf("change %p (%i) to %p; %li when instr had %i\n", (void*) cf->instr_ptr, cf->instr_ptr->type, (void*) next_instr, (char*) next_instr - (char*) cf->instr_ptr, instr_size(cf->instr_ptr));
   cf->instr_ptr = next_instr;
 }
