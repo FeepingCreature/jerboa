@@ -29,18 +29,35 @@ static int ref_access(FunctionBuilder *builder, RefValue rv) {
 }
 
 static void ref_assign(FunctionBuilder *builder, RefValue rv, int value) {
+  if (!builder) return;
   assert(rv.key != -1);
   addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_PLAIN);
 }
 
 static void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value) {
+  if (!builder) return;
   assert(rv.key != -1);
   addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_EXISTING);
 }
 
 static void ref_assign_shadowing(FunctionBuilder *builder, RefValue rv, int value) {
+  if (!builder) return;
   assert(rv.key != -1);
   addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_SHADOWING);
+}
+
+// note: lexical scopes don't create new vm scopes, variable declarations do
+// however, lexical scopes reset the "active scope" at the end
+// (this is important, because it allows us to close the active
+//  scope immediately after the variable declaration, allowing optimization later)
+
+// IMPORTANT: because this is pure, you do NOT need to call end_lex_scope before returning errors!
+static int begin_lex_scope(FunctionBuilder *builder) {
+  return builder->scope;
+}
+
+static void end_lex_scope(FunctionBuilder *builder, int backup) {
+  builder->scope = backup;
 }
 
 /*
@@ -662,25 +679,6 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   return PARSE_OK;
 }
 
-static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRange *keywd_range) {
-  RefValue ret_value;
-  ParseResult res = parse_expr(textp, builder, 0, &ret_value);
-  if (res == PARSE_ERROR) return res;
-  assert(res == PARSE_OK);
-  
-  use_range_start(builder, keywd_range);
-  int value = ref_access(builder, ret_value);
-  if (!eat_string(textp, ";")) {
-    use_range_end(builder, keywd_range);
-    log_parser_error(*textp, "semicolon expected");
-    return PARSE_ERROR;
-  }
-  addinstr_return(builder, value);
-  new_block(builder);
-  use_range_end(builder, keywd_range);
-  return PARSE_OK;
-}
-
 static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRange *var_range) {
   char *text = *textp;
   // allocate the new scope immediately, so that the variable
@@ -731,11 +729,160 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     return parse_vardecl(textp, builder, var_range);
   }
   
-  if (!eat_string(&text, ";")) {
-    log_parser_error(text, "';' expected to close 'var' decl");
+  *textp = text;
+  return PARSE_OK;
+}
+
+static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
+  char *text2 = *textp;
+  RefValue rv;
+  ParseResult res = parse_expr_base(&text2, NULL, &rv); // speculative
+  if (res != PARSE_OK) return PARSE_NONE;
+  if (!eat_string(&text2, "=")) return PARSE_NONE;
+  
+  // discard text2, redo with non-null builder
+  char *text = *textp;
+  res = parse_expr_base(&text, builder, &rv);
+  assert(res == PARSE_OK);
+  FileRange *assign_range = alloc_and_record_start(text);
+  if (!eat_string(&text, "=")) assert(false); // Internal inconsistency
+  record_end(text, assign_range);
+  
+  RefValue value_expr;
+  res = parse_expr(&text, builder, 0, &value_expr);
+  if (res == PARSE_ERROR) {
+    free(assign_range);
+    return res;
+  }
+  assert(res == PARSE_OK);
+  
+  use_range_start(builder, assign_range);
+  int value = ref_access(builder, value_expr);
+  
+  switch (rv.mode) {
+    case REFMODE_NONE:
+      use_range_end(builder, assign_range);
+      free(assign_range);
+      log_parser_error(text, "cannot assign to non-reference expression!");
+      return PARSE_ERROR;
+    case REFMODE_VARIABLE: ref_assign_existing(builder, rv, value); break;
+    case REFMODE_OBJECT: ref_assign_shadowing(builder, rv, value); break;
+    case REFMODE_INDEX: ref_assign(builder, rv, value); break;
+    default: assert(false);
+  }
+  
+  use_range_end(builder, assign_range);
+  
+  *textp = text;
+  return PARSE_OK;
+}
+
+static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *range) {
+  char *text = *textp;
+  if (!eat_string(&text, "(")) {
+    log_parser_error(text, "'for' expected opening paren");
     return PARSE_ERROR;
   }
+  
+  // variable is out of scope after the loop
+  int scope_backup = begin_lex_scope(builder);
+  
+  FileRange *decl_range = alloc_and_record_start(text);
+  if (eat_keyword(&text, "var")) {
+    ParseResult res = parse_vardecl(&text, builder, decl_range);
+    if (res == PARSE_ERROR) return res;
+    assert(res == PARSE_OK);
+  } else {
+    ParseResult res = parse_assign(&text, builder);
+    if (res == PARSE_ERROR) return res;
+    assert(res == PARSE_OK);
+  }
+  
+  if (!eat_string(&text, ";")) {
+    log_parser_error(text, "'for' expected semicolon");
+    return PARSE_ERROR;
+  }
+  
+  use_range_start(builder, range);
+  IntVarRef test_blk;
+  addinstr_branch(builder, &test_blk);
+  int test_blk_idx = new_block(builder);
+  set_int_var(builder, test_blk, test_blk_idx);
+  use_range_end(builder, range);
+  
+  IntVarRef loop_blk, end_blk;
+  
+  RefValue test_expr;
+  ParseResult res = parse_expr(&text, builder, 0, &test_expr);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
+  
+  if (!eat_string(&text, ";")) {
+    log_parser_error(text, "'for' expected semicolon");
+    return PARSE_ERROR;
+  }
+  
+  char *text_step = text; // keep a text pointer to the step statement
+  {
+    // skip ahead to the loop statement
+    // TODO use parse_semicolon_statement
+    res = parse_assign(&text, NULL);
+    if (res == PARSE_ERROR) return PARSE_ERROR;
+    if (res == PARSE_NONE) {
+      log_parser_error(text, "'for' expected assignment");
+      return PARSE_ERROR;
+    }
+    assert(res == PARSE_OK);
+    if (!eat_string(&text, ")")) {
+      log_parser_error(text, "'for' expected closing paren");
+      return PARSE_ERROR;
+    }
+  }
+  
+  use_range_start(builder, range);
+  int testslot = ref_access(builder, test_expr);
+
+  addinstr_test_branch(builder, testslot, &loop_blk, &end_blk);
+  use_range_end(builder, range);
+  
+  // begin loop body
+  set_int_var(builder, loop_blk, new_block(builder));
+  parse_block(&text, builder);
+  
+  res = parse_assign(&text_step, builder);
+  assert(res == PARSE_OK); // what? this already worked above...
+  
+  use_range_start(builder, range);
+  IntVarRef test_blk2;
+  addinstr_branch(builder, &test_blk2);
+  set_int_var(builder, test_blk2, test_blk_idx);
+  
+  use_range_end(builder, range);
+  
+  set_int_var(builder, end_blk, new_block(builder));
+  
+  end_lex_scope(builder, scope_backup);
+  
   *textp = text;
+  return PARSE_OK;
+}
+
+static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRange *keywd_range) {
+  RefValue ret_value;
+  ParseResult res = parse_expr(textp, builder, 0, &ret_value);
+  if (res == PARSE_ERROR) return res;
+  assert(res == PARSE_OK);
+  
+  use_range_start(builder, keywd_range);
+  int value = ref_access(builder, ret_value);
+  if (!eat_string(textp, ";")) {
+    use_range_end(builder, keywd_range);
+    log_parser_error(*textp, "semicolon expected");
+    return PARSE_ERROR;
+  }
+  addinstr_return(builder, value);
+  new_block(builder);
+  use_range_end(builder, keywd_range);
   return PARSE_OK;
 }
 
@@ -773,8 +920,15 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
   }
   if (eat_keyword(&text, "var")) {
     record_end(text, keyword_range);
+    ParseResult res = parse_vardecl(&text, builder, keyword_range);
+    if (res == PARSE_ERROR) return PARSE_ERROR;
+    assert(res == PARSE_OK);
+    if (!eat_string(&text, ";")) {
+      log_parser_error(text, "';' expected to close 'var' decl");
+      return PARSE_ERROR;
+    }
     *textp = text;
-    return parse_vardecl(textp, builder, keyword_range);
+    return PARSE_OK;
   }
   if (eat_keyword(&text, "function")) {
     record_end(text, keyword_range);
@@ -786,52 +940,21 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     *textp = text;
     return parse_while(textp, builder, keyword_range);
   }
+  if (eat_keyword(&text, "for")) {
+    record_end(text, keyword_range);
+    *textp = text;
+    return parse_for(textp, builder, keyword_range);
+  }
   {
-    char *text2 = text;
-    RefValue rv;
-    ParseResult res = parse_expr_base(&text2, NULL, &rv); // speculative
-    if (res == PARSE_ERROR) return res;
-    
-    if (res == PARSE_OK && eat_string(&text2, "=")) {
-      // discard text2, redo with non-null builder
-      res = parse_expr_base(&text, builder, &rv);
-      assert(res == PARSE_OK);
-      FileRange *assign_range = alloc_and_record_start(text);
-      if (!eat_string(&text, "=")) assert(false); // Internal inconsistency
-      record_end(text, assign_range);
-      
-      RefValue value_expr;
-      res = parse_expr(&text, builder, 0, &value_expr);
-      if (res == PARSE_ERROR) {
-        free(assign_range);
-        return res;
-      }
-      assert(res == PARSE_OK);
-      
-      use_range_start(builder, assign_range);
-      int value = ref_access(builder, value_expr);
-      
-      switch (rv.mode) {
-        case REFMODE_NONE:
-          use_range_end(builder, assign_range);
-          free(assign_range);
-          log_parser_error(text, "cannot assign to non-reference expression!");
-          return PARSE_ERROR;
-        case REFMODE_VARIABLE: ref_assign_existing(builder, rv, value); break;
-        case REFMODE_OBJECT: ref_assign_shadowing(builder, rv, value); break;
-        case REFMODE_INDEX: ref_assign(builder, rv, value); break;
-        default: assert(false);
-      }
-      
-      use_range_end(builder, assign_range);
-      
+    ParseResult res = parse_assign(&text, builder);
+    if (res == PARSE_OK) {
       if (!eat_string(&text, ";")) {
         log_parser_error(text, "';' expected to close assignment");
         return PARSE_ERROR;
       }
       *textp = text;
-      return PARSE_OK;
     }
+    if (res == PARSE_OK || res == PARSE_ERROR) return res;
   }
   {
     // expr as statement
@@ -851,15 +974,10 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
   return PARSE_ERROR;
 }
 
-// note: blocks don't open new scopes, variable declarations do
-// however, blocks reset the "active scope" at the end
-// (this is important, because it allows us to close the active
-//  scope after the variable declaration, allowing optimization later)
-
 static ParseResult parse_block(char **textp, FunctionBuilder *builder) {
   char *text = *textp;
   
-  int scope_backup = builder->scope;
+  int scope_backup = begin_lex_scope(builder);
   ParseResult res;
   
   if (eat_string(&text, "{")) {
@@ -875,7 +993,7 @@ static ParseResult parse_block(char **textp, FunctionBuilder *builder) {
   }
   
   *textp = text;
-  builder->scope = scope_backup;
+  end_lex_scope(builder, scope_backup);
   return PARSE_OK;
 }
 

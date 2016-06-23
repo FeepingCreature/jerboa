@@ -5,24 +5,18 @@ puts("Hello World from libffi!");
 
 function print_xml(node, depth) {
   var spacing = "";
-  var i = 0;
-  while (i < depth) {
+  for (var i = 0; i < depth; i = i + 1) {
     spacing = spacing + "  ";
-    i = i + 1;
   }
   if (node.nodeType == 1) {
     var attrs = "";
     var attr_names = keys(node.attr);
-    i = 0;
-    while (i < attr_names.length) {
+    for (var i = 0; i < attr_names.length; i = i + 1) {
       attrs = attrs + " " + attr_names[i]+"='"+node.attr[attr_names[i]]+"'";
-      i = i + 1;
     }
     print(spacing, "<", node.nodeName, attrs, ">");
-    i = 0;
-    while (i < node.children.length) {
+    for (var i = 0; i < node.children.length; i = i + 1) {
       print_xml(node.children[i], depth + 1);
-      i = i + 1;
     }
     print(spacing, "</", node.nodeName, ">");
   }
@@ -32,17 +26,13 @@ xml.node["toString"] = method() {
     var res = "";
     var attrs = "";
     var attr_names = keys(this.attr);
-    var i = 0;
-    while (i < attr_names.length) {
+    for (var i = 0; i < attr_names.length; i = i + 1) {
       attrs = attrs + " " + attr_names[i]+"='"+this.attr[attr_names[i]]+"'";
-      i = i + 1;
     }
     res = res + "<"+this.nodeName+attrs+">";
-    i = 0;
-    while (i < this.children.length) {
+    for (var i = 0; i < this.children.length; i = i + 1) {
       var str = this.children[i].toString();
       if (str) res = res + str;
-      i = i + 1;
     }
     res = res + "</" + this.nodeName + ">";
     return res;
@@ -55,15 +45,11 @@ var XmlResults = {
   "[]": method(i) { return this.array[i]; },
   combine: method(res2) {
     var array2 = [];
-    var i = 0;
-    while (i < this.array.length) {
+    for (var i = 0; i < this.array.length; i = i + 1) {
       array2.push(this.array[i]);
-      i = i + 1;
     }
-    i = 0;
-    while (i < res2.array.length) {
+    for (var i = 0; i < res2.array.length; i = i + 1) {
       array2.push(res2.array[i]);
-      i = i + 1;
     }
     return new XmlResults {
       array: array2,
@@ -72,11 +58,9 @@ var XmlResults = {
   },
   filter: method(pred) {
     var res = [];
-    var i = 0;
-    while (i < this.array.length) {
+    for (var i = 0; i < this.array.length; i = i + 1) {
       var entry = this.array[i];
       if (pred(entry)) res.push(entry);
-      i = i + 1;
     }
     return new XmlResults {
       array: res,
@@ -85,16 +69,12 @@ var XmlResults = {
   },
   children: method(pred) {
     var res = [];
-    var i = 0;
-    while (i < this.array.length) {
+    for (var i = 0; i < this.array.length; i = i + 1) {
       var entry = this.array[i];
-      var k = 0;
-      while (k < entry.children.length) {
+      for (var k = 0; k < entry.children.length; k = k + 1) {
         var child = entry.children[k];
         if (pred(child)) res.push(child);
-        k = k + 1;
       }
-      i = i + 1;
     }
     return new XmlResults {
       array: res,
@@ -103,10 +83,8 @@ var XmlResults = {
   },
   find: method(pred) {
     var res = new XmlResults;
-    var i = 0;
-    while (i < this.array.length) {
+    for (var i = 0; i < this.array.length; i = i + 1) {
       res = res.combine(this.array[i].find(pred));
-      i = i + 1;
     }
     return res;
   },
@@ -136,15 +114,13 @@ function getAttr(node, name) {
     if (i == children.length) { print("fail"); (1/0); }
   }
   var attrs = children[i].children;
-  i = 0;
-  while (i < attrs.length) {
+  for (var i = 0; i < attrs.length; i = i + 1) {
     var attr = attrs[i];
     if (attr.nodeName == "attribute") {
       if (attr.attr["name"] == name) {
         return attr.attr["value"];
       }
     }
-    i = i + 1;
   }
   print("fail");
   (1/0);
@@ -163,11 +139,9 @@ function loadLibrary(xml_file, lib_file) {
   });
   print("done. ", typedefs.length);
   print("process typedefs");
-  var i = 0;
-  while (i < typedefs.length) {
+  for (var i = 0; i < typedefs.length; i = i + 1) {
     var typedef = typedefs[i];
     global_typemap[getAttr(typedef, "name")] = getAttr(typedef, "type");
-    i = i + 1;
   }
   print("done.");
   function xml_type_to_ffi(type) {
@@ -210,9 +184,8 @@ function loadLibrary(xml_file, lib_file) {
     return getAttr(node, "kind") == "function";
   });
   print("done.");
-  i = 0;
   print("parse ", fndecls.length, " fn decls");
-  while (i < fndecls.length) {
+  for (var i = 0; i < fndecls.length; i = i + 1) {
     var decl = fndecls[i];
     // print("? ", getAttr(decl, "name"));
     var ret_type;
@@ -222,9 +195,8 @@ function loadLibrary(xml_file, lib_file) {
     if (ret_type) {
       var parms = decl.findByName("parm");
       var par_types = [];
-      var k = 0;
       var good = true;
-      while (k < parms.length) {
+      for (var k = 0; k < parms.length; k = k + 1) {
         var parm = parms[k];
         var typestr = getAttr(parm, "type");
         var skip = 0;
@@ -237,7 +209,6 @@ function loadLibrary(xml_file, lib_file) {
           }
           par_types.push(type);
         }
-        k = k + 1;
       }
       if (good) {
         var name = getAttr(decl, "name");
@@ -248,22 +219,19 @@ function loadLibrary(xml_file, lib_file) {
         } // else print("sym skip ", getAttr(decl, "name"));
       } // else print("bad skip ", getAttr(decl, "name"));
     } // else print("ret skip ", getAttr(decl, "name"));
-    i = i + 1;
   }
   print("done.");
   print("filter constants");
   var constants = xmldata.findByName("constant");
   print("done.");
-  i = 0;
   print("parse ", constants.length, " constants");
-  while (i < constants.length) {
+  for (var i = 0; i < constants.length; i = i + 1) {
     var constant = constants[i];
     var name = getAttr(constant, "name");
     var value = getAttr(constant, "value");
     value = int.parse(value);
     // print("+ '", name, "'");
     obj[name] = value;
-    i = i + 1;
   }
   print("done.");
   // swig doesn't generate this properly for sdl
@@ -272,14 +240,12 @@ function loadLibrary(xml_file, lib_file) {
   var enumitems = xmldata.findByName("enumitem");
   print("done.");
   print("parse ", enumitems.length, " flags");
-  i = 0;
-  while (i < enumitems.length) {
+  for (var i = 0; i < enumitems.length; i = i + 1) {
     var enumitem = enumitems[i];
     var name = getAttr(enumitem, "name");
     var value = getAttr(enumitem, "value");
     value = int.parse(value);
     obj[name] = value;
-    i = i + 1;
   }
   print("done.");
   */
@@ -370,4 +336,6 @@ print("2 !< 2 = "+(2 !< 2));
 print("2 !> 2 = "+(2 !> 2));
 print("2 !<= 2 = "+(2 !<= 2));
 print("2 !>= 2 = "+(2 !>= 2));
-var i = 0; while (i < 10) { print("i = "+i); i = i + 1; }
+for (var i = 0; i < 10; i = i + 1) {
+  print("i = "+i);
+}
