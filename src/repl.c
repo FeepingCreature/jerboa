@@ -12,6 +12,7 @@
 #include "vm/call.h"
 #include "vm/runtime.h"
 #include "vm/dump.h"
+#include "vm/vm.h"
 #include "language.h"
 #include "util.h"
 

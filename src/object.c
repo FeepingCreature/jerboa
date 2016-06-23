@@ -434,4 +434,3 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
   dprintf(fd, "</body></html>");
   close(fd);
 }
-

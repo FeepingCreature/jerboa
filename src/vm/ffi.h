@@ -3,7 +3,7 @@
 
 #include <ffi.h>
 
-#include "vm/call.h"
+#include "vm/vm.h"
 
 void ffi_setup_root(VMState *state, Object *root);
 
