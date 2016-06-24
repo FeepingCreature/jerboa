@@ -69,7 +69,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *float_base = object_lookup(root, "float", NULL);
   Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
   if (fobj2) {
-    float v1 = ((IntObject*) iobj1)->value, v2 = ((IntObject*) fobj2)->value;
+    float v1 = ((IntObject*) iobj1)->value, v2 = ((FloatObject*) fobj2)->value;
     float res;
     switch (mop) {
       case MATH_ADD: res = v1 + v2; break;
