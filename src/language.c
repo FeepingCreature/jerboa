@@ -543,9 +543,25 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
 static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv) {
   char *text = *textp;
   
+  bool negate = false;
+  FileRange *neg_range = alloc_and_record_start(text);
+  if (eat_string(&text, "-")) {
+    record_end(text, neg_range);
+    negate = true;
+  } else free(neg_range);
+  
   ParseResult res = parse_expr_base(&text, builder, rv);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
+  
+  if (negate) {
+    use_range_start(builder, neg_range);
+    int zero_slot = 0;
+    if (builder) zero_slot = addinstr_alloc_int_object(builder, builder->scope, 0);
+    use_range_end(builder, neg_range);
+    RefValue zref = ref_simple(zero_slot);
+    build_op(builder, "-", rv, zref, *rv, neg_range);
+  }
   
   if (level > 2) { *textp = text; return PARSE_OK; }
   
