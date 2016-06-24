@@ -204,9 +204,13 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     else if (obj_instance_of_or_equal(type, ffi_pointer)) {
       if (i == -1) ret_ptr = data;
       else {
-        PointerObject *pobj = (PointerObject*) obj_instance_of(args_ptr[i], pointer_base);
-        VM_ASSERT(pobj, "ffi pointer argument must be pointer");
-        *(void**) data = pobj->ptr;
+        if (args_ptr[i] == NULL) {
+          *(void**) data = NULL;
+        } else {
+          PointerObject *pobj = (PointerObject*) obj_instance_of(args_ptr[i], pointer_base);
+          VM_ASSERT(pobj, "ffi pointer argument must be pointer");
+          *(void**) data = pobj->ptr;
+        }
         par_ptrs[i] = data;
       }
       data = (char*) data + ((sizeof(void*)>sizeof(long))?sizeof(void*):sizeof(long));
@@ -234,6 +238,11 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       object_set(ptr, "dereference", alloc_fn(state, ffi_ptr_dereference));
       state->result_value = ptr;
     }
+  } else if (obj_instance_of_or_equal(ret_type, ffi_float)) {
+    state->result_value = alloc_float(state, *(float*) ret_ptr);
+  } else if (obj_instance_of_or_equal(ret_type, ffi_double)) {
+    // TODO alloc_double?
+    state->result_value = alloc_float(state, (float) *(double*) ret_ptr);
   } else VM_ASSERT(false, "unknown return type");
 }
 

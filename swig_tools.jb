@@ -1,3 +1,4 @@
+// swig -v -includeall -ignoremissing -module [name] -outcurrentdir -xml /usr/include/[header]
 function print_xml(node, depth) {
   var spacing = "";
   for (var i = 0; i < depth; i++) {
@@ -122,7 +123,7 @@ function getAttr(node, name) {
 }
 
 var global_typemap = {};
-function loadLibrary(xml_file, lib_file) {
+function loadLibraryWithPrefix(xml_file, lib_file, prefix) {
   var xmldata = xml.load(xml_file);
   print("select decls");
   var count = 0;
@@ -141,6 +142,8 @@ function loadLibrary(xml_file, lib_file) {
   print("done.");
   function xml_type_to_ffi(type) {
     // print("  debug: ", type);
+    if (type == "p.char") return ffi.char_pointer;
+    if (type == "p.q(const).char") return ffi.char_pointer;
     if (type.startsWith("a(")) return null;
     if (type.startsWith("q(const).")) type = type.startsWith("q(const).");
     if (type.startsWith("p.")) return ffi.pointer;
@@ -210,6 +213,7 @@ function loadLibrary(xml_file, lib_file) {
         var sym = library.sym(name, ret_type, par_types);
         if (sym) {
           // print("+ ", name);
+          if (name.startsWith(prefix)) name = name.startsWith(prefix);
           obj[name] = sym;
         } // else print("sym skip ", getAttr(decl, "name"));
       } // else print("bad skip ", getAttr(decl, "name"));
@@ -226,6 +230,7 @@ function loadLibrary(xml_file, lib_file) {
     var value = getAttr(constant, "value");
     value = int.parse(value);
     // print("+ '", name, "'");
+    if (name.startsWith(prefix)) name = name.startsWith(prefix);
     obj[name] = value;
   }
   print("done.");
@@ -245,4 +250,7 @@ function loadLibrary(xml_file, lib_file) {
   print("done.");
   */
   return obj;
+}
+function loadLibrary(xml_file, lib_file) {
+  return loadLibraryWithPrefix(xml_file, lib_file, "");
 }
