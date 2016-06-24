@@ -16,14 +16,23 @@ typedef struct {
   int base;
   int key;
   RefMode mode;
+  FileRange *range;
 } RefValue;
 
 static ParseResult parse_function_expr(char **textp, UserFunction **uf);
 
+static RefValue ref_simple(int slot) {
+  return (RefValue) { slot, -1, REFMODE_NONE, NULL };
+}
+
 static int ref_access(FunctionBuilder *builder, RefValue rv) {
   if (!builder) return 0; // happens when speculatively parsing
   if (rv.key != -1) {
-    return addinstr_access(builder, rv.base, rv.key);
+    bool use_range = builder->current_range != rv.range;
+    if (use_range) use_range_start(builder, rv.range);
+    int res = addinstr_access(builder, rv.base, rv.key);
+    if (use_range) use_range_end(builder, rv.range);
+    return res;
   }
   return rv.base;
 }
@@ -72,9 +81,10 @@ static void end_lex_scope(FunctionBuilder *builder, int backup) {
 static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
-  if (!builder) return (RefValue) {0, -1, REFMODE_VARIABLE};
+  if (!builder) return (RefValue) {0, -1, REFMODE_VARIABLE, NULL};
+  assert(builder->current_range);
   int name_slot = addinstr_alloc_string_object(builder, builder->scope, name);
-  return (RefValue) {builder->scope, name_slot, REFMODE_VARIABLE};
+  return (RefValue) {builder->scope, name_slot, REFMODE_VARIABLE, builder->current_range};
 }
 
 static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *builder, int obj_slot) {
@@ -103,9 +113,10 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     assert(res == PARSE_OK);
     
     if (builder) {
+      int value_slot = ref_access(builder, value);
+      
       use_range_start(builder, add_entry_range);
       int key_slot = addinstr_alloc_string_object(builder, builder->scope, key_name);
-      int value_slot = ref_access(builder, value);
       addinstr_assign(builder, obj_slot, key_slot, value_slot, ASSIGN_PLAIN);
       use_range_end(builder, add_entry_range);
     }
@@ -132,7 +143,7 @@ static ParseResult parse_object_literal(char **textp, FunctionBuilder *builder, 
   if (builder) obj_slot = addinstr_alloc_object(builder, builder->slot_base++ /*null slot*/);
   use_range_end(builder, range);
   *textp = text;
-  *rv_p = (RefValue) {obj_slot, -1, REFMODE_NONE};
+  *rv_p = ref_simple(obj_slot);
   
   ParseResult res = parse_object_literal_body(textp, builder, obj_slot);
   record_end(text, range);
@@ -162,13 +173,16 @@ static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *build
     use_range_start(builder, range);
     int keyslot1 = addinstr_alloc_string_object(builder, builder->scope, "resize");
     int keyslot2 = addinstr_alloc_string_object(builder, builder->scope, "[]=");
-    int resizefn = ref_access(builder, (RefValue) {obj_slot, keyslot1, REFMODE_OBJECT});
-    int assignfn = ref_access(builder, (RefValue) {obj_slot, keyslot2, REFMODE_OBJECT});
+    int resizefn = ref_access(builder, (RefValue) {obj_slot, keyslot1, REFMODE_OBJECT, range});
+    int assignfn = ref_access(builder, (RefValue) {obj_slot, keyslot2, REFMODE_OBJECT, range});
     int newsize_slot = addinstr_alloc_int_object(builder, builder->scope, values_len);
     obj_slot = addinstr_call1(builder, resizefn, obj_slot, newsize_slot);
     for (int i = 0; i < values_len; ++i) {
       int index_slot = addinstr_alloc_int_object(builder, builder->scope, i);
-      addinstr_call2(builder, assignfn, obj_slot, index_slot, ref_access(builder, values_ptr[i]));
+      use_range_end(builder, range);
+      int value_slot = ref_access(builder, values_ptr[i]);
+      use_range_start(builder, range);
+      addinstr_call2(builder, assignfn, obj_slot, index_slot, value_slot);
     }
     use_range_end(builder, range);
   }
@@ -188,7 +202,7 @@ static ParseResult parse_array_literal(char **textp, FunctionBuilder *builder, R
   use_range_start(builder, lit_range);
   if (builder) obj_slot = addinstr_alloc_array_object(builder, builder->scope);
   *textp = text;
-  *rv_p = (RefValue) {obj_slot, -1, REFMODE_NONE};
+  *rv_p = ref_simple(obj_slot);
   use_range_end(builder, lit_range);
   
   ParseResult res = parse_array_literal_body(textp, builder, obj_slot, lit_range);
@@ -221,7 +235,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
       slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
       use_range_end(builder, range);
     }
-    *rv = (RefValue) {slot, -1, REFMODE_NONE};
+    *rv = ref_simple(slot);
     return PARSE_OK;
   }
   
@@ -235,7 +249,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
       slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
       use_range_end(builder, range);
     }
-    *rv = (RefValue) {slot, -1, REFMODE_NONE};
+    *rv = ref_simple(slot);
     return PARSE_OK;
   }
   
@@ -253,7 +267,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
         use_range_end(builder, range);
       }
     }
-    *rv = (RefValue) {slot, -1, REFMODE_NONE};
+    *rv = ref_simple(slot);
     return res;
   }
   
@@ -302,7 +316,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
       slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
       use_range_end(builder, range);
     }
-    *rv = (RefValue) {slot, -1, REFMODE_NONE};
+    *rv = ref_simple(slot);
     return PARSE_OK;
   }
   
@@ -314,9 +328,9 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
-    use_range_start(builder, range);
     int parent_slot = ref_access(builder, parent_var);
     int obj_slot = 0;
+    use_range_start(builder, range);
     if (builder) obj_slot = addinstr_alloc_object(builder, parent_slot);
     use_range_end(builder, range);
     
@@ -326,7 +340,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
       if (res == PARSE_ERROR) return res;
       assert(res == PARSE_OK);
     }
-    *rv = (RefValue) {obj_slot, -1, REFMODE_NONE};
+    *rv = ref_simple(obj_slot);
     return PARSE_OK;
   }
   free(range);
@@ -358,12 +372,8 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
-    use_range_start(builder, call_range);
-    int slot = ref_access(builder, arg);
-    use_range_end(builder, call_range);
-    
     args_ptr = realloc(args_ptr, sizeof(int) * ++args_len);
-    args_ptr[args_len - 1] = slot;
+    args_ptr[args_len - 1] = ref_access(builder, arg);
   }
   
   record_end(text, call_range);
@@ -374,13 +384,11 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
     if (expr->key) this_slot = expr->base;
     else this_slot = builder->slot_base++; /* null slot */
     
+    int expr_slot = ref_access(builder, *expr);
+    
     // use_range_start(builder, call_range);
     use_range_start(builder, expr_range);
-    *expr = (RefValue) {
-      addinstr_call(builder, ref_access(builder, *expr), this_slot, args_ptr, args_len),
-      -1,
-      REFMODE_NONE
-    };
+    *expr = ref_simple(addinstr_call(builder, expr_slot, this_slot, args_ptr, args_len));
     // use_range_end(builder, call_range);
     use_range_end(builder, expr_range);
   }
@@ -407,13 +415,12 @@ static ParseResult parse_array_access(char **textp, FunctionBuilder *builder, Re
   }
   record_end(text, access_range);
   
-  use_range_start(builder, access_range);
-  int key_slot = ref_access(builder, key);
-  
   *textp = text;
   
-  *expr = (RefValue) {ref_access(builder, *expr), key_slot, REFMODE_INDEX};
-  use_range_end(builder, access_range);
+  int key_slot = ref_access(builder, key);
+  int expr_slot = ref_access(builder, *expr);
+  
+  *expr = (RefValue) {expr_slot, key_slot, REFMODE_INDEX, access_range};
   
   return PARSE_OK;
 }
@@ -431,10 +438,12 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
   record_end(text, prop_range);
   *textp = text;
   
+  int expr_slot = 0;
   int key_slot = 0;
+  if (builder) expr_slot = ref_access(builder, *expr);
   use_range_start(builder, prop_range);
   if (builder) key_slot = addinstr_alloc_string_object(builder, builder->scope, keyname);
-  *expr = (RefValue) {ref_access(builder, *expr), key_slot, REFMODE_OBJECT};
+  *expr = (RefValue) {expr_slot, key_slot, REFMODE_OBJECT, prop_range};
   use_range_end(builder, prop_range);
   
   return PARSE_OK;
@@ -442,11 +451,11 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
 
 void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs_expr, RefValue rhs_expr, FileRange *range) {
   if (builder) {
-    use_range_start(builder, range);
     int lhs_value = ref_access(builder, lhs_expr);
     int rhs_value = ref_access(builder, rhs_expr);
+    use_range_start(builder, range);
     int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, op));
-    *res_rv = (RefValue) { addinstr_call1(builder, fn, lhs_value, rhs_value), -1, REFMODE_NONE };
+    *res_rv = ref_simple(addinstr_call1(builder, fn, lhs_value, rhs_value));
     use_range_end(builder, range);
   }
 }
@@ -478,29 +487,31 @@ static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefV
   
   record_end(text, op_range);
   
-  use_range_start(builder, op_range);
   int prev_slot = 0, one_slot = 0;
   if (builder) {
     prev_slot = ref_access(builder, *rv);
+    use_range_start(builder, op_range);
     one_slot = addinstr_alloc_int_object(builder, builder->scope, 1);
+    use_range_end(builder, op_range);
   }
-  use_range_end(builder, op_range);
   
   RefValue sum;
-  build_op(builder, op, &sum, *rv, (RefValue) {one_slot, -1, REFMODE_NONE}, op_range);
+  build_op(builder, op, &sum, *rv, ref_simple(one_slot), op_range);
   use_range_start(builder, op_range);
   if (!assign_value(builder, *rv, ref_access(builder, sum), op_range)) {
     log_parser_error(*textp, "post-inc/dec cannot assign to non-reference expression!");
     return PARSE_ERROR;
   }
   *textp = text;
-  *rv = (RefValue) {prev_slot, -1, REFMODE_NONE};
+  *rv = ref_simple(prev_slot);
   return PARSE_OK;
 }
 
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv) {
-  FileRange *expr_range = alloc_and_record_start(*textp);
-  ParseResult res = parse_expr_stem(textp, builder, rv);
+  char *text = *textp;
+  
+  FileRange *expr_range = alloc_and_record_start(text);
+  ParseResult res = parse_expr_stem(&text, builder, rv);
   if (res == PARSE_ERROR) {
     free(expr_range);
     return PARSE_ERROR;
@@ -508,17 +519,19 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
   assert(res == PARSE_OK);
   
   while (true) {
-    record_end(*textp, expr_range);
-    if ((res = parse_cont_call(textp, builder, rv, expr_range)) == PARSE_OK) continue;
+    record_end(text, expr_range);
+    if ((res = parse_cont_call(&text, builder, rv, expr_range)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
-    if ((res = parse_prop_access(textp, builder, rv)) == PARSE_OK) continue;
+    if ((res = parse_prop_access(&text, builder, rv)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
-    if ((res = parse_array_access(textp, builder, rv)) == PARSE_OK) continue;
+    if ((res = parse_array_access(&text, builder, rv)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
-    if ((res = parse_postincdec(textp, builder, rv)) == PARSE_OK) continue;
+    if ((res = parse_postincdec(&text, builder, rv)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
     break;
   }
+  
+  *textp = text;
   return PARSE_OK;
 }
 
@@ -630,7 +643,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     use_range_start(builder, range);
     int lhs_value = ref_access(builder, *rv);
     int notfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "!"));
-    *rv = (RefValue) { addinstr_call0(builder, notfn, lhs_value), -1, REFMODE_NONE };
+    *rv = ref_simple(addinstr_call0(builder, notfn, lhs_value));
     use_range_end(builder, range);
   }
   
@@ -650,13 +663,13 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   ParseResult res = parse_expr(&text, builder, 0, &test_expr);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
-  use_range_start(builder, keywd_range);
   int testslot = ref_access(builder, test_expr);
   if (!eat_string(&text, ")")) {
     log_parser_error(text, "if expected closing paren");
     return PARSE_ERROR;
   }
   IntVarRef true_blk, false_blk, end_blk;
+  use_range_start(builder, keywd_range);
   addinstr_test_branch(builder, testslot, &true_blk, &false_blk);
   use_range_end(builder, keywd_range);
   
@@ -766,9 +779,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
-    use_range_start(builder, calc_init_expr);
     value = ref_access(builder, rv);
-    use_range_end(builder, calc_init_expr);
   }
   
   use_range_start(builder, assign_value);
@@ -820,9 +831,9 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
     build_op(builder, op, &value_expr, rv, value_expr, assign_range);
   }
   
-  use_range_start(builder, assign_range);
   int value = ref_access(builder, value_expr);
   
+  use_range_start(builder, assign_range);
   if (!assign_value(builder, rv, value, assign_range)) {
     log_parser_error(text, "cannot assign to non-reference expression!");
     return PARSE_ERROR;
@@ -929,9 +940,9 @@ static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRang
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
   
-  use_range_start(builder, keywd_range);
   int value = ref_access(builder, ret_value);
   
+  use_range_start(builder, keywd_range);
   addinstr_return(builder, value);
   new_block(builder);
   use_range_end(builder, keywd_range);
