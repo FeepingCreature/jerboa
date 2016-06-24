@@ -11,15 +11,16 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-static void my_asprintf(char **outp, char *fmt, ...) {
+static char *my_asprintf(char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   int len = vsnprintf(NULL, 0, fmt, ap);
-  *outp = malloc(len + 1);
+  char *res = malloc(len + 1);
   va_end(ap);
   va_start(ap, fmt);
-  vsnprintf(*outp, len + 1, fmt, ap);
+  vsnprintf(res, len + 1, fmt, ap);
   va_end(ap);
+  return res;
 }
 
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -184,13 +185,12 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
   VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
   
   char *str1 = ((StringObject*) sobj1)->value, *str2;
-  if (sobj2) my_asprintf(&str2, "%s", ((StringObject*) sobj2)->value);
-  else if (fobj2) my_asprintf(&str2, "%f", ((FloatObject*) fobj2)->value);
-  else if (iobj2) my_asprintf(&str2, "%i", ((IntObject*) iobj2)->value);
-  else if (bobj2) if (((BoolObject*)bobj2)->value) my_asprintf(&str2, "%s", "true"); else my_asprintf(&str2, "%s", "false");
+  if (sobj2) str2 = my_asprintf("%s", ((StringObject*) sobj2)->value);
+  else if (fobj2) str2 = my_asprintf("%f", ((FloatObject*) fobj2)->value);
+  else if (iobj2) str2 = my_asprintf("%i", ((IntObject*) iobj2)->value);
+  else if (bobj2) if (((BoolObject*)bobj2)->value) str2 = my_asprintf("%s", "true"); else str2 = my_asprintf("%s", "false");
   else VM_ASSERT(false, "don't know how to format object: %p", args_ptr[0]);
-  char *str3;
-  my_asprintf(&str3, "%s%s", str1, str2);
+  char *str3 = my_asprintf("%s%s", str1, str2);
   free(str2);
   state->result_value = alloc_string(state, str3, strlen(str3));
   free(str3);
@@ -790,6 +790,44 @@ static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Obje
   gc_enable(state);
 }
 
+#include "language.h"
+
+static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *string_base = object_lookup(root, "string", NULL);
+  
+  StringObject *file_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(file_obj, "parameter to require() must be string!");
+  
+  char *filename = file_obj->value;
+  
+  TextRange source = readfile(filename);
+  register_file(source, my_asprintf("%s", filename) /* dup */, 0, 0);
+  
+  UserFunction *module;
+  char *text = source.start;
+  ParseResult res = parse_module(&text, &module);
+  VM_ASSERT(res == PARSE_OK, "require() parsing failed!");
+  // dump_fn(module);
+  
+  VMState substate = {0};
+  substate.parent = state;
+  substate.root = state->root;
+  substate.shared = state->shared;
+  
+  call_function(&substate, root, module, NULL, 0);
+  vm_run(&substate);
+  
+  if (substate.runstate == VM_ERRORED) {
+    state->runstate = VM_ERRORED;
+    state->error = my_asprintf("Error during require('%s')", filename);
+    return;
+  }
+  
+  state->result_value = substate.result_value;
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -884,6 +922,8 @@ Object *create_root(VMState *state) {
   object_set(node_obj, "find_array_by_name", alloc_fn(state, xml_node_find_by_name_array_fn));
   xml_obj->flags |= OBJ_IMMUTABLE;
   object_set(root, "xml", xml_obj);
+  
+  object_set(root, "require", alloc_fn(state, require_fn));
   
   ffi_setup_root(state, root);
   
