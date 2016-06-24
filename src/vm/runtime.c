@@ -822,6 +822,8 @@ static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   if (substate.runstate == VM_ERRORED) {
     state->runstate = VM_ERRORED;
     state->error = my_asprintf("Error during require('%s')", filename);
+    state->backtrace = vm_record_backtrace(&substate, &state->backtrace_depth);
+    free(substate.backtrace);
     return;
   }
   

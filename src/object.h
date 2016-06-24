@@ -109,6 +109,7 @@ struct _VMState {
   
   VMRunState runstate;
   char *error;
+  char *backtrace; int backtrace_depth;
 };
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);

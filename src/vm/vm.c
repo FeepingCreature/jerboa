@@ -62,6 +62,7 @@ void vm_error(VMState *state, char *fmt, ...) {
   va_end(ap);
   state->runstate = VM_ERRORED;
   state->error = errorstr;
+  state->backtrace_depth = 0;
 }
 
 void vm_remove_frame(VMState *state) {
@@ -72,22 +73,46 @@ void vm_remove_frame(VMState *state) {
 }
 
 void vm_print_backtrace(VMState *state) {
-  VMState *curstate = state;
-  int k = 0;
-  while (curstate) {
-    for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
-      Callframe *curf = &curstate->stack_ptr[i];
-      Instr *instr = curf->instr_ptr;
-      
-      const char *file;
-      TextRange line;
-      int row, col;
-      bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
-      assert(found);
-      fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
-    }
-    curstate = curstate->parent;
+  int k = state->backtrace_depth;
+  if (state->backtrace) fprintf(stderr, state->backtrace);
+  for (int i = state->stack_len - 1; i >= 0; --i, ++k) {
+    Callframe *curf = &state->stack_ptr[i];
+    Instr *instr = curf->instr_ptr;
+    
+    const char *file;
+    TextRange line;
+    int row, col;
+    bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
+    assert(found);
+    fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
   }
+}
+
+char *vm_record_backtrace(VMState *state, int *depth) {
+  char *res_ptr = NULL; int res_len = 0;
+  int k = state->backtrace_depth;
+  if (state->backtrace) {
+    res_len = strlen(state->backtrace);
+    res_ptr = malloc(res_len + 1);
+    strncpy(res_ptr, state->backtrace, res_len + 1);
+  }
+  for (int i = state->stack_len - 1; i >= 0; --i, ++k) {
+    Callframe *curf = &state->stack_ptr[i];
+    Instr *instr = curf->instr_ptr;
+    
+    const char *file;
+    TextRange line;
+    int row, col;
+    bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
+    assert(found);
+    int size = snprintf(NULL, 0, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
+    res_ptr = realloc(res_ptr, res_len + size + 1);
+    snprintf(res_ptr + res_len, size + 1, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
+    res_len += size;
+  }
+  res_ptr[res_len] = 0;
+  *depth = k;
+  return res_ptr;
 }
 
 static void vm_record_profile(VMState *state) {

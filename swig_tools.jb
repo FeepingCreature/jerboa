@@ -16,7 +16,6 @@ function print_xml(node, depth) {
     print(spacing, "</", node.nodeName, ">");
   }
 }
-// var i = 0; i /= i;
 xml.node["toString"] = method() {
   if (this.nodeType == 1) {
     var res = "";
