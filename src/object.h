@@ -114,6 +114,10 @@ struct _VMState {
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);
 
+Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash, bool *key_found);
+
+#define OBJECT_LOOKUP_STRING(obj, key, key_found) object_lookup_with_hash(obj, key, strlen(key), hash(key, strlen(key)), key_found)
+
 // returns NULL on success, error string otherwise
 char *object_set_existing(Object *obj, const char *key, Object *value);
 

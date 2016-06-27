@@ -3,11 +3,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include "call.h"
-#include "dump.h"
+#include "vm/call.h"
+#include "vm/dump.h"
 #include "gc.h"
-
-#define UNLIKELY(X) __builtin_expect(X, 0)
 
 const long long sample_stepsize = 200000LL; // 0.2ms
 
@@ -74,7 +72,7 @@ void vm_remove_frame(VMState *state) {
 
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
-  if (state->backtrace) fprintf(stderr, state->backtrace);
+  if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
   for (int i = state->stack_len - 1; i >= 0; --i, ++k) {
     Callframe *curf = &state->stack_ptr[i];
     Instr *instr = curf->instr_ptr;
@@ -83,7 +81,7 @@ void vm_print_backtrace(VMState *state) {
     TextRange line;
     int row, col;
     bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
-    assert(found);
+    (void) found; assert(found);
     fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
   }
 }
@@ -104,7 +102,7 @@ char *vm_record_backtrace(VMState *state, int *depth) {
     TextRange line;
     int row, col;
     bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
-    assert(found);
+    (void) found; assert(found);
     int size = snprintf(NULL, 0, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
     res_ptr = realloc(res_ptr, res_len + size + 1);
     snprintf(res_ptr + res_len, size + 1, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
@@ -140,7 +138,7 @@ static void vm_record_profile(VMState *state) {
         
         if (k == 0) {
           void **freeptr;
-          void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_hash, key_ptr, key_len, &freeptr);
+          void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
           if (entry_p) (*(int*) entry_p) ++;
           else (*(int*) freeptr) = 1;
         } else {
@@ -149,7 +147,7 @@ static void vm_record_profile(VMState *state) {
           
           if (!range_already_counted) {
             void **freeptr;
-            void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_hash, key_ptr, key_len, &freeptr);
+            void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
             if (entry_p) (*(int*) entry_p) ++;
             else (*(int*) freeptr) = 1;
           }
@@ -169,7 +167,7 @@ static void vm_step(VMState *state) {
   Object *root = state->root;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   
-  state->shared->cyclecount ++;
+  int next_cyclecount = state->shared->cyclecount + 1;
   Instr *instr = cf->instr_ptr;
   Instr *next_instr = NULL;
   switch (instr->type) {
@@ -187,6 +185,7 @@ static void vm_step(VMState *state) {
       cf->slots_ptr[slot] = cf->context;
       next_instr = (Instr*)(get_context_instr + 1);
     } break;
+    // TODO split into two cases, move shared code into static function
     case INSTR_ACCESS: case INSTR_ACCESS_STRING_KEY: {
       AccessInstr *access_instr = (AccessInstr*) instr;
       AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
@@ -516,6 +515,7 @@ static void vm_step(VMState *state) {
       VM_ASSERT(false, "unknown instruction: %i\n", instr->type);
       break;
   }
+  state->shared->cyclecount = next_cyclecount;
   if (state->runstate == VM_ERRORED) return;
   if (UNLIKELY(state->shared->cyclecount > state->shared->profstate.next_prof_check)) {
     state->shared->profstate.next_prof_check = state->shared->cyclecount + 1021;

@@ -60,7 +60,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
         VM_ASSERT(i2 != 0, "division by zero");
         res = i1 / i2;
         break;
-      default: assert(false);
+      default: abort();
     }
     state->result_value = alloc_int(state, res);
     return;
@@ -79,7 +79,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
         VM_ASSERT(v2 != 0.0f, "float division by zero");
         res = v1 / v2;
         break;
-      default: assert(false);
+      default: abort();
     }
     state->result_value = alloc_float(state, res);
     return;
@@ -144,7 +144,7 @@ static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **
       case MATH_SUB: res = v1 - v2; break;
       case MATH_MUL: res = v1 * v2; break;
       case MATH_DIV: res = v1 / v2; break;
-      default: assert(false);
+      default: abort();
     }
     state->result_value = alloc_float(state, res);
     return;
@@ -292,7 +292,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
       case CMP_GT: res = i1 >  i2; break;
       case CMP_LE: res = i1 <= i2; break;
       case CMP_GE: res = i1 >= i2; break;
-      default: assert(false);
+      default: abort();
     }
     state->result_value = alloc_bool(state, res);
     return;
@@ -309,7 +309,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
       case CMP_GT: res = v1 >  v2; break;
       case CMP_LE: res = v1 <= v2; break;
       case CMP_GE: res = v1 >= v2; break;
-      default: assert(false);
+      default: abort();
     }
     state->result_value = alloc_bool(state, res);
     return;
@@ -359,7 +359,7 @@ static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **a
       case CMP_GT: res = v1 >  v2; break;
       case CMP_LE: res = v1 <= v2; break;
       case CMP_GE: res = v1 >= v2; break;
-      default: assert(false);
+      default: abort();
     }
     state->result_value = alloc_bool(state, res);
     return;
@@ -644,7 +644,7 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
     char *content = (char*) element->content;
     object_set(res, "value", alloc_string(state, content, strlen(content)));
-  } else assert(false);
+  } else abort();
   return res;
 }
 
@@ -821,7 +821,7 @@ static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   
   if (substate.runstate == VM_ERRORED) {
     state->runstate = VM_ERRORED;
-    state->error = my_asprintf("Error during require('%s')", filename);
+    state->error = my_asprintf("Error during require('%s')\n%s", filename, substate.error);
     state->backtrace = vm_record_backtrace(&substate, &state->backtrace_depth);
     free(substate.backtrace);
     return;

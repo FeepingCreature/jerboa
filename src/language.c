@@ -738,12 +738,12 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
-  use_range_start(builder, range);
   int testslot = ref_access(builder, test_expr);
   if (!eat_string(&text, ")")) {
     log_parser_error(text, "'while' expected closing paren");
     return PARSE_ERROR;
   }
+  use_range_start(builder, range);
   addinstr_test_branch(builder, testslot, &loop_blk, &end_blk);
   use_range_end(builder, range);
   

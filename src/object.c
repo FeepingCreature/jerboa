@@ -43,15 +43,21 @@ void cache_free(int size, void *ptr) {
   free(ptr);
 }
 
-Object *object_lookup(Object *obj, const char *key, bool *key_found_p) {
+Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
   while (obj) {
     bool key_found;
-    Object *value = table_lookup(&obj->tbl, key, strlen(key), &key_found);
+    Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv, &key_found);
     if (key_found) { if (key_found_p) *key_found_p = true; return value; }
     obj = obj->parent;
   }
   if (key_found_p) *key_found_p = false;
   return NULL;
+}
+
+Object *object_lookup(Object *obj, const char *key_ptr, bool *key_found_p) {
+  size_t len = strlen(key_ptr);
+  size_t hashv = hash(key_ptr, len);
+  return object_lookup_with_hash(obj, key_ptr, len, hashv, key_found_p);
 }
 
 void obj_mark(VMState *state, Object *obj) {
@@ -330,7 +336,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
     TableEntry *entry = &direct_table->entries_ptr[i];
     if (entry->name_ptr) {
       FileRange *range = *(FileRange**) entry->name_ptr; // This hurts my soul.
-      int samples = *(int*) &entry->value;
+      int samples = (intptr_t) entry->value;
       // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_direct) max_samples_direct = samples;
       sum_samples_direct += samples;
@@ -341,7 +347,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
     TableEntry *entry = &indirect_table->entries_ptr[i];
     if (entry->name_ptr) {
       FileRange *range = *(FileRange**) entry->name_ptr;
-      int samples = *(int*) &entry->value;
+      int samples = (intptr_t) entry->value;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_indirect) max_samples_indirect = samples;
       sum_samples_indirect += samples;

@@ -1,5 +1,6 @@
 #include "vm/instr.h"
 
+#include <stdlib.h>
 #include <assert.h>
 
 int instr_size(Instr *instr) {
@@ -20,6 +21,6 @@ int instr_size(Instr *instr) {
     CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr);
     CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr);
 #undef CASE
-    default: assert("unknown instr!" && false);
+    default: abort();
   }
 }

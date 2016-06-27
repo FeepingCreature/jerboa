@@ -1,4 +1,4 @@
-#include "optimize.h"
+#include "vm/optimize.h"
 
 #include "vm/builder.h"
 

@@ -3,7 +3,9 @@
 
 #include "object.h"
 
-#define VM_ASSERT(cond, ...) if (!(cond) && (vm_error(state, __VA_ARGS__), true)) return
+#define UNLIKELY(X) __builtin_expect(X, 0)
+
+#define VM_ASSERT(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return
 
 Callframe *vm_alloc_frame(VMState *state, int slots);
 
