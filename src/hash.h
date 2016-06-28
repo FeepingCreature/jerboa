@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#define UNLIKELY(X) __builtin_expect(X, 0)
+
 struct _TableEntry;
 typedef struct _TableEntry TableEntry;
 
