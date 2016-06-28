@@ -32,9 +32,9 @@ void **table_lookup_ref_alloc(HashTable *tbl, const char *key_ptr, int key_len, 
 // added in case you've already precomputed the hash for other reasons, and wanna avoid double computing it
 void **table_lookup_ref_alloc_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash, void*** first_free_ptr);
 
-void *table_lookup(HashTable *tbl, const char *key_ptr, int key_len, bool *key_found_p) __attribute__ ((pure));
+void *table_lookup(HashTable *tbl, const char *key_ptr, int key_len, bool *key_found_p);
 
-void *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv, bool *key_found_p) __attribute__ ((pure));
+void *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv, bool *key_found_p);
 
 // thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
 static inline size_t hash(const char *ptr, int len) {
