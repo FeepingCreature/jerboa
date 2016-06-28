@@ -37,7 +37,9 @@ typedef enum {
   MATH_ADD,
   MATH_SUB,
   MATH_MUL,
-  MATH_DIV
+  MATH_DIV,
+  MATH_BIT_OR,
+  MATH_BIT_AND
 } MathOp;
 
 static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
@@ -60,6 +62,8 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
         VM_ASSERT(i2 != 0, "division by zero");
         res = i1 / i2;
         break;
+      case MATH_BIT_OR: res = i1 | i2; break;
+      case MATH_BIT_AND: res = i1 & i2; break;
       default: abort();
     }
     state->result_value = alloc_int(state, res);
@@ -103,6 +107,14 @@ static void int_div_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_DIV);
 }
 
+static void int_bit_or_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_BIT_OR);
+}
+
+static void int_bit_and_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  int_math_fn(state, thisptr, fn, args_ptr, args_len, MATH_BIT_AND);
+}
+
 static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
@@ -144,6 +156,8 @@ static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **
       case MATH_SUB: res = v1 - v2; break;
       case MATH_MUL: res = v1 * v2; break;
       case MATH_DIV: res = v1 / v2; break;
+      case MATH_BIT_OR:
+      case MATH_BIT_AND: vm_error(state, "bitops are undefined for float");
       default: abort();
     }
     state->result_value = alloc_float(state, res);
@@ -850,6 +864,8 @@ Object *create_root(VMState *state) {
   object_set(int_obj, "-" , alloc_fn(state, int_sub_fn));
   object_set(int_obj, "*" , alloc_fn(state, int_mul_fn));
   object_set(int_obj, "/" , alloc_fn(state, int_div_fn));
+  object_set(int_obj, "|" , alloc_fn(state, int_bit_or_fn));
+  object_set(int_obj, "&" , alloc_fn(state, int_bit_and_fn));
   object_set(int_obj, "==", alloc_fn(state, int_eq_fn));
   object_set(int_obj, "<" , alloc_fn(state, int_lt_fn));
   object_set(int_obj, ">" , alloc_fn(state, int_gt_fn));

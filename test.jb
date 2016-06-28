@@ -27,8 +27,7 @@ function drawGL() {
   gl.glClearColor(0.2, 0.2, 0.2, 0);
   gl.glHint(gl.GL_PERSPECTIVE_CORRECTION_HINT, gl.GL_NICEST);
   
-  // TODO '|'
-  gl.glClear(gl.GL_COLOR_BUFFER_BIT + gl.GL_DEPTH_BUFFER_BIT);
+  gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
   gl.glLoadIdentity();
   gl.glTranslatef(-1.5, 0.0, -6.0);
   gl.glColor3f(1, 1, 1);
@@ -49,8 +48,7 @@ function drawGL() {
 }
 
 sdl.SDL_Init(sdl.SDL_INIT_EVERYTHING);
-// TODO '|'
-sdl.SDL_SetVideoMode(800, 600, 32, sdl.SDL_OPENGL + sdl.SDL_RESIZABLE);
+sdl.SDL_SetVideoMode(800, 600, 32, sdl.SDL_OPENGL | sdl.SDL_RESIZABLE);
 var event = malloc(64);
 var running = true;
 while (running) {
