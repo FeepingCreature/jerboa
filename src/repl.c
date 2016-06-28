@@ -17,6 +17,8 @@
 #include "util.h"
 
 int main(int argc, char **argv) {
+  init_instr_fn_table();
+  
   VMState vmstate = {0};
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
   vm_alloc_frame(&vmstate, 0);

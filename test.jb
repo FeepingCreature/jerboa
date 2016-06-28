@@ -53,7 +53,6 @@ sdl.SDL_Init(sdl.SDL_INIT_EVERYTHING);
 sdl.SDL_SetVideoMode(800, 600, 32, sdl.SDL_OPENGL + sdl.SDL_RESIZABLE);
 var event = malloc(64);
 var running = true;
-return 0;
 while (running) {
   while (sdl.SDL_PollEvent(event)) {
     if (event.dereference(ffi.uint8) == sdl.SDL_QUIT) running = false;

@@ -28,7 +28,7 @@ void use_range_start(FunctionBuilder *builder, FileRange *range) {
 
 void use_range_end(FunctionBuilder *builder, FileRange *range) {
   if (!builder) return;
-  assert(builder->current_range == range);
+  (void) range; assert(builder->current_range == range);
   builder->current_range = NULL;
 }
 

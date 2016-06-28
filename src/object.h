@@ -76,7 +76,6 @@ typedef enum {
 
 typedef struct {
   struct timespec last_prof_time;
-  int next_prof_check;
   
   HashTable direct_table;
   HashTable indirect_table;

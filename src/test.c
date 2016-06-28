@@ -15,7 +15,9 @@
 #include "util.h"
 
 int main(int argc, char **argv) {
-  assert(argc == 2);
+  (void) argc; assert(argc == 2);
+  
+  init_instr_fn_table();
   
   VMState vmstate = {0};
   vmstate.shared = calloc(sizeof(VMSharedState), 1);

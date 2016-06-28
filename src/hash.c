@@ -8,7 +8,9 @@ void *cache_alloc(int size);
 
 void cache_free(int size, void *ptr);
 
+// #include <stdio.h>
 static void **table_lookup_ref_with_hash_internal(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv) {
+  // printf("::%.*s\n", key_len, key_ptr);
   assert(key_ptr != NULL);
   if (tbl->entries_stored == 0) return NULL;
   // printf(":: %.*s into %i having %i\n", key_len, key_ptr, tbl->entries_num, tbl->entries_stored);
