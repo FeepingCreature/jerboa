@@ -109,6 +109,7 @@ static void **table_lookup_ref_alloc_with_hash_internal(HashTable *tbl, const ch
   newtable.entries_ptr = cache_alloc(sizeof(TableEntry) * newlen);
   newtable.entries_num = newlen;
   newtable.entries_stored = 0;
+  newtable.bloom = 0;
   if (tbl->entries_stored) {
     for (int i = 0; i < entries_num; ++i) {
       TableEntry *entry = &tbl->entries_ptr[i];
