@@ -806,6 +806,9 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   
   use_range_start(builder, alloc_var_name);
   int value, varname_slot = addinstr_alloc_string_object(builder, builder->scope, varname);
+  int nullslot = builder->slot_base++;
+  addinstr_assign(builder, builder->scope, varname_slot, nullslot, ASSIGN_PLAIN);
+  addinstr_close_object(builder, builder->scope);
   use_range_end(builder, alloc_var_name);
   
   FileRange *assign_value = alloc_and_record_start(text);
@@ -813,7 +816,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   if (!eat_string(&text, "=")) {
     free(assign_value);
     assign_value = alloc_var_name;
-    value = builder->slot_base++; // null slot
+    value = nullslot;
   } else {
     record_end(text, assign_value);
     RefValue rv;
@@ -829,8 +832,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   }
   
   use_range_start(builder, assign_value);
-  addinstr_assign(builder, builder->scope, varname_slot, value, ASSIGN_PLAIN);
-  addinstr_close_object(builder, builder->scope);
+  addinstr_assign(builder, builder->scope, varname_slot, value, ASSIGN_EXISTING);
   use_range_end(builder, assign_value);
   
   // var a, b;
