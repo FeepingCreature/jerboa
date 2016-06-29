@@ -7,17 +7,14 @@
 #include "object.h"
 
 #define DEBUG_MEM 0
-
-void gc_run(VMState *state); // defined here so we can call it in alloc
-
-void *int_freelist = NULL;
-void *obj_freelist = NULL;
-void *table4_freelist = NULL, *table8_freelist = NULL, *table16_freelist = NULL;
-
+/*
 void *freelist[128] = {0};
+*/
 
 void *cache_alloc(int size) {
-  // return calloc(size, 1);
+  return calloc(size, 1);
+  // just using jemalloc is faster than this
+  /*
   void *res = NULL;
   if (size >= sizeof(void*) && size < 128) {
     if (freelist[size]) {
@@ -30,17 +27,17 @@ void *cache_alloc(int size) {
     return calloc(size, 1);
   }
   memset(res, 0, size);
-  return res;
+  return res;*/
 }
 
 void cache_free(int size, void *ptr) {
-  // free(ptr); return;
-  if (size >= sizeof(void*) && size < 128) {
+  free(ptr); return;
+  /*if (size >= sizeof(void*) && size < 128) {
     *(void**) ptr = freelist[size];
     freelist[size] = ptr;
     return;
   }
-  free(ptr);
+  free(ptr);*/
 }
 
 Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
