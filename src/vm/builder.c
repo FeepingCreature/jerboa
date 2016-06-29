@@ -114,6 +114,14 @@ void addinstr_close_object(FunctionBuilder *builder, int obj) {
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
+void addinstr_freeze_object(FunctionBuilder *builder, int obj) {
+  FreezeObjectInstr *instr = malloc(sizeof(FreezeObjectInstr));
+  instr->base.type = INSTR_FREEZE_OBJECT;
+  instr->base.belongs_to = NULL;
+  instr->slot = obj;
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
+}
+
 int addinstr_get_context(FunctionBuilder *builder) {
   GetContextInstr *instr = malloc(sizeof(GetContextInstr));
   instr->base.type = INSTR_GET_CONTEXT;

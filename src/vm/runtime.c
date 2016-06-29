@@ -505,7 +505,7 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
 static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
-    print_recursive(state, arg);
+    print_recursive(state, arg, true);
     if (state->runstate == VM_ERRORED) return;
   }
   printf("\n");
@@ -757,6 +757,12 @@ static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   state->result_value = substate.result_value;
 }
 
+static void freeze_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *obj = args_ptr[0];
+  obj->flags |= OBJ_IMMUTABLE;
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -855,6 +861,7 @@ Object *create_root(VMState *state) {
   object_set(root, "xml", xml_obj);
   
   object_set(root, "require", alloc_fn(state, require_fn));
+  object_set(root, "freeze", alloc_fn(state, freeze_fn));
   
   ffi_setup_root(state, root);
   

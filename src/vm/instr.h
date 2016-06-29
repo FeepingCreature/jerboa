@@ -14,6 +14,7 @@ typedef enum {
   INSTR_ALLOC_STRING_OBJECT,
   INSTR_ALLOC_CLOSURE_OBJECT,
   INSTR_CLOSE_OBJECT,
+  INSTR_FREEZE_OBJECT,
   INSTR_ACCESS,
   INSTR_ASSIGN,
   INSTR_CALL,
@@ -125,6 +126,11 @@ typedef struct {
   Instr base;
   int slot;
 } CloseObjectInstr;
+
+typedef struct {
+  Instr base;
+  int slot;
+} FreezeObjectInstr;
 
 typedef struct {
   Instr base;

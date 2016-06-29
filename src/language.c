@@ -791,13 +791,14 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   return PARSE_OK;
 }
 
-static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRange *var_range) {
+static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRange *var_range, bool isconst) {
   char *text = *textp;
   // allocate the new scope immediately, so that the variable
   // is in scope for the value expression.
   // (this is important for recursion, ie. var foo = function() { foo(); }; )
   use_range_start(builder, var_range);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
+  int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
   use_range_end(builder, var_range);
   
   FileRange *alloc_var_name = alloc_and_record_start(text);
@@ -805,10 +806,10 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   record_end(text, alloc_var_name);
   
   use_range_start(builder, alloc_var_name);
-  int value, varname_slot = addinstr_alloc_string_object(builder, builder->scope, varname);
+  int value, varname_slot = addinstr_alloc_string_object(builder, var_scope, varname);
   int nullslot = builder->slot_base++;
-  addinstr_assign(builder, builder->scope, varname_slot, nullslot, ASSIGN_PLAIN);
-  addinstr_close_object(builder, builder->scope);
+  addinstr_assign(builder, var_scope, varname_slot, nullslot, ASSIGN_PLAIN);
+  addinstr_close_object(builder, var_scope);
   use_range_end(builder, alloc_var_name);
   
   FileRange *assign_value = alloc_and_record_start(text);
@@ -832,13 +833,14 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   }
   
   use_range_start(builder, assign_value);
-  addinstr_assign(builder, builder->scope, varname_slot, value, ASSIGN_EXISTING);
+  addinstr_assign(builder, var_scope, varname_slot, value, ASSIGN_EXISTING);
+  if (isconst) addinstr_freeze_object(builder, var_scope);
   use_range_end(builder, assign_value);
   
   // var a, b;
   if (eat_string(&text, ",")) {
     *textp = text;
-    return parse_vardecl(textp, builder, var_range);
+    return parse_vardecl(textp, builder, var_range, isconst);
   }
   
   *textp = text;
@@ -905,7 +907,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   
   FileRange *decl_range = alloc_and_record_start(text);
   if (eat_keyword(&text, "var")) {
-    ParseResult res = parse_vardecl(&text, builder, decl_range);
+    ParseResult res = parse_vardecl(&text, builder, decl_range, false);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
   } else {
@@ -1026,7 +1028,11 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
   }
   else if (eat_keyword(&text, "var")) {
     record_end(text, keyword_range);
-    res = parse_vardecl(&text, builder, keyword_range);
+    res = parse_vardecl(&text, builder, keyword_range, false);
+  }
+  else if (eat_keyword(&text, "const")) {
+    record_end(text, keyword_range);
+    res = parse_vardecl(&text, builder, keyword_range, true);
   }
   else {
     res = parse_assign(&text, builder);

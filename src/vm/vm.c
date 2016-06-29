@@ -295,6 +295,17 @@ static FnWrap vm_instr_close_object(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_freeze_object(FastVMState *state) {
+  FreezeObjectInstr *freeze_object_instr = (FreezeObjectInstr*) state->instr;
+  int slot = freeze_object_instr->slot;
+  VM_ASSERT2_SLOT(slot < state->cf->slots_len, "slot numbering error");
+  Object *obj = state->cf->slots_ptr[slot];
+  VM_ASSERT2(!(obj->flags & OBJ_IMMUTABLE), "object is already frozen!");
+  obj->flags |= OBJ_IMMUTABLE;
+  state->instr = (Instr*)(freeze_object_instr + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_instr_access(FastVMState *state) {
   AccessInstr *access_instr = (AccessInstr*) state->instr;
   int obj_slot, target_slot;
@@ -644,6 +655,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ALLOC_STRING_OBJECT] = vm_instr_alloc_string_object;
   instr_fns[INSTR_ALLOC_CLOSURE_OBJECT] = vm_instr_alloc_closure_object;
   instr_fns[INSTR_CLOSE_OBJECT] = vm_instr_close_object;
+  instr_fns[INSTR_FREEZE_OBJECT] = vm_instr_freeze_object;
   instr_fns[INSTR_ACCESS] = vm_instr_access;
   instr_fns[INSTR_ASSIGN] = vm_instr_assign;
   instr_fns[INSTR_CALL] = vm_instr_call;

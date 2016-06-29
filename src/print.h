@@ -3,6 +3,6 @@
 
 #include "object.h"
 
-void print_recursive(VMState *state, Object *obj);
+void print_recursive(VMState *state, Object *obj, bool allow_tostring);
 
 #endif

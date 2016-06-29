@@ -29,6 +29,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr, alloc_closure_obj_instr)
             slots[alloc_closure_obj_instr->context_slot] = false;
           CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr, close_obj_instr)
+          CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr, freeze_obj_instr)
           CASE(INSTR_ACCESS, AccessInstr, access_instr)
             slots[access_instr->obj_slot] = false;
           CASE(INSTR_ASSIGN, AssignInstr, assign_instr)
@@ -66,7 +67,6 @@ typedef struct {
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
   
-  fprintf(stderr, " -------- \nslot scanning %s\n", uf->name);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
     Instr *instr = block->instrs_ptr;
@@ -92,14 +92,13 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
           free(names_ptr);
           continue;
         }
+        instr = (Instr*)((CloseObjectInstr*) instr + 1);
         int target_slot = alobi->target_slot;
         (*slots_p)[target_slot].static_object = true;
         (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
         (*slots_p)[target_slot].names_ptr = names_ptr;
         (*slots_p)[target_slot].names_len = names_len;
-        for (int i = 0; i < names_len; ++i) {
-          fprintf(stderr, "  # %i: %s\n", i, names_ptr[i]);
-        }
+        continue;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
@@ -255,8 +254,8 @@ UserFunction *optimize(UserFunction *uf) {
 #include "print.h"
 
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
-  fprintf(stderr, "runtime optimize %s with %p\n", uf->name, (void*) context);
-  print_recursive(state, context);
+  printf("runtime optimize %s with %p\n", uf->name, (void*) context);
+  if (uf->name && strcmp(uf->name, "gear") == 0) print_recursive(state, context, false);
   printf("\n-----\n");
   return uf;
 }

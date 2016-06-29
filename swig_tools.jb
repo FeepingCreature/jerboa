@@ -249,6 +249,7 @@ function loadLibraryWithPrefix(xml_file, lib_file, prefix) {
   }
   print("done.");
   */
+  freeze(obj);
   return obj;
 }
 function loadLibrary(xml_file, lib_file) {

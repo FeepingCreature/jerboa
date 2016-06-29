@@ -48,6 +48,10 @@ void dump_instr(Instr **instr_p) {
       fprintf(stderr, "    close_object: %i\n", ((CloseObjectInstr*) instr)->slot);
       *instr_p = (Instr*) ((CloseObjectInstr*) instr + 1);
       break;
+    case INSTR_FREEZE_OBJECT:
+      fprintf(stderr, "    freeze_object: %i\n", ((FreezeObjectInstr*) instr)->slot);
+      *instr_p = (Instr*) ((FreezeObjectInstr*) instr + 1);
+      break;
     case INSTR_ACCESS:
       fprintf(stderr, "    access: %i = %i . %i\n",
               ((AccessInstr*) instr)->target_slot, ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key_slot);
