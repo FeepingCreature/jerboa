@@ -13,8 +13,8 @@
 
 typedef enum {
   OBJ_NONE = 0,
-  OBJ_CLOSED = 0x1, // no entries can be added or removed
-  OBJ_IMMUTABLE = 0x2, // no entries' values can be changed
+  OBJ_CLOSED = 0x1, // no entries can be added
+  OBJ_FROZEN = 0x2, // no entries' values can be changed, no entries can be removed
   OBJ_NOINHERIT = 0x4, // don't allow the user to use this as a prototype
                        // used for prototypes of objects with payload,
                        // like int or float, that have their own alloc functions.

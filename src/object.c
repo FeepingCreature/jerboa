@@ -112,9 +112,9 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
   while (current) {
     Object **ptr = (Object**) table_lookup_ref(&current->tbl, key, strlen(key));
     if (ptr != NULL) {
-      if (current->flags & OBJ_IMMUTABLE) {
+      if (current->flags & OBJ_FROZEN) {
         char *error = NULL;
-        if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was immutable.", key, (void*) current)) abort();
+        if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was frozen.", key, (void*) current)) abort();
         return error;
       }
       *ptr = value;
@@ -148,7 +148,7 @@ void object_set(Object *obj, const char *key, Object *value) {
   void **freeptr;
   Object **ptr = (Object **) table_lookup_ref_alloc(&obj->tbl, key, strlen(key), &freeptr);
   if (ptr) {
-    assert(!(obj->flags & OBJ_IMMUTABLE));
+    assert(!(obj->flags & OBJ_FROZEN));
   } else {
     assert(!(obj->flags & OBJ_CLOSED));
     ptr = (Object **) freeptr;

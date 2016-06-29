@@ -760,7 +760,7 @@ static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
 static void freeze_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *obj = args_ptr[0];
-  obj->flags |= OBJ_IMMUTABLE;
+  obj->flags |= OBJ_FROZEN;
 }
 
 Object *create_root(VMState *state) {
@@ -857,7 +857,7 @@ Object *create_root(VMState *state) {
   object_set(xml_obj, "node", node_obj);
   object_set(node_obj, "find_array", alloc_fn(state, xml_node_find_array_fn));
   object_set(node_obj, "find_array_by_name", alloc_fn(state, xml_node_find_by_name_array_fn));
-  xml_obj->flags |= OBJ_IMMUTABLE;
+  xml_obj->flags |= OBJ_FROZEN;
   object_set(root, "xml", xml_obj);
   
   object_set(root, "require", alloc_fn(state, require_fn));
@@ -865,7 +865,7 @@ Object *create_root(VMState *state) {
   
   ffi_setup_root(state, root);
   
-  root->flags |= OBJ_IMMUTABLE;
+  root->flags |= OBJ_FROZEN;
   gc_remove_roots(state, &pin_root);
   
   return root;

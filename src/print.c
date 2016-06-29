@@ -81,10 +81,10 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
     printf("(");
     if (obj->flags & OBJ_CLOSED) {
       printf("CLS");
-      if (obj->flags & (OBJ_IMMUTABLE|OBJ_NOINHERIT)) printf("|");
+      if (obj->flags & (OBJ_FROZEN|OBJ_NOINHERIT)) printf("|");
     }
-    if (obj->flags & OBJ_IMMUTABLE) {
-      printf("IMM");
+    if (obj->flags & OBJ_FROZEN) {
+      printf("FRZ");
       if (obj->flags & OBJ_NOINHERIT) printf("|");
     }
     if (obj->flags & OBJ_NOINHERIT) printf("NOI");

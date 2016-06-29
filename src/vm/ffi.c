@@ -27,7 +27,7 @@ static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   VM_ASSERT(dlptr, "dlopen failed: %s", dlerror());
   
   Object *handle_obj = alloc_object(state, handle_base);
-  handle_obj->flags |= OBJ_IMMUTABLE;
+  handle_obj->flags |= OBJ_FROZEN;
   object_set(handle_obj, "pointer", alloc_ptr(state, dlptr));
   state->result_value = handle_obj;
 }
@@ -290,7 +290,7 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   VM_ASSERT(status == FFI_OK, "FFI error: %i", status);
   
   Object *fn_obj = alloc_fn(state, ffi_call_fn);
-  fn_obj->flags |= OBJ_IMMUTABLE;
+  fn_obj->flags |= OBJ_FROZEN;
   object_set(fn_obj, "return_type", ret_type);
   object_set(fn_obj, "parameter_types", args_ptr[2]);
   object_set(fn_obj, "_sym_pointer", alloc_ptr(state, fnptr));
@@ -341,6 +341,6 @@ void ffi_setup_root(VMState *state, Object *root) {
   object_set(handle_obj, "pointer", NULL);
   object_set(handle_obj, "sym", alloc_fn(state, ffi_sym_fn));
   
-  ffi_obj->flags |= OBJ_IMMUTABLE;
+  ffi_obj->flags |= OBJ_FROZEN;
   object_set(root, "ffi", ffi_obj);
 }
