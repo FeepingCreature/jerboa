@@ -8,9 +8,9 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
     printf("(null)");
     return;
   }
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *bool_base = object_lookup(root, "bool", NULL);
-  Object *float_base = object_lookup(root, "float", NULL);
+  Object *int_base = state->shared->vcache.int_base;
+  Object *bool_base = state->shared->vcache.bool_base;
+  Object *float_base = state->shared->vcache.float_base;
   Object *array_base = object_lookup(root, "array", NULL);
   Object *string_base = object_lookup(root, "string", NULL);
   Object
@@ -50,8 +50,8 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
   }
   Object *toString_fn = object_lookup(obj, "toString", NULL);
   if (allow_tostring && toString_fn) {
-    Object *function_base = object_lookup(root, "function", NULL);
-    Object *closure_base = object_lookup(root, "closure", NULL);
+    Object *function_base = state->shared->vcache.function_base;
+    Object *closure_base = state->shared->vcache.closure_base;
     FunctionObject *fn_toString = (FunctionObject*) obj_instance_of(toString_fn, function_base);
     ClosureObject *cl_toString = (ClosureObject*) obj_instance_of(toString_fn, closure_base);
     VM_ASSERT(fn_toString || cl_toString, "'toString' property is neither function nor closure");

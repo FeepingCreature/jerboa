@@ -279,7 +279,7 @@ static FnWrap vm_instr_alloc_closure_object(FastVMState *state) {
   int target_slot = alloc_closure_obj_instr->target_slot, context_slot = alloc_closure_obj_instr->context_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(context_slot < state->cf->slots_len, "slot numbering error");
-  state->cf->slots_ptr[target_slot] = alloc_closure_fn(state->cf->slots_ptr[context_slot], alloc_closure_obj_instr->fn);
+  state->cf->slots_ptr[target_slot] = alloc_closure_fn(state->reststate, state->cf->slots_ptr[context_slot], alloc_closure_obj_instr->fn);
   state->instr = (Instr*)(alloc_closure_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -335,8 +335,8 @@ static FnWrap vm_instr_access(FastVMState *state) {
   if (!object_found) {
     Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
     if (index_op) {
-      Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
-      Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
+      Object *function_base = state->reststate->shared->vcache.function_base;
+      Object *closure_base = state->reststate->shared->vcache.closure_base;
       FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
       ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
       VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
@@ -388,8 +388,8 @@ static FnWrap vm_instr_access_string_key(FastVMState *state) {
   if (!object_found) {
     Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
     if (index_op) {
-      Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
-      Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
+      Object *function_base = state->reststate->shared->vcache.function_base;
+      Object *closure_base = state->reststate->shared->vcache.closure_base;
       FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
       ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
       VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
@@ -436,8 +436,8 @@ static FnWrap vm_instr_assign(FastVMState *state) {
     // non-string key, goes to []=
     Object *index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (index_assign_op) {
-      Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
-      Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
+      Object *function_base = state->reststate->shared->vcache.function_base;
+      Object *closure_base = state->reststate->shared->vcache.closure_base;
       FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
       ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
       VM_ASSERT2(fn_index_assign_op || cl_index_assign_op, "'[]=' is neither function nor closure");
@@ -518,8 +518,8 @@ static FnWrap vm_instr_call(FastVMState *state) {
   Object *this_obj = state->cf->slots_ptr[this_slot];
   Object *fn_obj = state->cf->slots_ptr[function_slot];
   // validate function type
-  Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
-  Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
+  Object *closure_base = state->reststate->shared->vcache.closure_base;
+  Object *function_base = state->reststate->shared->vcache.function_base;
   FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
   ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
   VM_ASSERT2(cl || fn, "cannot call: object is neither function nor closure");
@@ -603,10 +603,8 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   VM_ASSERT2_SLOT(test_slot < state->cf->slots_len, "slot numbering error");
   Object *test_value = state->cf->slots_ptr[test_slot];
   
-  Object *bool_base = OBJECT_LOOKUP_STRING(state->root, "bool", NULL);
-  Object *int_base = OBJECT_LOOKUP_STRING(state->root, "int", NULL);
-  Object *b_test_value = obj_instance_of(test_value, bool_base);
-  Object *i_test_value = obj_instance_of(test_value, int_base);
+  Object *b_test_value = obj_instance_of(test_value, state->reststate->shared->vcache.bool_base);
+  Object *i_test_value = obj_instance_of(test_value, state->reststate->shared->vcache.int_base);
   
   bool test = false;
   if (b_test_value) {

@@ -26,9 +26,7 @@ static char *my_asprintf(char *fmt, ...) {
 
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *root = state->root;
-  Object *bool_base = OBJECT_LOOKUP_STRING(root, "bool", NULL);
-  BoolObject *boolobj = (BoolObject*) obj_instance_of(thisptr, bool_base);
+  BoolObject *boolobj = (BoolObject*) obj_instance_of(thisptr, state->shared->vcache.bool_base);
   VM_ASSERT(boolobj, "internal error: bool negation called on wrong type of object");
   
   state->result_value = alloc_bool(state, !boolobj->value);
@@ -45,12 +43,10 @@ typedef enum {
 
 static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
   
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object
-    *iobj1 = obj_instance_of(thisptr, int_base),
-    *iobj2 = obj_instance_of(args_ptr[0], int_base);
+    *iobj1 = obj_instance_of(thisptr, state->shared->vcache.int_base),
+    *iobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   VM_ASSERT(iobj1, "internal error: int math function called on wrong type of object"); // otherwise how are we called on it??
   if (iobj2) {
     int i1 = ((IntObject*) iobj1)->value, i2 = ((IntObject*) iobj2)->value;
@@ -71,8 +67,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     return;
   }
   
-  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
-  Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
+  Object *fobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.float_base);
   if (fobj2) {
     float v1 = ((IntObject*) iobj1)->value, v2 = ((FloatObject*) fobj2)->value;
     float res;
@@ -138,14 +133,11 @@ static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
-  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   
   Object
-    *fobj1 = obj_instance_of(thisptr, float_base),
-    *iobj2 = obj_instance_of(args_ptr[0], int_base),
-    *fobj2 = obj_instance_of(args_ptr[0], float_base);
+    *fobj1 = obj_instance_of(thisptr, state->shared->vcache.float_base),
+    *iobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.int_base),
+    *fobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.float_base);
   VM_ASSERT(fobj1, "internal error: float math function called on wrong type of object");
   if (fobj2 || iobj2) {
     float v1 = ((FloatObject*) fobj1)->value, v2;
@@ -186,16 +178,13 @@ static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
-  Object *bool_base = OBJECT_LOOKUP_STRING(root, "bool", NULL);
-  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
-    *iobj2 = obj_instance_of(args_ptr[0], int_base),
-    *bobj2 = obj_instance_of(args_ptr[0], bool_base),
-    *fobj2 = obj_instance_of(args_ptr[0], float_base),
+    *iobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.int_base),
+    *bobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.bool_base),
+    *fobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.float_base),
     *sobj2 = obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
   
@@ -291,12 +280,10 @@ typedef enum {
 
 static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
   
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object
-    *iobj1 = obj_instance_of(thisptr, int_base),
-    *iobj2 = obj_instance_of(args_ptr[0], int_base);
+    *iobj1 = obj_instance_of(thisptr, state->shared->vcache.int_base),
+    *iobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   VM_ASSERT(iobj1, "internal error: int compare function called on wrong type of object");
   if (iobj2) {
     int i1 = ((IntObject*) iobj1)->value, i2 = ((IntObject*) iobj2)->value;
@@ -313,8 +300,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
     return;
   }
   
-  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
-  Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
+  Object *fobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.float_base);
   if (fobj2) {
     float v1 = ((IntObject*) iobj1)->value, v2 = ((FloatObject*) fobj2)->value;
     bool res;
@@ -354,14 +340,11 @@ static void int_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **args
 
 static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
   
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
-  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   Object
-    *fobj1 = obj_instance_of(thisptr, float_base),
-    *iobj2 = obj_instance_of(args_ptr[0], int_base),
-    *fobj2 = obj_instance_of(args_ptr[0], float_base);
+    *fobj1 = obj_instance_of(thisptr, state->shared->vcache.float_base),
+    *iobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.int_base),
+    *fobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.float_base);
   VM_ASSERT(fobj1, "internal error: float compare function called on wrong type of object");
   if (fobj2 || iobj2) {
     float v1 = ((FloatObject*) fobj1)->value, v2;
@@ -403,8 +386,7 @@ static void float_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 }
 
 static void closure_mark_fn(VMState *state, Object *obj) {
-  Object *root = state->root;
-  Object *closure_base = OBJECT_LOOKUP_STRING(root, "closure", NULL);
+  Object *closure_base = state->shared->vcache.closure_base;
   ClosureObject *clobj = (ClosureObject*) obj_instance_of(obj, closure_base);
   if (clobj) obj_mark(state, clobj->context);
 }
@@ -431,10 +413,9 @@ static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object *
 static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
-  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
+  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   VM_ASSERT(iarg, "parameter to resize function must be int");
   VM_ASSERT(arr_obj, "internal error: resize called on object that is not an array");
   int oldsize = arr_obj->length;
@@ -475,10 +456,9 @@ static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
-  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
+  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   if (!iarg) { state->result_value = NULL; return; }
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = iarg->value;
@@ -489,10 +469,9 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
 static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
-  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
+  IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   VM_ASSERT(arr_obj, "internal error: array '[]=' called on object that is not an array");
   VM_ASSERT(iarg, "index of array '[]=' must be int");
   int index = iarg->value;
@@ -662,10 +641,10 @@ static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Ob
 static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *bool_base = OBJECT_LOOKUP_STRING(root, "bool", NULL);
+  Object *bool_base = state->shared->vcache.bool_base;
   Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
-  Object *closure_base = OBJECT_LOOKUP_STRING(root, "closure", NULL);
-  Object *function_base = OBJECT_LOOKUP_STRING(root, "function", NULL);
+  Object *closure_base = state->shared->vcache.closure_base;
+  Object *function_base = state->shared->vcache.function_base;
   
   Object **array_ptr = NULL; int array_length = 0;
   gc_disable(state);
@@ -775,6 +754,7 @@ Object *create_root(VMState *state) {
   Object *function_obj = alloc_object(state, NULL);
   function_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "function", function_obj);
+  state->shared->vcache.function_base = function_obj;
   
   Object *int_obj = alloc_object(state, NULL);
   int_obj->flags |= OBJ_NOINHERIT;
@@ -791,6 +771,8 @@ Object *create_root(VMState *state) {
   object_set(int_obj, "<=", alloc_fn(state, int_le_fn));
   object_set(int_obj, ">=", alloc_fn(state, int_ge_fn));
   object_set(int_obj, "parse" , alloc_fn(state, int_parse_fn));
+  state->shared->vcache.int_base = int_obj;
+  int_obj->flags |= OBJ_FROZEN;
   state->shared->vcache.int_zero = alloc_int(state, 0);
   
   Object *float_obj = alloc_object(state, NULL);
@@ -805,16 +787,22 @@ Object *create_root(VMState *state) {
   object_set(float_obj, ">" , alloc_fn(state, float_gt_fn));
   object_set(float_obj, "<=", alloc_fn(state, float_le_fn));
   object_set(float_obj, ">=", alloc_fn(state, float_ge_fn));
+  state->shared->vcache.float_base = float_obj;
+  float_obj->flags |= OBJ_FROZEN;
   
   Object *closure_obj = alloc_object(state, NULL);
   closure_obj->flags |= OBJ_NOINHERIT;
   closure_obj->mark_fn = closure_mark_fn;
   object_set(root, "closure", closure_obj);
+  state->shared->vcache.closure_base = closure_obj;
   
   Object *bool_obj = alloc_object(state, NULL);
   bool_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "bool", bool_obj);
   object_set(bool_obj, "!", alloc_fn(state, bool_not_fn));
+  state->shared->vcache.bool_base = bool_obj;
+  bool_obj->flags |= OBJ_FROZEN;
+  
   Object
     *true_obj = alloc_bool_uncached(state, true),
     *false_obj = alloc_bool_uncached(state, false);

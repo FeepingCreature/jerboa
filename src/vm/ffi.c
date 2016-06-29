@@ -79,8 +79,8 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
 
 static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   Object *root = state->root;
-  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
-  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
+  Object *int_base = state->shared->vcache.int_base;
+  Object *float_base = state->shared->vcache.float_base;
   Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   Object *pointer_base = OBJECT_LOOKUP_STRING(root, "pointer", NULL);

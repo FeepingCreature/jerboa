@@ -174,10 +174,8 @@ Object *alloc_object(VMState *state, Object *parent) {
 }
 
 Object *alloc_int(VMState *state, int value) {
-  Object *int_base = OBJECT_LOOKUP_STRING(state->root, "int", NULL);
-  assert(int_base);
   IntObject *obj = alloc_object_internal(state, sizeof(IntObject));
-  obj->base.parent = int_base;
+  obj->base.parent = state->shared->vcache.int_base;
   // prevent variations and modifications, allowing all equal numbers to be interchangeable
   // TODO do we actually need this?
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
@@ -186,10 +184,8 @@ Object *alloc_int(VMState *state, int value) {
 }
 
 Object *alloc_bool_uncached(VMState *state, bool value) {
-  Object *bool_base = OBJECT_LOOKUP_STRING(state->root, "bool", NULL);
-  assert(bool_base);
   BoolObject *obj = alloc_object_internal(state, sizeof(BoolObject));
-  obj->base.parent = bool_base;
+  obj->base.parent = state->shared->vcache.bool_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
@@ -204,10 +200,8 @@ Object *alloc_bool(VMState *state, bool value) {
 }
 
 Object *alloc_float(VMState *state, float value) {
-  Object *float_base = OBJECT_LOOKUP_STRING(state->root, "float", NULL);
-  assert(float_base);
   FloatObject *obj = alloc_object_internal(state, sizeof(FloatObject));
-  obj->base.parent = float_base;
+  obj->base.parent = state->shared->vcache.float_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
@@ -258,10 +252,8 @@ Object *alloc_ptr(VMState *state, void *ptr) { // TODO unify with alloc_fn
 }
 
 Object *alloc_fn(VMState *state, VMFunctionPointer fn) {
-  Object *fn_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
-  assert(fn_base);
   FunctionObject *obj = alloc_object_internal(state, sizeof(FunctionObject));
-  obj->base.parent = fn_base;
+  obj->base.parent = state->shared->vcache.function_base;
   obj->fn_ptr = fn;
   return (Object*) obj;
 }

@@ -50,12 +50,9 @@ void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_p
   gc_enable(state);
 }
 
-Object *alloc_closure_fn(Object *context, UserFunction *fn) {
-  Object *root = context;
-  while (root->parent) root = root->parent;
-  Object *cl_base = object_lookup(root, "closure", NULL);
+Object *alloc_closure_fn(VMState *state, Object *context, UserFunction *fn) {
   ClosureObject *obj = calloc(sizeof(ClosureObject), 1);
-  obj->base.base.parent = cl_base;
+  obj->base.base.parent = state->shared->vcache.closure_base;
   if (fn->is_method) obj->base.fn_ptr = method_handler;
   else obj->base.fn_ptr = function_handler;
   obj->context = context;
