@@ -620,6 +620,16 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_set_slot(FastVMState *state) {
+  SetSlotInstr *ssi = (SetSlotInstr*) state->instr;
+  int target_slot = ssi->target_slot;
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
+  state->cf->slots_ptr[target_slot] = ssi->value;
+  
+  state->instr = (Instr*)(ssi + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static void vm_step(VMState *state) {
   FastVMState fast_state;
   fast_state.reststate = state;
@@ -665,6 +675,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_TESTBR] = vm_instr_testbr;
   instr_fns[INSTR_ACCESS_STRING_KEY] = vm_instr_access_string_key;
   instr_fns[INSTR_ASSIGN_STRING_KEY] = vm_instr_assign_string_key;
+  instr_fns[INSTR_SET_SLOT] = vm_instr_set_slot;
 }
 
 void vm_run(VMState *state) {

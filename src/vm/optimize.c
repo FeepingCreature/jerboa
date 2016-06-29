@@ -240,6 +240,103 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
   return fn;
 }
 
+#include "print.h"
+
+// if lookup for "key" in "context" will always return the same value, return it.
+Object *lookup_statically(Object *obj, char *key, bool *key_found_p) {
+  *key_found_p = false;
+  char *key_ptr = key;
+  int key_len = strlen(key);
+  size_t hashv = hash(key_ptr, key_len);
+  while (obj) {
+    bool key_found;
+    Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv, &key_found);
+    if (key_found) {
+      // hit, but the value might change later! bad!
+      if (!(obj->flags & OBJ_FROZEN)) return NULL;
+      *key_found_p = true;
+      return value;
+    }
+    // no hit, but ... 
+    // if the object is not closed, somebody might
+    // insert a different object of "key" later!
+    // note that the current object just needs to be frozen,
+    // because if it gets a hit, we won't be able to overwrite it.
+    if (!(obj->flags & OBJ_CLOSED)) return NULL;
+    obj = obj->parent;
+  }
+  return NULL; // no hits.
+}
+
+UserFunction *inline_static_lookups_to_constants(UserFunction *uf, Object *context) {
+  bool *object_known = calloc(sizeof(bool), uf->slots);
+  Object **known_objects_table = calloc(sizeof(Object*), uf->slots);
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    Instr *instr = block->instrs_ptr;
+    Instr *instr_end = block->instrs_ptr_end;
+    while (instr != instr_end) {
+      if (instr->type == INSTR_GET_CONTEXT) {
+        GetContextInstr *gci = (GetContextInstr*) instr;
+        object_known[gci->slot] = true;
+        known_objects_table[gci->slot] = context;
+      }
+      if (instr->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+        if (object_known[aski->obj_slot]) {
+          Object *known_obj = known_objects_table[aski->obj_slot];
+          bool key_found;
+          Object *static_lookup = lookup_statically(known_obj, aski->key, &key_found);
+          if (key_found) {
+            object_known[aski->target_slot] = true;
+            known_objects_table[aski->target_slot] = static_lookup;
+          }
+        }
+      }
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->slot_base = 0;
+  builder->block_terminated = true;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    new_block(builder);
+    
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+      if (instr->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+        if (object_known[aski->target_slot]) {
+          SetSlotInstr *ssi = malloc(sizeof(SetSlotInstr));
+          ssi->base.type = INSTR_SET_SLOT;
+          ssi->target_slot = aski->target_slot;
+          // Note: there's no need to gc-pin this, since it's
+          // clearly a value that we can see anyways
+          // (ie. it's covered via the gc link via context)
+          ssi->value = known_objects_table[aski->target_slot];
+          use_range_start(builder, instr->belongs_to);
+          addinstr(builder, sizeof(*ssi), (Instr*) ssi);
+          use_range_end(builder, instr->belongs_to);
+          instr = (Instr*) (aski + 1);
+          continue;
+        }
+      }
+      
+      use_range_start(builder, instr->belongs_to);
+      addinstr(builder, instr_size(instr), instr);
+      use_range_end(builder, instr->belongs_to);
+      
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
 UserFunction *optimize(UserFunction *uf) {
   
   bool *primitive_slots;
@@ -251,11 +348,16 @@ UserFunction *optimize(UserFunction *uf) {
   return uf;
 }
 
-#include "print.h"
-
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
+  /*
   printf("runtime optimize %s with %p\n", uf->name, (void*) context);
   if (uf->name && strcmp(uf->name, "gear") == 0) print_recursive(state, context, false);
   printf("\n-----\n");
+  */
+  uf = inline_static_lookups_to_constants(uf, context);
+  
+  fprintf(stderr, "runtime optimized %s to\n", uf->name);
+  dump_fn(uf);
+  
   return uf;
 }

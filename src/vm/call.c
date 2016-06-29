@@ -24,7 +24,7 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
   cf->instr_ptr = cf->uf->body.blocks_ptr[0].instrs_ptr;
 }
 
-#include "optimize.h"
+#include "vm/optimize.h"
 void call_closure(VMState *state, Object *context, ClosureObject *cl, Object **args_ptr, int args_len) {
   cl->num_called ++;
   if (cl->num_called == 10) {

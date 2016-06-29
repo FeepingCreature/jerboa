@@ -110,6 +110,13 @@ void dump_instr(Instr **instr_p) {
       *instr_p = (Instr*) ((AssignStringKeyInstr*) instr + 1);
       break;
     }
+    case INSTR_SET_SLOT:
+    {
+      fprintf(stderr, "    set slot: %i = %p \t\t (opt: inlined lookup)\n",
+              ((SetSlotInstr*) instr)->target_slot, (void*) ((SetSlotInstr*) instr)->value);
+      *instr_p = (Instr*) ((SetSlotInstr*) instr + 1);
+      break;
+    }
     default:
       fprintf(stderr, "    unknown instruction: %i\n", instr->type);
       assert(false);
