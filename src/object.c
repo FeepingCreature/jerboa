@@ -153,13 +153,7 @@ void object_set(Object *obj, const char *key, Object *value) {
   *ptr = value;
 }
 
-static void *alloc_object_internal(VMState *state, int size) {
-  if (state->shared->gcstate.num_obj_allocated > state->shared->gcstate.next_gc_run) {
-    gc_run(state);
-    // run gc after 50% growth or 10000 allocated or thereabouts
-    state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + 10000;
-  }
-  
+void *alloc_object_internal(VMState *state, int size) {
   Object *res = cache_alloc(size);
   res->prev = state->shared->gcstate.last_obj_allocated;
   res->size = size;
@@ -180,7 +174,7 @@ Object *alloc_object(VMState *state, Object *parent) {
 }
 
 Object *alloc_int(VMState *state, int value) {
-  Object *int_base = object_lookup(state->root, "int", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(state->root, "int", NULL);
   assert(int_base);
   IntObject *obj = alloc_object_internal(state, sizeof(IntObject));
   obj->base.parent = int_base;
@@ -192,7 +186,7 @@ Object *alloc_int(VMState *state, int value) {
 }
 
 Object *alloc_bool_uncached(VMState *state, bool value) {
-  Object *bool_base = object_lookup(state->root, "bool", NULL);
+  Object *bool_base = OBJECT_LOOKUP_STRING(state->root, "bool", NULL);
   assert(bool_base);
   BoolObject *obj = alloc_object_internal(state, sizeof(BoolObject));
   obj->base.parent = bool_base;
@@ -210,7 +204,7 @@ Object *alloc_bool(VMState *state, bool value) {
 }
 
 Object *alloc_float(VMState *state, float value) {
-  Object *float_base = object_lookup(state->root, "float", NULL);
+  Object *float_base = OBJECT_LOOKUP_STRING(state->root, "float", NULL);
   assert(float_base);
   FloatObject *obj = alloc_object_internal(state, sizeof(FloatObject));
   obj->base.parent = float_base;
@@ -220,7 +214,7 @@ Object *alloc_float(VMState *state, float value) {
 }
 
 Object *alloc_string(VMState *state, const char *ptr, int len) {
-  Object *string_base = object_lookup(state->root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
   assert(string_base);
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
@@ -233,7 +227,7 @@ Object *alloc_string(VMState *state, const char *ptr, int len) {
 }
 
 Object *alloc_string_foreign(VMState *state, char *value) {
-  Object *string_base = object_lookup(state->root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
   assert(string_base);
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
@@ -244,7 +238,7 @@ Object *alloc_string_foreign(VMState *state, char *value) {
 }
 
 Object *alloc_array(VMState *state, Object **ptr, IntObject *length) {
-  Object *array_base = object_lookup(state->root, "array", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(state->root, "array", NULL);
   assert(array_base);
   ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
   obj->base.parent = array_base;
@@ -255,7 +249,7 @@ Object *alloc_array(VMState *state, Object **ptr, IntObject *length) {
 }
 
 Object *alloc_ptr(VMState *state, void *ptr) { // TODO unify with alloc_fn
-  Object *ptr_base = object_lookup(state->root, "pointer", NULL);
+  Object *ptr_base = OBJECT_LOOKUP_STRING(state->root, "pointer", NULL);
   assert(ptr_base);
   PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject));
   obj->base.parent = ptr_base;
@@ -264,7 +258,7 @@ Object *alloc_ptr(VMState *state, void *ptr) { // TODO unify with alloc_fn
 }
 
 Object *alloc_fn(VMState *state, VMFunctionPointer fn) {
-  Object *fn_base = object_lookup(state->root, "function", NULL);
+  Object *fn_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
   assert(fn_base);
   FunctionObject *obj = alloc_object_internal(state, sizeof(FunctionObject));
   obj->base.parent = fn_base;

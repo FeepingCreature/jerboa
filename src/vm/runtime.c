@@ -27,7 +27,7 @@ static char *my_asprintf(char *fmt, ...) {
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *root = state->root;
-  Object *bool_base = object_lookup(root, "bool", NULL);
+  Object *bool_base = OBJECT_LOOKUP_STRING(root, "bool", NULL);
   BoolObject *boolobj = (BoolObject*) obj_instance_of(thisptr, bool_base);
   VM_ASSERT(boolobj, "internal error: bool negation called on wrong type of object");
   
@@ -47,7 +47,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
   
-  Object *int_base = object_lookup(root, "int", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object
     *iobj1 = obj_instance_of(thisptr, int_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base);
@@ -71,7 +71,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     return;
   }
   
-  Object *float_base = object_lookup(root, "float", NULL);
+  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
   if (fobj2) {
     float v1 = ((IntObject*) iobj1)->value, v2 = ((FloatObject*) fobj2)->value;
@@ -120,7 +120,7 @@ static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
   
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(sobj, "parameter to int.parse() must be string!");
@@ -139,8 +139,8 @@ static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *float_base = object_lookup(root, "float", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
+  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   
   Object
     *fobj1 = obj_instance_of(thisptr, float_base),
@@ -186,10 +186,10 @@ static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *bool_base = object_lookup(root, "bool", NULL);
-  Object *float_base = object_lookup(root, "float", NULL);
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
+  Object *bool_base = OBJECT_LOOKUP_STRING(root, "bool", NULL);
+  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -214,7 +214,7 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
 static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -232,7 +232,7 @@ static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -258,7 +258,7 @@ static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Ob
 static void string_endswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -293,7 +293,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
   
-  Object *int_base = object_lookup(root, "int", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
   Object
     *iobj1 = obj_instance_of(thisptr, int_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base);
@@ -313,7 +313,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
     return;
   }
   
-  Object *float_base = object_lookup(root, "float", NULL);
+  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   Object *fobj2 = obj_instance_of(args_ptr[0], float_base);
   if (fobj2) {
     float v1 = ((IntObject*) iobj1)->value, v2 = ((FloatObject*) fobj2)->value;
@@ -356,8 +356,8 @@ static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **a
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
   
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *float_base = object_lookup(root, "float", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
+  Object *float_base = OBJECT_LOOKUP_STRING(root, "float", NULL);
   Object
     *fobj1 = obj_instance_of(thisptr, float_base),
     *iobj2 = obj_instance_of(args_ptr[0], int_base),
@@ -404,14 +404,14 @@ static void float_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 
 static void closure_mark_fn(VMState *state, Object *obj) {
   Object *root = state->root;
-  Object *closure_base = object_lookup(root, "closure", NULL);
+  Object *closure_base = OBJECT_LOOKUP_STRING(root, "closure", NULL);
   ClosureObject *clobj = (ClosureObject*) obj_instance_of(obj, closure_base);
   if (clobj) obj_mark(state, clobj->context);
 }
 
 static void array_mark_fn(VMState *state, Object *obj) {
   Object *root = state->root;
-  Object *array_base = object_lookup(root, "array", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
   if (arr_obj) { // else it's obj == array_base
     for (int i = 0; i < arr_obj->length; ++i) {
@@ -423,7 +423,7 @@ static void array_mark_fn(VMState *state, Object *obj) {
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *root = state->root;
-  Object *pointer_base = object_lookup(root, "pointer", NULL);
+  Object *pointer_base = OBJECT_LOOKUP_STRING(root, "pointer", NULL);
   PointerObject *ptr_obj = (PointerObject*) obj_instance_of(thisptr, pointer_base);
   state->result_value = alloc_bool(state, ptr_obj->ptr == NULL);
 }
@@ -431,8 +431,8 @@ static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object *
 static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *array_base = object_lookup(root, "array", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
   VM_ASSERT(iarg, "parameter to resize function must be int");
@@ -450,7 +450,7 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
 static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *array_base = object_lookup(root, "array", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   VM_ASSERT(arr_obj, "internal error: push called on object that is not an array");
   Object *value = args_ptr[0];
@@ -463,7 +463,7 @@ static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **
 static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *root = state->root;
-  Object *array_base = object_lookup(root, "array", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   VM_ASSERT(arr_obj, "internal error: pop called on object that is not an array");
   Object *res = arr_obj->ptr[arr_obj->length - 1];
@@ -475,8 +475,8 @@ static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *array_base = object_lookup(root, "array", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
   if (!iarg) { state->result_value = NULL; return; }
@@ -489,8 +489,8 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
 static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
   Object *root = state->root;
-  Object *int_base = object_lookup(root, "int", NULL);
-  Object *array_base = object_lookup(root, "array", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(root, "int", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], int_base);
   VM_ASSERT(arr_obj, "internal error: array '[]=' called on object that is not an array");
@@ -578,8 +578,8 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
 static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = object_lookup(root, "string", NULL);
-  Object *node_base = object_lookup(object_lookup(root, "xml", NULL), "node", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *node_base = OBJECT_LOOKUP_STRING(OBJECT_LOOKUP_STRING(root, "xml", NULL), "node", NULL);
   
   StringObject *str_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(str_obj, "parameter to xml.load must be string");
@@ -647,7 +647,7 @@ static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Ob
     (*array_p_p)[(*array_l_p) - 1] = node;
   }
   
-  Object *children_obj = object_lookup(node, "children", NULL);
+  Object *children_obj = OBJECT_LOOKUP_STRING(node, "children", NULL);
   VM_ASSERT(children_obj, "missing 'children' property in node");
   ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
   VM_ASSERT(children_aobj, "'children' property in node is not an array");
@@ -662,10 +662,10 @@ static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Ob
 static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *bool_base = object_lookup(root, "bool", NULL);
-  Object *array_base = object_lookup(root, "array", NULL);
-  Object *closure_base = object_lookup(root, "closure", NULL);
-  Object *function_base = object_lookup(root, "function", NULL);
+  Object *bool_base = OBJECT_LOOKUP_STRING(root, "bool", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *closure_base = OBJECT_LOOKUP_STRING(root, "closure", NULL);
+  Object *function_base = OBJECT_LOOKUP_STRING(root, "function", NULL);
   
   Object **array_ptr = NULL; int array_length = 0;
   gc_disable(state);
@@ -679,7 +679,7 @@ static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, 
 static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *name, Object ***array_p_p, int *array_l_p,
                                   Object *string_base, Object *array_base)
 {
-  Object *node_name = object_lookup(node, "nodeName", NULL);
+  Object *node_name = OBJECT_LOOKUP_STRING(node, "nodeName", NULL);
   VM_ASSERT(node_name, "missing 'nodeName' property in node");
   StringObject *nodeName_str = (StringObject*) obj_instance_of(node_name, string_base);
   if (strcmp(nodeName_str->value, name) == 0) {
@@ -687,7 +687,7 @@ static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *na
     (*array_p_p)[(*array_l_p) - 1] = node;
   }
   
-  Object *children_obj = object_lookup(node, "children", NULL);
+  Object *children_obj = OBJECT_LOOKUP_STRING(node, "children", NULL);
   VM_ASSERT(children_obj, "missing 'children' property in node");
   ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
   VM_ASSERT(children_aobj, "'children' property in node is not an array");
@@ -702,8 +702,8 @@ static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *na
 static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *array_base = object_lookup(root, "array", NULL);
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   StringObject *name_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(name_obj, "parameter to find_array_by_name must be string!");
@@ -722,7 +722,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Obje
 static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   StringObject *file_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(file_obj, "parameter to require() must be string!");

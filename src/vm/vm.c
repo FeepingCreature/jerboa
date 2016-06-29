@@ -322,7 +322,7 @@ static FnWrap vm_instr_access(FastVMState *state) {
   int key_slot = access_instr->key_slot;
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "internal slot error");
   VM_ASSERT2(state->cf->slots_ptr[key_slot], "key slot null"); // TODO "slot_assigned"
-  Object *string_base = object_lookup(state->root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
   Object *key_obj = state->cf->slots_ptr[key_slot];
   VM_ASSERT2(key_obj, "key is null");
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
@@ -333,10 +333,10 @@ static FnWrap vm_instr_access(FastVMState *state) {
     state->cf->slots_ptr[target_slot] = object_lookup(obj, key, &object_found);
   }
   if (!object_found) {
-    Object *index_op = object_lookup(obj, "[]", NULL);
+    Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
     if (index_op) {
-      Object *function_base = object_lookup(state->root, "function", NULL);
-      Object *closure_base = object_lookup(state->root, "closure", NULL);
+      Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
+      Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
       FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
       ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
       VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
@@ -379,19 +379,21 @@ static FnWrap vm_instr_access_string_key(FastVMState *state) {
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "internal slot error");
   Object *obj = state->cf->slots_ptr[obj_slot];
   
-  char *key = aski->key;
+  char *key_ptr = aski->key_ptr;
+  int key_len = aski->key_len;
+  size_t key_hash = aski->key_hash;
   bool object_found = false;
-  state->cf->slots_ptr[target_slot] = object_lookup(obj, key, &object_found);
+  state->cf->slots_ptr[target_slot] = object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found);
   
   if (!object_found) {
-    Object *index_op = object_lookup(obj, "[]", NULL);
+    Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
     if (index_op) {
-      Object *function_base = object_lookup(state->root, "function", NULL);
-      Object *closure_base = object_lookup(state->root, "closure", NULL);
+      Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
+      Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
       FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
       ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
       VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
-      Object *key_obj = alloc_string(state->reststate, aski->key, strlen(aski->key));
+      Object *key_obj = alloc_string(state->reststate, aski->key_ptr, aski->key_len);
       
       VMState substate = {0};
       // TODO see above
@@ -411,7 +413,7 @@ static FnWrap vm_instr_access_string_key(FastVMState *state) {
     }
   }
   if (!object_found) {
-    VM_ASSERT2(false, "property not found: '%s'", key);
+    VM_ASSERT2(false, "property not found: '%.*s'", key_len, key_ptr);
   }
   state->instr = (Instr*)(aski + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -427,15 +429,15 @@ static FnWrap vm_instr_assign(FastVMState *state) {
   VM_ASSERT2(state->cf->slots_ptr[key_slot], "key slot null"); // TODO see above
   Object *obj = state->cf->slots_ptr[obj_slot];
   Object *value_obj = state->cf->slots_ptr[value_slot];
-  Object *string_base = object_lookup(state->root, "string", NULL);
+  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
   Object *key_obj = state->cf->slots_ptr[key_slot];
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   if (!skey) {
     // non-string key, goes to []=
-    Object *index_assign_op = object_lookup(obj, "[]=", NULL);
+    Object *index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (index_assign_op) {
-      Object *function_base = object_lookup(state->root, "function", NULL);
-      Object *closure_base = object_lookup(state->root, "closure", NULL);
+      Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
+      Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
       FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
       ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
       VM_ASSERT2(fn_index_assign_op || cl_index_assign_op, "'[]=' is neither function nor closure");
@@ -516,8 +518,8 @@ static FnWrap vm_instr_call(FastVMState *state) {
   Object *this_obj = state->cf->slots_ptr[this_slot];
   Object *fn_obj = state->cf->slots_ptr[function_slot];
   // validate function type
-  Object *closure_base = object_lookup(state->root, "closure", NULL);
-  Object *function_base = object_lookup(state->root, "function", NULL);
+  Object *closure_base = OBJECT_LOOKUP_STRING(state->root, "closure", NULL);
+  Object *function_base = OBJECT_LOOKUP_STRING(state->root, "function", NULL);
   FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
   ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
   VM_ASSERT2(cl || fn, "cannot call: object is neither function nor closure");
@@ -601,8 +603,8 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   VM_ASSERT2_SLOT(test_slot < state->cf->slots_len, "slot numbering error");
   Object *test_value = state->cf->slots_ptr[test_slot];
   
-  Object *bool_base = object_lookup(state->root, "bool", NULL);
-  Object *int_base = object_lookup(state->root, "int", NULL);
+  Object *bool_base = OBJECT_LOOKUP_STRING(state->root, "bool", NULL);
+  Object *int_base = OBJECT_LOOKUP_STRING(state->root, "int", NULL);
   Object *b_test_value = obj_instance_of(test_value, bool_base);
   Object *i_test_value = obj_instance_of(test_value, int_base);
   
@@ -701,6 +703,11 @@ void vm_run(VMState *state) {
     if (state->stack_len == 0) {
       state->runstate = VM_TERMINATED;
       break;
+    }
+    if (state->shared->gcstate.num_obj_allocated > state->shared->gcstate.next_gc_run) {
+      gc_run(state);
+      // run gc after 50% growth or 10000 allocated or thereabouts
+      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + 10000;
     }
   }
   gc_remove_roots(state, &result_set);

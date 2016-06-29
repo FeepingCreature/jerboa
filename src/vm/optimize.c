@@ -136,7 +136,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           bool key_in_obj = false;
           for (int i = 0; i < info[obj_slot].names_len; ++i) {
             char *objkey = info[obj_slot].names_ptr[i];
-            if (strcmp(objkey, aski_new->key) == 0) {
+            if (strcmp(objkey, aski_new->key_ptr) == 0) {
               key_in_obj = true;
               break;
             }
@@ -206,7 +206,9 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         aski->base.type = INSTR_ACCESS_STRING_KEY;
         aski->obj_slot = acci->obj_slot;
         aski->target_slot = acci->target_slot;
-        aski->key = slot_table_ptr[acci->key_slot];
+        aski->key_ptr = slot_table_ptr[acci->key_slot];
+        aski->key_len = strlen(aski->key_ptr);
+        aski->key_hash = hash(aski->key_ptr, aski->key_len);
         use_range_start(builder, acci->base.belongs_to);
         addinstr(builder, sizeof(*aski), (Instr*) aski);
         use_range_end(builder, acci->base.belongs_to);
@@ -243,11 +245,8 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
 #include "print.h"
 
 // if lookup for "key" in "context" will always return the same value, return it.
-Object *lookup_statically(Object *obj, char *key, bool *key_found_p) {
+Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv, bool *key_found_p) {
   *key_found_p = false;
-  char *key_ptr = key;
-  int key_len = strlen(key);
-  size_t hashv = hash(key_ptr, key_len);
   while (obj) {
     bool key_found;
     Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv, &key_found);
@@ -286,7 +285,9 @@ UserFunction *inline_static_lookups_to_constants(UserFunction *uf, Object *conte
         if (object_known[aski->obj_slot]) {
           Object *known_obj = known_objects_table[aski->obj_slot];
           bool key_found;
-          Object *static_lookup = lookup_statically(known_obj, aski->key, &key_found);
+          Object *static_lookup = lookup_statically(known_obj,
+                                                    aski->key_ptr, aski->key_len, aski->key_hash,
+                                                    &key_found);
           if (key_found) {
             object_known[aski->target_slot] = true;
             known_objects_table[aski->target_slot] = static_lookup;

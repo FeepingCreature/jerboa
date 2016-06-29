@@ -2,6 +2,7 @@
 #define VM_INSTR_H
 
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef enum {
   INSTR_INVALID = -1,
@@ -175,7 +176,9 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot; char *key;
+  int obj_slot;
+  char *key_ptr; int key_len;
+  size_t key_hash;
   int target_slot;
 } AccessStringKeyInstr;
 

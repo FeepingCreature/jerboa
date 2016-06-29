@@ -179,6 +179,8 @@ typedef struct {
   void *ptr;
 } PointerObject;
 
+void *alloc_object_internal(VMState *state, int size);
+
 Object *alloc_object(VMState *state, Object *parent);
 
 Object *alloc_int(VMState *state, int value);

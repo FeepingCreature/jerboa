@@ -1,16 +1,16 @@
 var libc_so = ffi.open("libc.so.6");
-var puts = libc_so.sym("puts", ffi.sint, [ffi.char_pointer]);
-var malloc = libc_so.sym("malloc", ffi.pointer, [ffi.sint]);
+const puts = libc_so.sym("puts", ffi.sint, [ffi.char_pointer]);
+const malloc = libc_so.sym("malloc", ffi.pointer, [ffi.sint]);
 puts("Hello World from libffi!");
 
 var swig_tools = require("swig_tools.jb");
 
-var gl = swig_tools.loadLibrary("gl_wrap.xml", "libGL.so");
-var sdl = swig_tools.loadLibrary("SDL_wrap.xml", "libSDL.so");
+const gl = swig_tools.loadLibrary("gl_wrap.xml", "libGL.so");
+const sdl = swig_tools.loadLibrary("SDL_wrap.xml", "libSDL.so");
 
 sdl["SDL_QUIT"] = 12;
 
-var glu = swig_tools.loadLibrary("glu_wrap.xml", "libGLU.so");
+const glu = swig_tools.loadLibrary("glu_wrap.xml", "libGLU.so");
 
 function drawGL() {
   gl.glViewport(0, 0, 800, 600);

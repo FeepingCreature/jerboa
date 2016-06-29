@@ -96,8 +96,9 @@ void dump_instr(Instr **instr_p) {
       *instr_p = (Instr*) ((TestBranchInstr*) instr + 1);
       break;
     case INSTR_ACCESS_STRING_KEY:
-      fprintf(stderr, "    access: %i = %i . '%s' \t\t(opt: string key)\n",
-              ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot, ((AccessStringKeyInstr*) instr)->key);
+      fprintf(stderr, "    access: %i = %i . '%.*s' \t\t(opt: string key)\n",
+              ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot,
+              ((AccessStringKeyInstr*) instr)->key_len, ((AccessStringKeyInstr*) instr)->key_ptr);
       *instr_p = (Instr*) ((AccessStringKeyInstr*) instr + 1);
       break;
     case INSTR_ASSIGN_STRING_KEY:
