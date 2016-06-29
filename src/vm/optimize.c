@@ -251,3 +251,12 @@ UserFunction *optimize(UserFunction *uf) {
   
   return uf;
 }
+
+#include "print.h"
+
+UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
+  fprintf(stderr, "runtime optimize %s with %p\n", uf->name, (void*) context);
+  print_recursive(state, context);
+  printf("\n-----\n");
+  return uf;
+}

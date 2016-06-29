@@ -64,7 +64,7 @@ typedef struct {
   UserFunction *uf;
   Object *context;
   Object **slots_ptr; int slots_len;
-  GCRootSet frameroot; // gc entry for the pinned slots array
+  GCRootSet frameroot_slots, frameroot_ctx; // gc entries
   Instr *instr_ptr;
 } Callframe;
 
@@ -143,7 +143,8 @@ typedef struct {
 typedef struct {
   FunctionObject base;
   Object *context;
-  UserFunction vmfun;
+  UserFunction *vmfun;
+  int num_called; // used for triggering optimization
 } ClosureObject;
 
 typedef struct {

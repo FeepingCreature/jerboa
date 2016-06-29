@@ -31,14 +31,16 @@ Callframe *vm_alloc_frame(VMState *state, int slots) {
       *((int*)ptr - 1) = new_capacity;
       // tear down old gc roots
       for (int i = 0; i < state->stack_len; ++i) {
-        gc_remove_roots(state, &state->stack_ptr[i].frameroot);
+        gc_remove_roots(state, &state->stack_ptr[i].frameroot_slots);
+        gc_remove_roots(state, &state->stack_ptr[i].frameroot_ctx);
       }
       memcpy(ptr, old_ptr, capacity);
       state->stack_ptr = ptr;
       // add new gc roots
       for (int i = 0; i < state->stack_len; ++i) {
         Callframe *cf = &state->stack_ptr[i];
-        gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot);
+        gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
+        gc_add_roots(state, &cf->context, 1, &cf->frameroot_ctx);
       }
       free(old_ptr_base);
     }
@@ -562,7 +564,8 @@ static FnWrap vm_instr_return(FastVMState *state) {
   int ret_slot = ret_instr->ret_slot;
   VM_ASSERT2_SLOT(ret_slot < state->cf->slots_len, "slot numbering error");
   Object *res = state->cf->slots_ptr[ret_slot];
-  gc_remove_roots(state->reststate, &state->cf->frameroot);
+  gc_remove_roots(state->reststate, &state->cf->frameroot_slots);
+  gc_remove_roots(state->reststate, &state->cf->frameroot_ctx);
   vm_remove_frame(state->reststate);
   state->reststate->result_value = res;
   
