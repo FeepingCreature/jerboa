@@ -53,6 +53,122 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   }
 }
 
+typedef struct {
+  bool static_object;
+  int parent_slot;
+  char **names_ptr; int names_len;
+} SlotIsStaticObjInfo;
+
+#include <stdio.h>
+#include "vm/dump.h"
+
+// static object: allocated, assigned a few keys, and closed.
+static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
+  *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
+  
+  fprintf(stderr, " -------- \nslot scanning %s\n", uf->name);
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    Instr *instr = block->instrs_ptr;
+    Instr *instr_end = block->instrs_ptr_end;
+    while (instr != instr_end) {
+      Instr *instr2 = instr;
+      dump_instr(&instr2);
+      
+      if (instr->type == INSTR_ALLOC_OBJECT) {
+        AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
+        instr = (Instr*) (alobi + 1);
+        bool failed = false;
+        char **names_ptr = 0; int names_len = 0;
+        while (instr != instr_end && instr->type == INSTR_ASSIGN_STRING_KEY) {
+          AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
+          if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
+          instr = (Instr*) (aski + 1);
+          names_ptr = realloc(names_ptr, sizeof(char*) * ++names_len);
+          names_ptr[names_len - 1] = aski->key;
+        }
+        if (instr->type != INSTR_CLOSE_OBJECT) failed = true;
+        if (failed) {
+          free(names_ptr);
+          continue;
+        }
+        int target_slot = alobi->target_slot;
+        (*slots_p)[target_slot].static_object = true;
+        (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
+        (*slots_p)[target_slot].names_ptr = names_ptr;
+        (*slots_p)[target_slot].names_len = names_len;
+        for (int i = 0; i < names_len; ++i) {
+          fprintf(stderr, "  # %i: %s\n", i, names_ptr[i]);
+        }
+      }
+      instr = (Instr*)((char*) instr + instr_size(instr));
+    }
+  }
+}
+
+static void copy_fn_stats(UserFunction *from, UserFunction *to) {
+  to->slots = from->slots;
+  to->arity = from->arity;
+  to->name = from->name;
+  to->is_method = from->is_method;
+}
+
+static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
+  SlotIsStaticObjInfo *info;
+  slot_is_static_object(uf, &info);
+  
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->slot_base = 0;
+  builder->block_terminated = true;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    new_block(builder);
+    
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+      AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+      if (instr->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *aski_new = malloc(sizeof(AccessStringKeyInstr));
+        *aski_new = *aski;
+        while (true) {
+          int obj_slot = aski_new->obj_slot;
+          if (!info[obj_slot].static_object) break;
+          bool key_in_obj = false;
+          for (int i = 0; i < info[obj_slot].names_len; ++i) {
+            char *objkey = info[obj_slot].names_ptr[i];
+            if (strcmp(objkey, aski_new->key) == 0) {
+              key_in_obj = true;
+              break;
+            }
+          }
+          if (key_in_obj) break;
+          // since the key was not found in obj
+          // we can know statically that the lookup will
+          // not succeed at runtime either
+          // (since the object is closed, its keys are statically known)
+          // so instead look up in the (known) parent object from the start
+          aski_new->obj_slot = info[obj_slot].parent_slot;
+        }
+        use_range_start(builder, instr->belongs_to);
+        addinstr(builder, sizeof(*aski_new), (Instr*) aski_new);
+        use_range_end(builder, instr->belongs_to);
+        instr = (Instr*) (aski + 1);
+        continue;
+      }
+      
+      use_range_start(builder, instr->belongs_to);
+      addinstr(builder, instr_size(instr), instr);
+      use_range_end(builder, instr->belongs_to);
+      
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
 static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->slot_base = 0;
@@ -120,12 +236,8 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  // TODO abstract this out?
   UserFunction *fn = build_function(builder);
-  fn->slots = uf->slots;
-  fn->arity = uf->arity;
-  fn->name = uf->name;
-  fn->is_method = uf->is_method;
+  copy_fn_stats(uf, fn);
   return fn;
 }
 
@@ -134,5 +246,8 @@ UserFunction *optimize(UserFunction *uf) {
   bool *primitive_slots;
   slot_is_primitive(uf, &primitive_slots);
   uf = inline_primitive_accesses(uf, primitive_slots);
+  
+  uf = redirect_predictable_lookup_misses(uf);
+  
   return uf;
 }

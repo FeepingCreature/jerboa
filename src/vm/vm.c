@@ -182,9 +182,11 @@ static FnWrap vm_halt(FastVMState *state);
 
 #define VM_ASSERT2(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state->reststate, __VA_ARGS__), true)) return (FnWrap) { vm_halt }
 
-// enable when adding new instructions/transforms
-// #define VM_ASSERT2_SLOT(cond, ...) VM_ASSERT2(cond, ...)
+#ifndef NDEBUG
+#define VM_ASSERT2_SLOT(cond, ...) VM_ASSERT2(cond, __VA_ARGS__)
+#else
 #define VM_ASSERT2_SLOT(cond, ...) (void) 0
+#endif
 
 static VMInstrFn instr_fns[INSTR_LAST] = {0};
 
