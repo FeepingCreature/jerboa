@@ -22,6 +22,7 @@ typedef struct {
   TableEntry *entries_ptr;
   int entries_num;
   int entries_stored;
+  size_t bloom;
 } HashTable;
 
 void **table_lookup_ref(HashTable *tbl, const char *key_ptr, int key_len) __attribute__ ((pure));

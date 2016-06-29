@@ -8,13 +8,14 @@ void *cache_alloc(int size);
 
 void cache_free(int size, void *ptr);
 
-// #include <stdio.h>
+#include <stdio.h>
 static inline void **table_lookup_ref_with_hash_internal2(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv) {
-  // printf("::%.*s\n", key_len, key_ptr);
   assert(key_ptr != NULL);
   if (tbl->entries_stored == 0) return NULL;
+  if ((tbl->bloom & hashv) != hashv) return NULL;
   // printf(":: %.*s into %i having %i\n", key_len, key_ptr, tbl->entries_num, tbl->entries_stored);
   int entries_num = tbl->entries_num;
+  // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
   if (entries_num <= 8) { // faster to do a direct scan
     for (int i = 0; i < entries_num; ++i) {
       TableEntry *entry = &tbl->entries_ptr[i];
@@ -98,6 +99,7 @@ static void **table_lookup_ref_alloc_with_hash_internal(HashTable *tbl, const ch
       free_ptr->name_ptr = key_ptr;
       free_ptr->name_len = key_len;
       tbl->entries_stored ++;
+      tbl->bloom |= key_hash;
       *first_free_ptr = &free_ptr->value;
       return NULL;
     }
@@ -131,7 +133,7 @@ void **table_lookup_ref_alloc_with_hash(HashTable *tbl, const char *key_ptr, int
 // if the key was not found, return null but allocate a mapping in first_free_ptr
 void **table_lookup_ref_alloc(HashTable *tbl, const char *key_ptr, int key_len, void*** first_free_ptr) {
   size_t key_hash = tbl->entries_num?hash(key_ptr, key_len):0;
-  return table_lookup_ref_alloc_with_hash(tbl, key_ptr, key_len, key_hash, first_free_ptr);
+  return table_lookup_ref_alloc_with_hash_internal(tbl, key_ptr, key_len, key_hash, first_free_ptr);
 }
 
 void *table_lookup(HashTable *tbl, const char *key_ptr, int key_len, bool *key_found_p) {
