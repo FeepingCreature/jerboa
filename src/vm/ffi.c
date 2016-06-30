@@ -33,20 +33,21 @@ static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 
 static ffi_type *type_to_ffi_ptr(Object *ffi_obj, Object *obj) {
   FFIObject *ffi = (FFIObject*) ffi_obj;
-  if (obj_instance_of_or_equal(obj, ffi->void_obj)) return &ffi_type_void;
-  if (obj_instance_of_or_equal(obj, ffi->uint_obj)) return &ffi_type_uint;
-  if (obj_instance_of_or_equal(obj, ffi->sint_obj)) return &ffi_type_sint;
-  if (obj_instance_of_or_equal(obj, ffi->float_obj)) return &ffi_type_float;
-  if (obj_instance_of_or_equal(obj, ffi->double_obj)) return &ffi_type_double;
-  if (obj_instance_of_or_equal(obj, ffi->int8_obj)) return &ffi_type_uint8;
-  if (obj_instance_of_or_equal(obj, ffi->int16_obj)) return &ffi_type_uint16;
-  if (obj_instance_of_or_equal(obj, ffi->int32_obj)) return &ffi_type_uint32;
-  if (obj_instance_of_or_equal(obj, ffi->int64_obj)) return &ffi_type_uint64;
-  if (obj_instance_of_or_equal(obj, ffi->uint8_obj)) return &ffi_type_uint8;
-  if (obj_instance_of_or_equal(obj, ffi->uint16_obj)) return &ffi_type_uint16;
-  if (obj_instance_of_or_equal(obj, ffi->uint32_obj)) return &ffi_type_uint32;
-  if (obj_instance_of_or_equal(obj, ffi->uint64_obj)) return &ffi_type_uint64;
-  if (obj_instance_of_or_equal(obj, ffi->pointer_obj)) return &ffi_type_pointer;
+  if (obj == ffi->void_obj) return &ffi_type_void;
+  if (obj == ffi->uint_obj) return &ffi_type_uint;
+  if (obj == ffi->sint_obj) return &ffi_type_sint;
+  if (obj == ffi->float_obj) return &ffi_type_float;
+  if (obj == ffi->double_obj) return &ffi_type_double;
+  if (obj == ffi->int8_obj) return &ffi_type_uint8;
+  if (obj == ffi->int16_obj) return &ffi_type_uint16;
+  if (obj == ffi->int32_obj) return &ffi_type_uint32;
+  if (obj == ffi->int64_obj) return &ffi_type_uint64;
+  if (obj == ffi->uint8_obj) return &ffi_type_uint8;
+  if (obj == ffi->uint16_obj) return &ffi_type_uint16;
+  if (obj == ffi->uint32_obj) return &ffi_type_uint32;
+  if (obj == ffi->uint64_obj) return &ffi_type_uint64;
+  if (obj == ffi->char_ptr_obj) return &ffi_type_pointer;
+  if (obj == ffi->pointer_obj) return &ffi_type_pointer;
   abort();
 }
 
@@ -77,6 +78,43 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   } else assert("TODO" && false);
 }
 
+typedef struct {
+  FunctionObject base;
+  Object *return_type;
+  ArrayObject *par_types_array;
+  Object *_sym_pointer, *_ffi_pointer;
+  int par_len_sum_precomp;
+} FFIFunctionObject;
+
+static int ffi_par_len(Object *ret_type, ArrayObject *par_types_array, FFIObject *ffi) {
+  int par_len_sum = 0;
+  for (int i = -1; i < par_types_array->length; ++i) {
+    Object *type;
+    if (i == -1) type = ret_type;
+    else type = par_types_array->ptr[i];
+    
+    if (obj_instance_of_or_equal(type, ffi->void_obj)) { }
+#define TYPESZ(T) ((sizeof(T)>sizeof(long))?sizeof(T):sizeof(long))
+    else if (type == ffi->sint_obj) par_len_sum += TYPESZ(int);
+    else if (type == ffi->uint_obj) par_len_sum += TYPESZ(unsigned int);
+    else if (type == ffi->float_obj) par_len_sum += TYPESZ(float);
+    else if (type == ffi->double_obj) par_len_sum += TYPESZ(double);
+    else if (type == ffi->int8_obj) par_len_sum += TYPESZ(int8_t);
+    else if (type == ffi->int16_obj) par_len_sum += TYPESZ(int16_t);
+    else if (type == ffi->int32_obj) par_len_sum += TYPESZ(int32_t);
+    else if (type == ffi->int64_obj) par_len_sum += TYPESZ(int64_t);
+    else if (type == ffi->uint8_obj) par_len_sum += TYPESZ(uint8_t);
+    else if (type == ffi->uint16_obj) par_len_sum += TYPESZ(uint16_t);
+    else if (type == ffi->uint32_obj) par_len_sum += TYPESZ(uint32_t);
+    else if (type == ffi->uint64_obj) par_len_sum += TYPESZ(uint64_t);
+    else if (type == ffi->char_ptr_obj) par_len_sum += TYPESZ(char*);
+    else if (type == ffi->pointer_obj) par_len_sum += TYPESZ(void*);
+    else abort();
+#undef TYPESZ
+  }
+  return par_len_sum;
+}
+
 static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   Object *int_base = state->shared->vcache.int_base;
   Object *float_base = state->shared->vcache.float_base;
@@ -87,13 +125,13 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *ffi_obj = state->shared->vcache.ffi_obj;
   FFIObject *ffi = (FFIObject*) ffi_obj;
   
-  Object *ret_type = OBJECT_LOOKUP_STRING(fn, "return_type", NULL);
-  Object *par_types = OBJECT_LOOKUP_STRING(fn, "parameter_types", NULL);
-  Object *ffi_ptr_obj = OBJECT_LOOKUP_STRING(fn, "_ffi_pointer", NULL);
-  Object *sym_ptr_obj = OBJECT_LOOKUP_STRING(fn, "_sym_pointer", NULL);
-  assert(ret_type && par_types && ffi_ptr_obj && sym_ptr_obj);
-  ArrayObject *par_types_array = (ArrayObject*) obj_instance_of(par_types, array_base);
-  assert(par_types_array);
+  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(fn, function_base);
+  
+  Object *ret_type = ffi_fn->return_type;
+  ArrayObject *par_types_array = ffi_fn->par_types_array;
+  Object *ffi_ptr_obj = ffi_fn->_ffi_pointer;
+  Object *sym_ptr_obj = ffi_fn->_sym_pointer;
+  assert(ret_type && par_types_array && ffi_ptr_obj && sym_ptr_obj);
   PointerObject *ffi_ptr_obj_sub = (PointerObject*) obj_instance_of(ffi_ptr_obj, pointer_base);
   PointerObject *sym_ptr_obj_sub = (PointerObject*) obj_instance_of(sym_ptr_obj, pointer_base);
   assert(ffi_ptr_obj_sub && sym_ptr_obj_sub);
@@ -102,39 +140,19 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   
   VM_ASSERT(args_len == par_types_array->length, "FFI arity violated: expected %i, got %i", par_types_array->length, args_len);
   
-  int par_len_sum = 0;
-  for (int i = -1; i < args_len; ++i) {
-    Object *type;
-    if (i == -1) type = ret_type;
-    else type = par_types_array->ptr[i];
-    
-    if (obj_instance_of_or_equal(type, ffi->void_obj)) { }
-    else if (obj_instance_of_or_equal(type, ffi->sint_obj)) par_len_sum += sizeof(long);
-    else if (obj_instance_of_or_equal(type, ffi->uint_obj)) par_len_sum += sizeof(long);
-    else if (obj_instance_of_or_equal(type, ffi->float_obj)) par_len_sum += (sizeof(float)>sizeof(long))?sizeof(float):sizeof(long);
-    else if (obj_instance_of_or_equal(type, ffi->double_obj)) par_len_sum += (sizeof(double)>sizeof(long))?sizeof(double):sizeof(long);
-    else if (obj_instance_of_or_equal(type, ffi->uint32_obj)) par_len_sum += sizeof(long);
-    else if (obj_instance_of_or_equal(type, ffi->char_ptr_obj)) par_len_sum += (sizeof(char*)>sizeof(long))?sizeof(char*):sizeof(long);
-    else if (obj_instance_of_or_equal(type, ffi->pointer_obj)) par_len_sum += (sizeof(void*)>sizeof(long))?sizeof(void*):sizeof(long);
-    else assert(false);
-  }
-  
   void *ret_ptr = NULL;
   void **par_ptrs = alloca(sizeof(void*) * args_len);
-  void *data = alloca(par_len_sum);
+  void *data = alloca(ffi_fn->par_len_sum_precomp);
   for (int i = -1; i < args_len; ++i) {
     Object *type;
     if (i == -1) type = ret_type;
     else type = par_types_array->ptr[i];
     
-    if (obj_instance_of_or_equal(type, ffi->void_obj)) {
+    if (type == ffi->void_obj) {
       if (i == -1) ret_ptr = data;
       else VM_ASSERT(false, "void in parameter types??");
     }
-    else if (obj_instance_of_or_equal(type, ffi->sint_obj)
-      || obj_instance_of_or_equal(type, ffi->uint32_obj)
-      || obj_instance_of_or_equal(type, ffi->uint_obj)
-    ) {
+    else if (type == ffi->sint_obj || type == ffi->uint32_obj || type == ffi->uint_obj) {
       if (i == -1) ret_ptr = data;
       else {
         IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
@@ -144,31 +162,39 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       }
       data = (char*) data + sizeof(long);
     }
-    else if (obj_instance_of_or_equal(type, ffi->float_obj)) {
+    else if (type == ffi->float_obj) {
       if (i == -1) ret_ptr = data;
       else {
         FloatObject *fobj = (FloatObject*) obj_instance_of(args_ptr[i], float_base);
-        IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-        VM_ASSERT(fobj || iobj, "ffi float argument must be int or float");
         if (fobj) *(float*) data = fobj->value;
-        else *(float*) data = iobj->value;
+        else {
+          IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
+          if (iobj) *(float*) data = iobj->value;
+          else {
+            VM_ASSERT(false, "ffi float argument must be int or float");
+          }
+        }
         par_ptrs[i] = data;
       }
       data = (char*) data + ((sizeof(float)>sizeof(long))?sizeof(float):sizeof(long));
     }
-    else if (obj_instance_of_or_equal(type, ffi->double_obj)) {
+    else if (type == ffi->double_obj) {
       if (i == -1) ret_ptr = data;
       else {
         FloatObject *fobj = (FloatObject*) obj_instance_of(args_ptr[i], float_base);
-        IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-        VM_ASSERT(fobj || iobj, "ffi double argument must be int or float");
         if (fobj) *(double*) data = fobj->value;
-        else *(double*) data = iobj->value;
+        else {
+          IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
+          if (iobj) *(double*) data = iobj->value;
+          else {
+            VM_ASSERT(false, "ffi double argument must be int or float");
+          }
+        }
         par_ptrs[i] = data;
       }
       data = (char*) data + ((sizeof(double)>sizeof(long))?sizeof(double):sizeof(long));
     }
-    else if (obj_instance_of_or_equal(type, ffi->char_ptr_obj)) {
+    else if (type == ffi->char_ptr_obj) {
       if (i == -1) ret_ptr = data;
       else {
         StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[i], string_base);
@@ -178,7 +204,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       }
       data = (char*) data + ((sizeof(char*)>sizeof(long))?sizeof(char*):sizeof(long));
     }
-    else if (obj_instance_of_or_equal(type, ffi->pointer_obj)) {
+    else if (type == ffi->pointer_obj) {
       if (i == -1) ret_ptr = data;
       else {
         if (args_ptr[i] == NULL) {
@@ -197,17 +223,17 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   
   void (*sym_fn)() = *(void(**)())&sym_ptr;
   ffi_call(&ffihdl->cif, sym_fn, ret_ptr, par_ptrs);
-  if (obj_instance_of_or_equal(ret_type, ffi->void_obj)) {
+  if (ret_type == ffi->void_obj) {
     state->result_value = NULL;
-  } else if (obj_instance_of_or_equal(ret_type, ffi->sint_obj)) {
+  } else if (ret_type == ffi->sint_obj) {
     state->result_value = alloc_int(state, *(int*) ret_ptr);
-  } else if (obj_instance_of_or_equal(ret_type, ffi->uint_obj)) {
+  } else if (ret_type == ffi->uint_obj) {
     state->result_value = alloc_int(state, *(unsigned int*) ret_ptr);
-  } else if (obj_instance_of_or_equal(ret_type, ffi->uint32_obj)) {
+  } else if (ret_type == ffi->uint32_obj) {
     state->result_value = alloc_int(state, *(uint32_t*) ret_ptr);
-  } else if (obj_instance_of_or_equal(ret_type, ffi->char_ptr_obj)) {
+  } else if (ret_type == ffi->char_ptr_obj) {
     state->result_value = alloc_string(state, *(char**) ret_ptr, strlen(*(char**) ret_ptr));
-  } else if (obj_instance_of_or_equal(ret_type, ffi->pointer_obj)) {
+  } else if (ret_type == ffi->pointer_obj) {
     if (*(void**) ret_ptr == NULL) {
       state->result_value = NULL;
     } else {
@@ -215,9 +241,9 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       object_set(ptr, "dereference", alloc_fn(state, ffi_ptr_dereference));
       state->result_value = ptr;
     }
-  } else if (obj_instance_of_or_equal(ret_type, ffi->float_obj)) {
+  } else if (ret_type == ffi->float_obj) {
     state->result_value = alloc_float(state, *(float*) ret_ptr);
-  } else if (obj_instance_of_or_equal(ret_type, ffi->double_obj)) {
+  } else if (ret_type == ffi->double_obj) {
     // TODO alloc_double?
     state->result_value = alloc_float(state, (float) *(double*) ret_ptr);
   } else VM_ASSERT(false, "unknown return type");
@@ -263,12 +289,22 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   ffi_status status = ffi_prep_cif(&ffihdl->cif, FFI_DEFAULT_ABI, par_types->length, ffi_ret_type, (ffi_type**)(ffihdl + 1));
   VM_ASSERT(status == FFI_OK, "FFI error: %i", status);
   
-  Object *fn_obj = alloc_fn(state, ffi_call_fn);
+  Object *fn_obj = alloc_fn_custom(state, ffi_call_fn, sizeof(FFIFunctionObject));
+  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) fn_obj;
+  Object *_sym_pointer = alloc_ptr(state, fnptr);
+  Object *_ffi_pointer = alloc_ptr(state, (void*) ffihdl);
+  
   fn_obj->flags |= OBJ_FROZEN;
   object_set(fn_obj, "return_type", ret_type);
   object_set(fn_obj, "parameter_types", args_ptr[2]);
-  object_set(fn_obj, "_sym_pointer", alloc_ptr(state, fnptr));
-  object_set(fn_obj, "_ffi_pointer", alloc_ptr(state, (void*) ffihdl));
+  object_set(fn_obj, "_sym_pointer", _sym_pointer);
+  object_set(fn_obj, "_ffi_pointer", _ffi_pointer);
+  ffi_fn->return_type = ret_type;
+  // use the array here, since we don't care about any subtypes
+  ffi_fn->par_types_array = par_types;
+  ffi_fn->_sym_pointer = _sym_pointer;
+  ffi_fn->_ffi_pointer = _ffi_pointer;
+  ffi_fn->par_len_sum_precomp = ffi_par_len(ret_type, par_types, (FFIObject*) ffi);
   
   state->result_value = fn_obj;
 }
@@ -276,24 +312,26 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
 void ffi_setup_root(VMState *state, Object *root) {
   FFIObject *ffi = (FFIObject*) alloc_object_internal(state, sizeof(FFIObject));
   Object *ffi_obj = (Object*) ffi;
+  ffi_obj->flags |= OBJ_FROZEN;
+  
   object_set((Object*) ffi_obj, "open", alloc_fn(state, ffi_open_fn));
   Object *type_obj = alloc_object(state, NULL);
   object_set((Object*) ffi_obj, "type", type_obj);
-  ffi->void_obj = alloc_object(state, type_obj);
-  ffi->sint_obj = alloc_object(state, type_obj);
-  ffi->uint_obj = alloc_object(state, type_obj);
-  ffi->int8_obj = alloc_object(state, type_obj);
-  ffi->int16_obj = alloc_object(state, type_obj);
-  ffi->int32_obj = alloc_object(state, type_obj);
-  ffi->int64_obj = alloc_object(state, type_obj);
-  ffi->uint8_obj = alloc_object(state, type_obj);
-  ffi->uint16_obj = alloc_object(state, type_obj);
-  ffi->uint32_obj = alloc_object(state, type_obj);
-  ffi->uint64_obj = alloc_object(state, type_obj);
-  ffi->float_obj = alloc_object(state, type_obj);
-  ffi->double_obj = alloc_object(state, type_obj);
-  ffi->pointer_obj = alloc_object(state, type_obj);
-  ffi->char_ptr_obj = alloc_object(state, ffi->pointer_obj);
+  ffi->void_obj = alloc_object(state, type_obj); ffi->void_obj->flags |= OBJ_NOINHERIT;
+  ffi->sint_obj = alloc_object(state, type_obj); ffi->sint_obj->flags |= OBJ_NOINHERIT;
+  ffi->uint_obj = alloc_object(state, type_obj); ffi->uint_obj->flags |= OBJ_NOINHERIT;
+  ffi->int8_obj = alloc_object(state, type_obj); ffi->int8_obj->flags |= OBJ_NOINHERIT;
+  ffi->int16_obj = alloc_object(state, type_obj); ffi->int16_obj->flags |= OBJ_NOINHERIT;
+  ffi->int32_obj = alloc_object(state, type_obj); ffi->int32_obj->flags |= OBJ_NOINHERIT;
+  ffi->int64_obj = alloc_object(state, type_obj); ffi->int64_obj->flags |= OBJ_NOINHERIT;
+  ffi->uint8_obj = alloc_object(state, type_obj); ffi->uint8_obj->flags |= OBJ_NOINHERIT;
+  ffi->uint16_obj = alloc_object(state, type_obj); ffi->uint16_obj->flags |= OBJ_NOINHERIT;
+  ffi->uint32_obj = alloc_object(state, type_obj); ffi->uint32_obj->flags |= OBJ_NOINHERIT;
+  ffi->uint64_obj = alloc_object(state, type_obj); ffi->uint64_obj->flags |= OBJ_NOINHERIT;
+  ffi->float_obj = alloc_object(state, type_obj); ffi->float_obj->flags |= OBJ_NOINHERIT;
+  ffi->double_obj = alloc_object(state, type_obj); ffi->double_obj->flags |= OBJ_NOINHERIT;
+  ffi->pointer_obj = alloc_object(state, type_obj); ffi->pointer_obj->flags |= OBJ_NOINHERIT;
+  ffi->char_ptr_obj = alloc_object(state, type_obj); ffi->char_ptr_obj->flags |= OBJ_NOINHERIT;
   
   object_set(ffi_obj, "void", ffi->void_obj);
   object_set(ffi_obj, "sint", ffi->sint_obj);
@@ -316,6 +354,6 @@ void ffi_setup_root(VMState *state, Object *root) {
   object_set(handle_obj, "pointer", NULL);
   object_set(handle_obj, "sym", alloc_fn(state, ffi_sym_fn));
   
-  ffi_obj->flags |= OBJ_FROZEN;
   object_set(root, "ffi", ffi_obj);
+  state->shared->vcache.ffi_obj = ffi_obj;
 }

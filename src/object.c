@@ -41,13 +41,22 @@ void cache_free(int size, void *ptr) {
 }
 
 Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
+  if (!key_found_p) {
+    while (obj) {
+      bool key_found;
+      Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv, &key_found);
+      if (key_found) return value;
+      obj = obj->parent;
+    }
+    return NULL;
+  }
   while (obj) {
     bool key_found;
     Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv, &key_found);
-    if (key_found) { if (key_found_p) *key_found_p = true; return value; }
+    if (key_found) { *key_found_p = true; return value; }
     obj = obj->parent;
   }
-  if (key_found_p) *key_found_p = false;
+  *key_found_p = false;
   return NULL;
 }
 

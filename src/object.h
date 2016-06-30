@@ -205,6 +205,8 @@ Object *alloc_array(VMState *state, Object **ptr, IntObject *length);
 
 Object *alloc_ptr(VMState *state, void *ptr); // TODO unify with alloc_fn
 
+Object *alloc_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom);
+
 Object *alloc_fn(VMState *state, VMFunctionPointer fn);
 
 Object *alloc_custom_gc(VMState *state);
