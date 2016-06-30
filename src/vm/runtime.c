@@ -1,7 +1,6 @@
 #include "vm/runtime.h"
 
 #include <stdio.h>
-#include <stdarg.h>
 #include <stdint.h>
 
 #include "vm/call.h"
@@ -11,18 +10,6 @@
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-
-static char *my_asprintf(char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  int len = vsnprintf(NULL, 0, fmt, ap);
-  char *res = malloc(len + 1);
-  va_end(ap);
-  va_start(ap, fmt);
-  vsnprintf(res, len + 1, fmt, ap);
-  va_end(ap);
-  return res;
-}
 
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);

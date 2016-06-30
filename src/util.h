@@ -16,4 +16,6 @@ bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_
 
 long long get_clock_and_difference(struct timespec *target_clock, struct timespec *compare_clock);
 
+char *my_asprintf(char *fmt, ...);
+
 #endif

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include <stdbool.h>
 
 TextRange readfile(char *filename) {
@@ -106,4 +107,16 @@ long long get_clock_and_difference(struct timespec *target_clock, struct timespe
   long ns_diff = target_clock->tv_nsec - compare_clock->tv_nsec;
   int s_diff = target_clock->tv_sec - compare_clock->tv_sec;
   return (long long) s_diff * 1000000000LL + (long long) ns_diff;
+}
+
+char *my_asprintf(char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  int len = vsnprintf(NULL, 0, fmt, ap);
+  char *res = malloc(len + 1);
+  va_end(ap);
+  va_start(ap, fmt);
+  vsnprintf(res, len + 1, fmt, ap);
+  va_end(ap);
+  return res;
 }
