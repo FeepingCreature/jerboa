@@ -96,14 +96,12 @@ typedef struct {
   Instr base;
   int target_slot;
   int value;
-  Object *int_obj; // cache
 } AllocIntObjectInstr;
 
 typedef struct {
   Instr base;
   int target_slot;
   float value;
-  Object *float_obj; // cache
 } AllocFloatObjectInstr;
 
 typedef struct {
@@ -115,7 +113,6 @@ typedef struct {
   Instr base;
   int target_slot;
   char *value;
-  Object *str_obj; // cache
 } AllocStringObjectInstr;
 
 typedef struct {
@@ -192,6 +189,7 @@ typedef struct {
   Instr base;
   int target_slot;
   Object *value;
+  char *opt_info;
 } SetSlotInstr;
 
 

@@ -113,8 +113,9 @@ void dump_instr(Instr **instr_p) {
     }
     case INSTR_SET_SLOT:
     {
-      fprintf(stderr, "    set slot: %i = %p \t\t (opt: inlined lookup)\n",
-              ((SetSlotInstr*) instr)->target_slot, (void*) ((SetSlotInstr*) instr)->value);
+      SetSlotInstr *ssi = (SetSlotInstr*) instr;
+      fprintf(stderr, "    set slot: %i = %p \t\t (opt: %s)\n",
+              ssi->target_slot, (void*) ssi->value, ssi->opt_info);
       *instr_p = (Instr*) ((SetSlotInstr*) instr + 1);
       break;
     }

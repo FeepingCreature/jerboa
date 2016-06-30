@@ -226,12 +226,7 @@ static FnWrap vm_instr_alloc_int_object(FastVMState *state) {
   AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) state->instr;
   int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  if (UNLIKELY(!alloc_int_obj_instr->int_obj)) {
-    Object *obj = alloc_int(state->reststate, value);
-    alloc_int_obj_instr->int_obj = obj;
-    gc_add_perm(state->reststate, obj);
-  }
-  state->cf->slots_ptr[target_slot] = alloc_int_obj_instr->int_obj;
+  state->cf->slots_ptr[target_slot] = alloc_int(state->reststate, value);
   state->instr = (Instr*)(alloc_int_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -240,12 +235,7 @@ static FnWrap vm_instr_alloc_float_object(FastVMState *state) {
   AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) state->instr;
   int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  if (UNLIKELY(!alloc_float_obj_instr->float_obj)) {
-    Object *obj = alloc_float(state->reststate, value);
-    alloc_float_obj_instr->float_obj = obj;
-    gc_add_perm(state->reststate, obj);
-  }
-  state->cf->slots_ptr[target_slot] = alloc_float_obj_instr->float_obj;
+  state->cf->slots_ptr[target_slot] = alloc_float(state->reststate, value);
   state->instr = (Instr*)(alloc_float_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -264,12 +254,7 @@ static FnWrap vm_instr_alloc_string_object(FastVMState *state) {
   AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) state->instr;
   int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  if (UNLIKELY(!alloc_string_obj_instr->str_obj)) {
-    Object *obj = alloc_string(state->reststate, value, strlen(value));
-    alloc_string_obj_instr->str_obj = obj;
-    gc_add_perm(state->reststate, obj);
-  }
-  state->cf->slots_ptr[target_slot] = alloc_string_obj_instr->str_obj;
+  state->cf->slots_ptr[target_slot] = alloc_string(state->reststate, value, strlen(value));
   state->instr = (Instr*)(alloc_string_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -370,6 +355,40 @@ static FnWrap vm_instr_access(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
+  AccessStringKeyInstr *aski = (AccessStringKeyInstr*) state->instr;
+  Object *obj = state->cf->slots_ptr[aski->obj_slot];
+  Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
+  if (index_op) {
+    Object *function_base = state->reststate->shared->vcache.function_base;
+    Object *closure_base = state->reststate->shared->vcache.closure_base;
+    FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
+    ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
+    VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
+    Object *key_obj = alloc_string(state->reststate, aski->key_ptr, aski->key_len);
+    
+    VMState substate = {0};
+    // TODO see above
+    substate.parent = state->reststate;
+    substate.root = state->root;
+    substate.shared = state->reststate->shared;
+    
+    if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
+    else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
+    
+    vm_run(&substate);
+    VM_ASSERT2(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
+    
+    state->cf->slots_ptr[aski->target_slot] = substate.result_value;
+    
+    state->instr = (Instr*)(aski + 1);
+    return (FnWrap) { instr_fns[state->instr->type] };
+  } else {
+    VM_ASSERT2(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr);
+  }
+}
+
+static FnWrap vm_instr_access_string_key(FastVMState *state) __attribute__ ((hot));
 static FnWrap vm_instr_access_string_key(FastVMState *state) {
   AccessStringKeyInstr *aski = (AccessStringKeyInstr*) state->instr;
   int obj_slot = aski->obj_slot;
@@ -385,36 +404,10 @@ static FnWrap vm_instr_access_string_key(FastVMState *state) {
   bool object_found = false;
   state->cf->slots_ptr[target_slot] = object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found);
   
-  if (!object_found) {
-    Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
-    if (index_op) {
-      Object *function_base = state->reststate->shared->vcache.function_base;
-      Object *closure_base = state->reststate->shared->vcache.closure_base;
-      FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
-      ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
-      VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
-      Object *key_obj = alloc_string(state->reststate, aski->key_ptr, aski->key_len);
-      
-      VMState substate = {0};
-      // TODO see above
-      substate.parent = state->reststate;
-      substate.root = state->root;
-      substate.shared = state->reststate->shared;
-      
-      if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
-      else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
-      
-      vm_run(&substate);
-      VM_ASSERT2(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
-      
-      state->cf->slots_ptr[target_slot] = substate.result_value;
-      
-      object_found = true; // rely on the [] call to error on its own, if key not found
-    }
+  if (UNLIKELY(!object_found)) {
+    return vm_instr_access_string_key_index_fallback(state);
   }
-  if (!object_found) {
-    VM_ASSERT2(false, "property not found: '%.*s'", key_len, key_ptr);
-  }
+  
   state->instr = (Instr*)(aski + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }

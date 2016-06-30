@@ -1,6 +1,7 @@
 #include "vm/optimize.h"
 
 #include "vm/builder.h"
+#include "gc.h"
 
 // mark slots whose value is only
 // used as parameter to other instructions and does not escape
@@ -267,7 +268,7 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
   return NULL; // no hits.
 }
 
-UserFunction *inline_static_lookups_to_constants(UserFunction *uf, Object *context) {
+UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context) {
   bool *object_known = calloc(sizeof(bool), uf->slots);
   Object **known_objects_table = calloc(sizeof(Object*), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
@@ -308,27 +309,63 @@ UserFunction *inline_static_lookups_to_constants(UserFunction *uf, Object *conte
     
     Instr *instr = block->instrs_ptr;
     while (instr != block->instrs_ptr_end) {
+      bool replace_with_ssi = false;
+      Object *obj = NULL; char *opt_info = NULL; int target_slot = 0;
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         if (object_known[aski->target_slot]) {
-          SetSlotInstr *ssi = malloc(sizeof(SetSlotInstr));
-          ssi->base.type = INSTR_SET_SLOT;
-          ssi->target_slot = aski->target_slot;
+          replace_with_ssi = true;
           // Note: there's no need to gc-pin this, since it's
           // clearly a value that we can see anyways
           // (ie. it's covered via the gc link via context)
-          ssi->value = known_objects_table[aski->target_slot];
-          use_range_start(builder, instr->belongs_to);
-          addinstr(builder, sizeof(*ssi), (Instr*) ssi);
-          use_range_end(builder, instr->belongs_to);
-          instr = (Instr*) (aski + 1);
-          continue;
+          obj = known_objects_table[aski->target_slot];
+          opt_info = my_asprintf("inlined lookup to '%.*s'", aski->key_len, aski->key_ptr);
+          target_slot = aski->target_slot;
         }
       }
       
-      use_range_start(builder, instr->belongs_to);
-      addinstr(builder, instr_size(instr), instr);
-      use_range_end(builder, instr->belongs_to);
+      if (instr->type == INSTR_ALLOC_INT_OBJECT) {
+        AllocIntObjectInstr *aioi = (AllocIntObjectInstr*) instr;
+        replace_with_ssi = true;
+        obj = alloc_int(state, aioi->value);
+        gc_add_perm(state, obj);
+        opt_info = my_asprintf("inlined alloc_int %i", aioi->value);
+        target_slot = aioi->target_slot;
+      }
+      
+      if (instr->type == INSTR_ALLOC_FLOAT_OBJECT) {
+        AllocFloatObjectInstr *afoi = (AllocFloatObjectInstr*) instr;
+        replace_with_ssi = true;
+        obj = alloc_float(state, afoi->value);
+        gc_add_perm(state, obj);
+        opt_info = my_asprintf("inlined alloc_float %i", afoi->value);
+        target_slot = afoi->target_slot;
+      }
+      
+      if (instr->type == INSTR_ALLOC_STRING_OBJECT) {
+        AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
+        replace_with_ssi = true;
+        int len = strlen(asoi->value);
+        obj = alloc_string(state, asoi->value, len);
+        gc_add_perm(state, obj);
+        opt_info = my_asprintf("inlined alloc_string %.*s", len, asoi->value);
+        target_slot = asoi->target_slot;
+      }
+      
+      if (replace_with_ssi) {
+        SetSlotInstr *ssi = malloc(sizeof(SetSlotInstr));
+        ssi->base.type = INSTR_SET_SLOT;
+        ssi->target_slot = target_slot;
+        ssi->value = obj;
+        ssi->opt_info = opt_info;
+        use_range_start(builder, instr->belongs_to);
+        addinstr(builder, sizeof(*ssi), (Instr*) ssi);
+        use_range_end(builder, instr->belongs_to);
+      } else {
+        use_range_start(builder, instr->belongs_to);
+        addinstr(builder, instr_size(instr), instr);
+        use_range_end(builder, instr->belongs_to);
+      }
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
@@ -355,7 +392,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   if (uf->name && strcmp(uf->name, "gear") == 0) print_recursive(state, context, false);
   printf("\n-----\n");
   */
-  uf = inline_static_lookups_to_constants(uf, context);
+  uf = inline_static_lookups_to_constants(state, uf, context);
   
   fprintf(stderr, "runtime optimized %s to\n", uf->name);
   dump_fn(uf);
