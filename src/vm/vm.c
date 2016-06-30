@@ -322,7 +322,7 @@ static FnWrap vm_instr_access(FastVMState *state) {
   int key_slot = access_instr->key_slot;
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "internal slot error");
   VM_ASSERT2(state->cf->slots_ptr[key_slot], "key slot null"); // TODO "slot_assigned"
-  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
+  Object *string_base = state->reststate->shared->vcache.string_base;
   Object *key_obj = state->cf->slots_ptr[key_slot];
   VM_ASSERT2(key_obj, "key is null");
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
@@ -429,7 +429,7 @@ static FnWrap vm_instr_assign(FastVMState *state) {
   VM_ASSERT2(state->cf->slots_ptr[key_slot], "key slot null"); // TODO see above
   Object *obj = state->cf->slots_ptr[obj_slot];
   Object *value_obj = state->cf->slots_ptr[value_slot];
-  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
+  Object *string_base = state->reststate->shared->vcache.string_base;
   Object *key_obj = state->cf->slots_ptr[key_slot];
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   if (!skey) {

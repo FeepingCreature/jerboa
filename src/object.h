@@ -89,6 +89,8 @@ typedef struct {
   Object ***args_prealloc;
   Object *int_base, *bool_base, *float_base;
   Object *closure_base, *function_base;
+  Object *array_base, *string_base, *pointer_base;
+  Object *ffi_obj; // cached here so ffi_call_fn can be fast
 } ValueCache;
 
 // shared between parent and child VMs

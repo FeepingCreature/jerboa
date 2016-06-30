@@ -14,7 +14,7 @@ typedef struct {
 static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   Object *ffi = OBJECT_LOOKUP_STRING(root, "ffi", NULL);
   Object *handle_base = OBJECT_LOOKUP_STRING(ffi, "handle", NULL);
   
@@ -53,7 +53,7 @@ static ffi_type *type_to_ffi_ptr(Object *ffi_obj, Object *obj) {
 static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *pointer_base = OBJECT_LOOKUP_STRING(root, "pointer", NULL);
+  Object *pointer_base = state->shared->vcache.pointer_base;
   
   Object *ffi = OBJECT_LOOKUP_STRING(root, "ffi", NULL);
   Object *ffi_type = OBJECT_LOOKUP_STRING(ffi, "type", NULL);
@@ -78,14 +78,13 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
 }
 
 static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  Object *root = state->root;
   Object *int_base = state->shared->vcache.int_base;
   Object *float_base = state->shared->vcache.float_base;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
-  Object *pointer_base = OBJECT_LOOKUP_STRING(root, "pointer", NULL);
+  Object *string_base = state->shared->vcache.string_base;
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  Object *function_base = state->shared->vcache.function_base;
   
-  Object *ffi_obj = OBJECT_LOOKUP_STRING(root, "ffi", NULL);
+  Object *ffi_obj = state->shared->vcache.ffi_obj;
   FFIObject *ffi = (FFIObject*) ffi_obj;
   
   Object *ret_type = OBJECT_LOOKUP_STRING(fn, "return_type", NULL);
@@ -226,11 +225,10 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 
 static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 3, "wrong arity: expected 3, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
-  Object *pointer_base = OBJECT_LOOKUP_STRING(root, "pointer", NULL);
-  Object *ffi = OBJECT_LOOKUP_STRING(root, "ffi", NULL);
+  Object *array_base = state->shared->vcache.array_base;
+  Object *string_base = state->shared->vcache.string_base;
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  Object *ffi = state->shared->vcache.ffi_obj;
   Object *handle_base = OBJECT_LOOKUP_STRING(ffi, "handle", NULL);
   Object *type_base = OBJECT_LOOKUP_STRING(ffi, "type", NULL);
   

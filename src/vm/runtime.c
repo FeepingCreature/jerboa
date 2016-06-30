@@ -113,9 +113,7 @@ static void int_bit_and_fn(VMState *state, Object *thisptr, Object *fn, Object *
 
 static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   
   StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(sobj, "parameter to int.parse() must be string!");
@@ -177,15 +175,13 @@ static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
   
   Object
-    *sobj1 = obj_instance_of(thisptr, string_base),
+    *sobj1 = obj_instance_of(thisptr, state->shared->vcache.string_base),
     *iobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.int_base),
     *bobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.bool_base),
     *fobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.float_base),
-    *sobj2 = obj_instance_of(args_ptr[0], string_base);
+    *sobj2 = obj_instance_of(args_ptr[0], state->shared->vcache.string_base);
   VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
   
   char *str1 = ((StringObject*) sobj1)->value, *str2;
@@ -202,8 +198,7 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
 
 static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -220,8 +215,7 @@ static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -246,8 +240,7 @@ static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Ob
 
 static void string_endswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   
   Object
     *sobj1 = obj_instance_of(thisptr, string_base),
@@ -392,8 +385,7 @@ static void closure_mark_fn(VMState *state, Object *obj) {
 }
 
 static void array_mark_fn(VMState *state, Object *obj) {
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
   if (arr_obj) { // else it's obj == array_base
     for (int i = 0; i < arr_obj->length; ++i) {
@@ -404,16 +396,14 @@ static void array_mark_fn(VMState *state, Object *obj) {
 
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *root = state->root;
-  Object *pointer_base = OBJECT_LOOKUP_STRING(root, "pointer", NULL);
+  Object *pointer_base = state->shared->vcache.pointer_base;
   PointerObject *ptr_obj = (PointerObject*) obj_instance_of(thisptr, pointer_base);
   state->result_value = alloc_bool(state, ptr_obj->ptr == NULL);
 }
 
 static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   VM_ASSERT(iarg, "parameter to resize function must be int");
@@ -430,8 +420,7 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
 
 static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   VM_ASSERT(arr_obj, "internal error: push called on object that is not an array");
   Object *value = args_ptr[0];
@@ -443,8 +432,7 @@ static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **
 
 static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   VM_ASSERT(arr_obj, "internal error: pop called on object that is not an array");
   Object *res = arr_obj->ptr[arr_obj->length - 1];
@@ -455,8 +443,7 @@ static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   if (!iarg) { state->result_value = NULL; return; }
@@ -468,8 +455,7 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
 
 static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   IntObject *iarg = (IntObject*) obj_instance_of(args_ptr[0], state->shared->vcache.int_base);
   VM_ASSERT(arr_obj, "internal error: array '[]=' called on object that is not an array");
@@ -557,7 +543,7 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
 static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   Object *node_base = OBJECT_LOOKUP_STRING(OBJECT_LOOKUP_STRING(root, "xml", NULL), "node", NULL);
   
   StringObject *str_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
@@ -640,9 +626,8 @@ static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Ob
 
 static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
   Object *bool_base = state->shared->vcache.bool_base;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
+  Object *array_base = state->shared->vcache.array_base;
   Object *closure_base = state->shared->vcache.closure_base;
   Object *function_base = state->shared->vcache.function_base;
   
@@ -680,9 +665,8 @@ static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *na
 
 static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *root = state->root;
-  Object *array_base = OBJECT_LOOKUP_STRING(root, "array", NULL);
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *array_base = state->shared->vcache.array_base;
+  Object *string_base = state->shared->vcache.string_base;
   
   StringObject *name_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(name_obj, "parameter to find_array_by_name must be string!");
@@ -701,7 +685,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Obje
 static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
-  Object *string_base = OBJECT_LOOKUP_STRING(root, "string", NULL);
+  Object *string_base = state->shared->vcache.string_base;
   
   StringObject *file_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(file_obj, "parameter to require() must be string!");
@@ -820,6 +804,7 @@ Object *create_root(VMState *state) {
   object_set(string_obj, "==", alloc_fn(state, string_eq_fn));
   object_set(string_obj, "startsWith", alloc_fn(state, string_startswith_fn));
   object_set(string_obj, "endsWith", alloc_fn(state, string_endswith_fn));
+  state->shared->vcache.string_base = string_obj;
   
   Object *array_obj = alloc_object(state, NULL);
   array_obj->flags |= OBJ_NOINHERIT;
@@ -830,11 +815,13 @@ Object *create_root(VMState *state) {
   object_set(array_obj, "pop", alloc_fn(state, array_pop_fn));
   object_set(array_obj, "[]", alloc_fn(state, array_index_fn));
   object_set(array_obj, "[]=", alloc_fn(state, array_index_assign_fn));
+  state->shared->vcache.array_base = array_obj;
   
   Object *ptr_obj = alloc_object(state, NULL);
   ptr_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "pointer", ptr_obj);
   object_set(ptr_obj, "null", alloc_fn(state, ptr_is_null_fn));
+  state->shared->vcache.pointer_base = ptr_obj;
   
   object_set(root, "print", alloc_fn(state, print_fn));
   object_set(root, "keys", alloc_fn(state, keys_fn));

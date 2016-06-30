@@ -208,11 +208,9 @@ Object *alloc_float(VMState *state, float value) {
 }
 
 Object *alloc_string(VMState *state, const char *ptr, int len) {
-  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
-  assert(string_base);
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
-  obj->base.parent = string_base;
+  obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = ((char*) obj) + sizeof(StringObject);
   strncpy(obj->value, ptr, len);
@@ -221,21 +219,17 @@ Object *alloc_string(VMState *state, const char *ptr, int len) {
 }
 
 Object *alloc_string_foreign(VMState *state, char *value) {
-  Object *string_base = OBJECT_LOOKUP_STRING(state->root, "string", NULL);
-  assert(string_base);
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
-  obj->base.parent = string_base;
+  obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }
 
 Object *alloc_array(VMState *state, Object **ptr, IntObject *length) {
-  Object *array_base = OBJECT_LOOKUP_STRING(state->root, "array", NULL);
-  assert(array_base);
   ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
-  obj->base.parent = array_base;
+  obj->base.parent = state->shared->vcache.array_base;
   obj->ptr = ptr;
   obj->length = length->value;
   object_set((Object*) obj, "length", (Object*) length);
@@ -243,19 +237,23 @@ Object *alloc_array(VMState *state, Object **ptr, IntObject *length) {
 }
 
 Object *alloc_ptr(VMState *state, void *ptr) { // TODO unify with alloc_fn
-  Object *ptr_base = OBJECT_LOOKUP_STRING(state->root, "pointer", NULL);
-  assert(ptr_base);
   PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject));
-  obj->base.parent = ptr_base;
+  obj->base.parent = state->shared->vcache.pointer_base;
   obj->ptr = ptr;
   return (Object*) obj;
 }
 
-Object *alloc_fn(VMState *state, VMFunctionPointer fn) {
-  FunctionObject *obj = alloc_object_internal(state, sizeof(FunctionObject));
+// used to allocate "special functions" like ffi functions, that need to store more data
+Object *alloc_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom) {
+  assert(size_custom >= sizeof(FunctionObject));
+  FunctionObject *obj = alloc_object_internal(state, size_custom);
   obj->base.parent = state->shared->vcache.function_base;
   obj->fn_ptr = fn;
   return (Object*) obj;
+}
+
+Object *alloc_fn(VMState *state, VMFunctionPointer fn) {
+  return alloc_fn_custom(state, fn, sizeof(FunctionObject));
 }
 
 // TODO move elsewhere

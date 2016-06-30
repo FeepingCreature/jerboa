@@ -3,7 +3,6 @@
 #include <stdio.h>
 
 static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostring, int indent) {
-  Object *root = state->root;
   if (obj == NULL) {
     printf("(null)");
     return;
@@ -11,8 +10,8 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
   Object *int_base = state->shared->vcache.int_base;
   Object *bool_base = state->shared->vcache.bool_base;
   Object *float_base = state->shared->vcache.float_base;
-  Object *array_base = object_lookup(root, "array", NULL);
-  Object *string_base = object_lookup(root, "string", NULL);
+  Object *array_base = state->shared->vcache.array_base;
+  Object *string_base = state->shared->vcache.string_base;
   Object
     *iobj = obj_instance_of(obj, int_base),
     *bobj = obj_instance_of(obj, bool_base),

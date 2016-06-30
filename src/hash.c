@@ -14,6 +14,7 @@ static inline void **table_lookup_ref_with_hash_internal2(HashTable *tbl, const 
   if (tbl->entries_stored == 0) return NULL;
   if ((tbl->bloom & hashv) != hashv) return NULL;
   // printf(":: %.*s into %i having %i\n", key_len, key_ptr, tbl->entries_num, tbl->entries_stored);
+  // printf(":: %.*s\n", key_len, key_ptr);
   int entries_num = tbl->entries_num;
   // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
   if (entries_num <= 8) { // faster to do a direct scan
