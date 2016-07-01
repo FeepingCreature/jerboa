@@ -59,6 +59,8 @@ typedef struct {
   bool static_object;
   int parent_slot;
   char **names_ptr; int names_len;
+  FileRange *belongs_to;
+  Instr *after_object_decl;
 } SlotIsStaticObjInfo;
 
 #include <stdio.h>
@@ -93,12 +95,15 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
           free(names_ptr);
           continue;
         }
-        instr = (Instr*)((CloseObjectInstr*) instr + 1);
         int target_slot = alobi->target_slot;
         (*slots_p)[target_slot].static_object = true;
         (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
         (*slots_p)[target_slot].names_ptr = names_ptr;
         (*slots_p)[target_slot].names_len = names_len;
+        (*slots_p)[target_slot].belongs_to = instr->belongs_to;
+        
+        instr = (Instr*)((CloseObjectInstr*) instr + 1);
+        (*slots_p)[target_slot].after_object_decl = instr;
         continue;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
@@ -168,6 +173,110 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   }
   UserFunction *fn = build_function(builder);
   copy_fn_stats(uf, fn);
+  return fn;
+}
+
+static UserFunction *access_vars_via_refslots(UserFunction *uf) {
+  SlotIsStaticObjInfo *info;
+  slot_is_static_object(uf, &info);
+  
+  int info_slots_len = 0;
+  for (int i = 0; i < uf->slots; ++i) if (info[i].static_object) info_slots_len ++;
+  int *info_slots_ptr = malloc(sizeof(int) * info_slots_len);
+  bool *obj_refslots_initialized = calloc(sizeof(bool), uf->slots);
+  int **ref_slots_ptr = calloc(sizeof(int*), uf->slots);
+  {
+    int k = 0;
+    for (int i = 0; i < uf->slots; ++i) if (info[i].static_object) {
+      info_slots_ptr[k++] = i;
+      ref_slots_ptr[i] = malloc(sizeof(int) * info[i].names_len);
+    }
+  }
+  
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->slot_base = 1;
+  builder->refslot_base = uf->refslots;
+  builder->block_terminated = true;
+  
+  // since the object accesses must dominate the object declaration,
+  // the refslot accesses will also dominate the refslot declaration.
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    new_block(builder);
+    
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+      // O(n²) but nbd
+      for (int k = 0; k < info_slots_len; ++k) {
+        int slot = info_slots_ptr[k];
+        if (instr == info[slot].after_object_decl) {
+          use_range_start(builder, info[slot].belongs_to);
+          for (int l = 0; l < info[slot].names_len; ++l) {
+            ref_slots_ptr[slot][l] = addinstr_def_refslot(builder, slot, info[slot].names_ptr[l]);
+          }
+          use_range_end(builder, info[slot].belongs_to);
+          obj_refslots_initialized[slot] = true;
+        }
+      }
+      
+      if (instr->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+        int obj_slot = aski->obj_slot;
+        char *key = aski->key_ptr;
+        if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
+          for (int k = 0; k < info[obj_slot].names_len; ++k) {
+            char *name = info[obj_slot].names_ptr[k];
+            if (strcmp(key, name) == 0) {
+              int refslot = ref_slots_ptr[obj_slot][k];
+              use_range_start(builder, instr->belongs_to);
+              addinstr_read_refslot(builder, refslot, aski->target_slot);
+              use_range_end(builder, instr->belongs_to);
+              instr = (Instr*) (aski + 1);
+              continue;
+            }
+          }
+        }
+      }
+      
+      if (instr->type == INSTR_ASSIGN_STRING_KEY) {
+        AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
+        int obj_slot = aski->obj_slot;
+        char *key = aski->key;
+        if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
+          for (int k = 0; k < info[obj_slot].names_len; ++k) {
+            char *name = info[obj_slot].names_ptr[k];
+            if (strcmp(key, name) == 0) {
+              int refslot = ref_slots_ptr[obj_slot][k];
+              use_range_start(builder, instr->belongs_to);
+              addinstr_write_refslot(builder, aski->value_slot, refslot);
+              use_range_end(builder, instr->belongs_to);
+              instr = (Instr*) (aski + 1);
+              continue;
+            }
+          }
+        }
+      }
+      
+      use_range_start(builder, instr->belongs_to);
+      addinstr(builder, instr_size(instr), instr);
+      use_range_end(builder, instr->belongs_to);
+      
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  int new_refslots = fn->refslots;
+  copy_fn_stats(uf, fn);
+  fn->refslots = new_refslots; // do update this
+  
+  free(info_slots_ptr);
+  free(obj_refslots_initialized);
+  for (int i = 0; i < uf->slots; ++i) {
+    free(ref_slots_ptr[i]);
+  }
+  free(ref_slots_ptr);
+  
   return fn;
 }
 
@@ -392,6 +501,7 @@ UserFunction *optimize(UserFunction *uf) {
   uf = inline_primitive_accesses(uf, primitive_slots);
   
   uf = redirect_predictable_lookup_misses(uf);
+  uf = access_vars_via_refslots(uf);
   
   return uf;
 }
