@@ -391,6 +391,10 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       drop_record(&open_range_head);
       dprintf(fd, "</span>");
     }
+    // skip any preceding
+    while (cur_entry_id < num_records && CUR_ENTRY.text_from < cur_char) {
+      cur_entry_id ++;
+    }
     // open any new
     while (cur_entry_id < num_records && CUR_ENTRY.text_from == cur_char) {
       // fprintf(stderr, "%li with %li: open tag\n", CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from);

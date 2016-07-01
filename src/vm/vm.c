@@ -123,6 +123,7 @@ static void vm_record_profile(VMState *state) {
   if (ns_diff > sample_stepsize) {
     state->shared->profstate.last_prof_time = prof_time;
     
+    int cyclecount = state->shared->cyclecount;
     HashTable *direct_tbl = &state->shared->profstate.direct_table;
     HashTable *indirect_tbl = &state->shared->profstate.indirect_table;
     
@@ -147,7 +148,7 @@ static void vm_record_profile(VMState *state) {
           else (*(int*) freeptr) = 1;
         } else {
           // don't double-count ranges in case of recursion
-          bool range_already_counted = instr->belongs_to->last_cycle_seen == state->shared->cyclecount;
+          bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
           
           if (!range_already_counted) {
             void **freeptr;
@@ -156,7 +157,7 @@ static void vm_record_profile(VMState *state) {
             else (*(int*) freeptr) = 1;
           }
         }
-        instr->belongs_to->last_cycle_seen = state->shared->cyclecount;
+        instr->belongs_to->last_cycle_seen = cyclecount;
       }
       curstate = curstate->parent;
     }
@@ -690,8 +691,8 @@ static void vm_step(VMState *state) {
     fn = fn(&fast_state).self;
   }
   state->shared->cyclecount += i * 9;
-  vm_record_profile(state);
   state->stack_ptr[state->stack_len - 1].instr_ptr = fast_state.instr;
+  vm_record_profile(state);
   fast_state.cf->instr_ptr = fast_state.instr;
 }
 
