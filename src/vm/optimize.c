@@ -253,7 +253,10 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
     Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv, &key_found);
     if (key_found) {
       // hit, but the value might change later! bad!
-      if (!(obj->flags & OBJ_FROZEN)) return NULL;
+      if (!(obj->flags & OBJ_FROZEN)) {
+        // printf("hit for %.*s, but object wasn't frozen\n", key_len, key_ptr);
+        return NULL;
+      }
       *key_found_p = true;
       return value;
     }
@@ -262,7 +265,10 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
     // insert a different object of "key" later!
     // note that the current object just needs to be frozen,
     // because if it gets a hit, we won't be able to overwrite it.
-    if (!(obj->flags & OBJ_CLOSED)) return NULL;
+    if (!(obj->flags & OBJ_CLOSED)) {
+      // printf("hit for %.*s, but object wasn't closed\n", key_len, key_ptr);
+      return NULL;
+    }
     obj = obj->parent;
   }
   return NULL; // no hits.

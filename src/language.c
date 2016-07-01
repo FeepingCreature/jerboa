@@ -1014,6 +1014,7 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
   addinstr_assign(builder, builder->scope, name_slot, slot, ASSIGN_PLAIN);
   addinstr_close_object(builder, builder->scope);
+  addinstr_freeze_object(builder, builder->scope);
   use_range_end(builder, range);
   return PARSE_OK;
 }
