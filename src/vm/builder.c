@@ -83,7 +83,6 @@ void set_int_var(FunctionBuilder *builder, IntVarRef ref, int value) {
   *(int*) ((char*) block->instrs_ptr + ref.distance) = value;
 }
 
-// use SAVE_RETURN so that ACCESS may generate a call internally
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
   AccessInstr *instr = malloc(sizeof(AccessInstr));
   instr->base.type = INSTR_ACCESS;

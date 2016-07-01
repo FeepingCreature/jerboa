@@ -12,7 +12,7 @@ typedef struct {
   int arglist_len;
   
   int scope;
-  int slot_base;
+  int slot_base; // base-1; 0 is reserved for "null"
   
   bool block_terminated;
   

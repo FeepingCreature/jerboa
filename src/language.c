@@ -140,7 +140,7 @@ static ParseResult parse_object_literal(char **textp, FunctionBuilder *builder, 
   
   int obj_slot = 0;
   use_range_start(builder, range);
-  if (builder) obj_slot = addinstr_alloc_object(builder, builder->slot_base++ /*null slot*/);
+  if (builder) obj_slot = addinstr_alloc_object(builder, 0);
   use_range_end(builder, range);
   *textp = text;
   *rv_p = ref_simple(obj_slot);
@@ -382,7 +382,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
   if (builder) {
     int this_slot;
     if (expr->key) this_slot = expr->base;
-    else this_slot = builder->slot_base++; /* null slot */
+    else this_slot = 0;
     
     int expr_slot = ref_access(builder, *expr);
     
@@ -807,8 +807,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   
   use_range_start(builder, alloc_var_name);
   int value, varname_slot = addinstr_alloc_string_object(builder, var_scope, varname);
-  int nullslot = builder->slot_base++;
-  addinstr_assign(builder, var_scope, varname_slot, nullslot, ASSIGN_PLAIN);
+  addinstr_assign(builder, var_scope, varname_slot, 0, ASSIGN_PLAIN);
   addinstr_close_object(builder, var_scope);
   use_range_end(builder, alloc_var_name);
   
@@ -817,7 +816,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   if (!eat_string(&text, "=")) {
     free(assign_value);
     assign_value = alloc_var_name;
-    value = nullslot;
+    value = 0;
   } else {
     record_end(text, assign_value);
     RefValue rv;
@@ -1161,7 +1160,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->arglist_ptr = arg_list_ptr;
   builder->arglist_len = arg_list_len;
-  builder->slot_base = arg_list_len;
+  builder->slot_base = 1 + arg_list_len;
   builder->name = fun_name;
   builder->block_terminated = true;
   
@@ -1172,7 +1171,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   builder->scope = addinstr_alloc_object(builder, ctxslot);
   for (int i = 0; i < arg_list_len; ++i) {
     int argname_slot = addinstr_alloc_string_object(builder, builder->scope, arg_list_ptr[i]);
-    addinstr_assign(builder, builder->scope, argname_slot, i, ASSIGN_PLAIN);
+    addinstr_assign(builder, builder->scope, argname_slot, 1 + i, ASSIGN_PLAIN);
   }
   addinstr_close_object(builder, builder->scope);
   use_range_end(builder, fnframe_range);
@@ -1194,7 +1193,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
 
 ParseResult parse_module(char **textp, UserFunction **uf_p) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 0;
+  builder->slot_base = 1;
   builder->name = NULL;
   builder->block_terminated = true;
   

@@ -118,7 +118,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   slot_is_static_object(uf, &info);
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 0;
+  builder->slot_base = 1;
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
@@ -171,7 +171,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
 
 static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 0;
+  builder->slot_base = 1;
   builder->block_terminated = true;
   
   char **slot_table_ptr = NULL;
@@ -300,7 +300,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   }
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 0;
+  builder->slot_base = 1;
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {

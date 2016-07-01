@@ -14,7 +14,7 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
   
   if (args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
   for (int i = 0; i < args_len; ++i) {
-    cf->slots_ptr[i] = args_ptr[i];
+    cf->slots_ptr[1 + i] = args_ptr[i];
   }
   
   if (cf->uf->body.blocks_len == 0) {
