@@ -7,28 +7,25 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
     printf("(null)");
     return;
   }
-  Object *int_base = state->shared->vcache.int_base;
-  Object *bool_base = state->shared->vcache.bool_base;
-  Object *float_base = state->shared->vcache.float_base;
+  Object *int_base = state->shared->vcache.int_base; assert(int_base->flags & OBJ_NOINHERIT);
+  Object *bool_base = state->shared->vcache.bool_base; assert(bool_base->flags & OBJ_NOINHERIT);
+  Object *float_base = state->shared->vcache.float_base; assert(float_base->flags & OBJ_NOINHERIT);
   Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
   Object
-    *iobj = obj_instance_of(obj, int_base),
-    *bobj = obj_instance_of(obj, bool_base),
-    *fobj = obj_instance_of(obj, float_base),
     *sobj = obj_instance_of(obj, string_base),
     *aobj = obj_instance_of(obj, array_base);
-  if (iobj) {
-    printf("%i", ((IntObject*)iobj)->value);
+  if (obj->parent == int_base) {
+    printf("%i", ((IntObject*)obj)->value);
     return;
   }
-  if (bobj) {
-    if (((BoolObject*)bobj)->value) printf("true");
+  if (obj->parent == bool_base) {
+    if (((BoolObject*)obj)->value) printf("true");
     else printf("false");
     return;
   }
-  if (fobj) {
-    printf("%f", ((FloatObject*)fobj)->value);
+  if (obj->parent == float_base) {
+    printf("%f", ((FloatObject*)obj)->value);
     return;
   }
   if (sobj) {

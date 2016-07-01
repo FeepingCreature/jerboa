@@ -155,9 +155,9 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     else if (type == ffi->sint_obj || type == ffi->uint32_obj || type == ffi->uint_obj) {
       if (i == -1) ret_ptr = data;
       else {
-        IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-        VM_ASSERT(iobj, "ffi int rgument must be int");
-        *(int*) data = iobj->value;
+        Object *obj = args_ptr[i];
+        VM_ASSERT(obj->parent == int_base, "ffi int rgument must be int");
+        *(int*) data = ((IntObject*) obj)->value;
         par_ptrs[i] = data;
       }
       data = (char*) data + sizeof(long);
@@ -165,11 +165,10 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     else if (type == ffi->float_obj) {
       if (i == -1) ret_ptr = data;
       else {
-        FloatObject *fobj = (FloatObject*) obj_instance_of(args_ptr[i], float_base);
-        if (fobj) *(float*) data = fobj->value;
+        Object *obj = args_ptr[i];
+        if (obj->parent == float_base) *(float*) data = ((FloatObject*) obj)->value;
         else {
-          IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-          if (iobj) *(float*) data = iobj->value;
+          if (obj->parent == int_base) *(float*) data = ((IntObject*) obj)->value;
           else {
             VM_ASSERT(false, "ffi float argument must be int or float");
           }
@@ -181,11 +180,10 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     else if (type == ffi->double_obj) {
       if (i == -1) ret_ptr = data;
       else {
-        FloatObject *fobj = (FloatObject*) obj_instance_of(args_ptr[i], float_base);
-        if (fobj) *(double*) data = fobj->value;
+        Object *obj = args_ptr[i];
+        if (obj->parent == float_base) *(double*) data = ((FloatObject*) obj)->value;
         else {
-          IntObject *iobj = (IntObject*) obj_instance_of(args_ptr[i], int_base);
-          if (iobj) *(double*) data = iobj->value;
+          if (obj->parent == int_base) *(double*) data = ((IntObject*) obj)->value;
           else {
             VM_ASSERT(false, "ffi double argument must be int or float");
           }

@@ -200,9 +200,12 @@ Object *alloc_object(VMState *state, Object *parent) {
 Object *alloc_int(VMState *state, int value) {
   IntObject *obj = alloc_object_internal(state, sizeof(IntObject));
   obj->base.parent = state->shared->vcache.int_base;
+  // lets us replace obj_instance_of with a simple "parent =="
+  obj->base.flags |= OBJ_NOINHERIT;
   // prevent variations and modifications, allowing all equal numbers to be interchangeable
   // TODO do we actually need this?
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
+  
   obj->value = value;
   return (Object*) obj;
 }
@@ -210,6 +213,8 @@ Object *alloc_int(VMState *state, int value) {
 Object *alloc_bool_uncached(VMState *state, bool value) {
   BoolObject *obj = alloc_object_internal(state, sizeof(BoolObject));
   obj->base.parent = state->shared->vcache.bool_base;
+  // lets us replace obj_instance_of with a simple "parent =="
+  obj->base.flags |= OBJ_NOINHERIT;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
@@ -226,6 +231,8 @@ Object *alloc_bool(VMState *state, bool value) {
 Object *alloc_float(VMState *state, float value) {
   FloatObject *obj = alloc_object_internal(state, sizeof(FloatObject));
   obj->base.parent = state->shared->vcache.float_base;
+  // lets us replace obj_instance_of with a simple "parent =="
+  obj->base.flags |= OBJ_NOINHERIT;
   // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
