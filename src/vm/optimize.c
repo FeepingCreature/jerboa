@@ -108,6 +108,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
 
 static void copy_fn_stats(UserFunction *from, UserFunction *to) {
   to->slots = from->slots;
+  to->refslots = from->refslots;
   to->arity = from->arity;
   to->name = from->name;
   to->is_method = from->is_method;
@@ -119,6 +120,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->slot_base = 1;
+  builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
@@ -172,6 +174,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
 static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->slot_base = 1;
+  builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
   char **slot_table_ptr = NULL;
@@ -307,6 +310,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->slot_base = 1;
+  builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {

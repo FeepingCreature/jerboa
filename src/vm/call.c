@@ -5,7 +5,7 @@
 #include "gc.h"
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
-  Callframe *cf = vm_alloc_frame(state, fn->slots);
+  Callframe *cf = vm_alloc_frame(state, fn->slots, fn->refslots);
   
   cf->uf = fn;
   cf->context = context;

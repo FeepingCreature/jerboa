@@ -9,7 +9,7 @@
 
 const long long sample_stepsize = 200000LL; // 0.2ms
 
-Callframe *vm_alloc_frame(VMState *state, int slots) {
+Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
   // okay. this might get a bit complicated.
   void *ptr = state->stack_ptr;
   if (!ptr) {
@@ -49,7 +49,9 @@ Callframe *vm_alloc_frame(VMState *state, int slots) {
   state->stack_len = state->stack_len + 1;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   cf->slots_len = slots;
-  cf->slots_ptr = cache_alloc(sizeof(Object*)*cf->slots_len);
+  cf->slots_ptr = cache_alloc(sizeof(Object*)*slots);
+  cf->refslots_len = refslots;
+  cf->refslots_ptr = cache_alloc(sizeof(Object**)*refslots);
   return cf;
 }
 
@@ -623,6 +625,51 @@ static FnWrap vm_instr_set_slot(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_define_refslot(FastVMState *state) {
+  DefineRefslotInstr *dri = (DefineRefslotInstr*) state->instr;
+  
+  int target_refslot = dri->target_refslot;
+  int obj_slot = dri->obj_slot;
+  VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
+  
+  Object *obj = state->cf->slots_ptr[obj_slot];
+  
+  Object **pp = object_lookup_ref_with_hash(obj, dri->key_ptr, dri->key_len, dri->key_hash);
+  VM_ASSERT2(pp, "key not in object");
+  state->cf->refslots_ptr[target_refslot] = pp;
+  
+  state->instr = (Instr*)(dri + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
+static FnWrap vm_instr_read_refslot(FastVMState *state) {
+  ReadRefslotInstr *rri = (ReadRefslotInstr*) state->instr;
+  
+  int target_slot = rri->target_slot;
+  int source_refslot = rri->source_refslot;
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(source_refslot < state->cf->refslots_len, "refslot numbering error");
+  
+  state->cf->slots_ptr[target_slot] = *state->cf->refslots_ptr[source_refslot];
+  
+  state->instr = (Instr*)(rri + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
+static FnWrap vm_instr_write_refslot(FastVMState *state) {
+  WriteRefslotInstr *wri = (WriteRefslotInstr*) state->instr;
+  
+  int target_refslot = wri->target_refslot;
+  int source_slot = wri->source_slot;
+  VM_ASSERT2_SLOT(target_refslot < state->cf->refslots_len, "refslot numbering error");
+  VM_ASSERT2_SLOT(source_slot < state->cf->slots_len, "slot numbering error");
+  
+  *state->cf->refslots_ptr[target_refslot] = state->cf->slots_ptr[source_slot];
+  
+  state->instr = (Instr*)(wri + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static void vm_step(VMState *state) {
   FastVMState fast_state;
   fast_state.reststate = state;
@@ -669,6 +716,9 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ACCESS_STRING_KEY] = vm_instr_access_string_key;
   instr_fns[INSTR_ASSIGN_STRING_KEY] = vm_instr_assign_string_key;
   instr_fns[INSTR_SET_SLOT] = vm_instr_set_slot;
+  instr_fns[INSTR_DEFINE_REFSLOT] = vm_instr_define_refslot;
+  instr_fns[INSTR_READ_REFSLOT] = vm_instr_read_refslot;
+  instr_fns[INSTR_WRITE_REFSLOT] = vm_instr_write_refslot;
 }
 
 void vm_run(VMState *state) {

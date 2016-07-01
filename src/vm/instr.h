@@ -27,6 +27,9 @@ typedef enum {
   INSTR_ACCESS_STRING_KEY,
   INSTR_ASSIGN_STRING_KEY,
   INSTR_SET_SLOT,
+  INSTR_DEFINE_REFSLOT,
+  INSTR_READ_REFSLOT,
+  INSTR_WRITE_REFSLOT,
   
   INSTR_LAST
 } InstrType;
@@ -67,7 +70,7 @@ typedef struct {
 
 typedef struct {
   int arity; // first n slots are reserved for parameters
-  int slots;
+  int slots, refslots;
   char *name;
   bool is_method;
   FunctionBody body;
@@ -192,5 +195,22 @@ typedef struct {
   char *opt_info;
 } SetSlotInstr;
 
+typedef struct {
+  Instr base;
+  int target_refslot;
+  int obj_slot;
+  char *key_ptr; int key_len;
+  size_t key_hash;
+} DefineRefslotInstr;
+
+typedef struct {
+  Instr base;
+  int source_refslot, target_slot;
+} ReadRefslotInstr;
+
+typedef struct {
+  Instr base;
+  int source_slot, target_refslot;
+} WriteRefslotInstr;
 
 #endif

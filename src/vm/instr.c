@@ -21,6 +21,9 @@ int instr_size(Instr *instr) {
     CASE(INSTR_BR, BranchInstr); CASE(INSTR_TESTBR, TestBranchInstr);
     CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr);
     CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr);
+    CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
+    CASE(INSTR_READ_REFSLOT, ReadRefslotInstr);
+    CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr);
 #undef CASE
     default: abort();
   }

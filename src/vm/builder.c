@@ -254,11 +254,46 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
+int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key) {
+  DefineRefslotInstr *instr = malloc(sizeof(DefineRefslotInstr));
+  instr->base.type = INSTR_DEFINE_REFSLOT;
+  instr->base.belongs_to = NULL;
+  instr->obj_slot = obj_slot;
+  instr->key_ptr = key;
+  instr->key_len = strlen(key);
+  instr->key_hash = hash(instr->key_ptr, instr->key_len);
+  instr->target_refslot = builder->refslot_base ++;
+  
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
+  return instr->target_refslot;
+}
+
+void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot) {
+  ReadRefslotInstr *instr = malloc(sizeof(ReadRefslotInstr));
+  instr->base.type = INSTR_READ_REFSLOT;
+  instr->base.belongs_to = NULL;
+  instr->source_refslot = source_refslot;
+  instr->target_slot = target_slot;
+  
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
+}
+
+void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot) {
+  WriteRefslotInstr *instr = malloc(sizeof(WriteRefslotInstr));
+  instr->base.type = INSTR_WRITE_REFSLOT;
+  instr->base.belongs_to = NULL;
+  instr->source_slot = source_slot;
+  instr->target_refslot = target_refslot;
+  
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
+}
+
 UserFunction *build_function(FunctionBuilder *builder) {
   assert(builder->block_terminated);
   UserFunction *fn = malloc(sizeof(UserFunction));
   fn->arity = builder->arglist_len;
   fn->slots = builder->slot_base;
+  fn->refslots = builder->refslot_base;
   fn->name = builder->name;
   fn->body = builder->body;
   fn->is_method = false;

@@ -119,6 +119,30 @@ void dump_instr(Instr **instr_p) {
       *instr_p = (Instr*) (ssi + 1);
       break;
     }
+    case INSTR_DEFINE_REFSLOT:
+    {
+      DefineRefslotInstr *dri = (DefineRefslotInstr*) instr;
+      fprintf(stderr, "    def refslot: &%i = %%%i . '%.*s' \t\t (opt: refslot)\n",
+              dri->target_refslot, dri->obj_slot, dri->key_len, dri->key_ptr);
+      *instr_p = (Instr*) (dri + 1);
+      break;
+    }
+    case INSTR_READ_REFSLOT:
+    {
+      ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
+      fprintf(stderr, "    %%%i = &%i \t\t (opt: refslot)\n",
+              rri->target_slot, rri->source_refslot);
+      *instr_p = (Instr*) (rri + 1);
+      break;
+    }
+    case INSTR_WRITE_REFSLOT:
+    {
+      WriteRefslotInstr *wri = (WriteRefslotInstr*) instr;
+      fprintf(stderr, "    &%i = %%%i \t\t (opt: refslot)\n",
+              wri->target_refslot, wri->source_slot);
+      *instr_p = (Instr*) (wri + 1);
+      break;
+    }
     default:
       fprintf(stderr, "    unknown instruction: %i\n", instr->type);
       assert(false);
@@ -130,7 +154,7 @@ void dump_fn(UserFunction *fn) {
   UserFunction **other_fns_ptr = NULL; int other_fns_len = 0;
   
   FunctionBody *body = &fn->body;
-  fprintf(stderr, "function %s (%i), %i slots [\n", fn->name, fn->arity, fn->slots);
+  fprintf(stderr, "function %s (%i), %i slots, %i refslots [\n", fn->name, fn->arity, fn->slots, fn->refslots);
   for (int i = 0; i < body->blocks_len; ++i) {
     fprintf(stderr, "  block <%i> [\n", i);
     InstrBlock *block = &body->blocks_ptr[i];

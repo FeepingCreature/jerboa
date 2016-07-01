@@ -40,6 +40,21 @@ void cache_free(int size, void *ptr) {
   free(ptr);*/
 }
 
+Object **object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
+  while (obj) {
+    Object **value_p = (Object**) table_lookup_ref_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv);
+    if (value_p) return value_p;
+    obj = obj->parent;
+  }
+  return NULL;
+}
+
+Object **object_lookup_ref(Object *obj, const char *key_ptr) {
+  size_t len = strlen(key_ptr);
+  size_t hashv = hash(key_ptr, len);
+  return object_lookup_ref_with_hash(obj, key_ptr, len, hashv);
+}
+
 Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
   if (!key_found_p) {
     while (obj) {

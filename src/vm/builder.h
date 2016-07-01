@@ -13,6 +13,7 @@ typedef struct {
   
   int scope;
   int slot_base; // base-1; 0 is reserved for "null"
+  int refslot_base;
   
   bool block_terminated;
   
@@ -80,6 +81,12 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, IntVarRef *truebra
 void addinstr_branch(FunctionBuilder *builder, IntVarRef *branch);
 
 void addinstr_return(FunctionBuilder *builder, int slot);
+
+int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key);
+
+void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot);
+
+void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot);
 
 UserFunction *build_function(FunctionBuilder *builder);
 

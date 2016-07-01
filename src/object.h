@@ -64,6 +64,7 @@ typedef struct {
   UserFunction *uf;
   Object *context;
   Object **slots_ptr; int slots_len;
+  Object ***refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots, frameroot_ctx; // gc entries
   Instr *instr_ptr;
 } Callframe;
@@ -114,6 +115,10 @@ struct _VMState {
   char *error;
   char *backtrace; int backtrace_depth;
 };
+
+Object **object_lookup_ref(Object *obj, const char *key);
+
+Object **object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash);
 
 Object *object_lookup(Object *obj, const char *key, bool *key_found);
 
