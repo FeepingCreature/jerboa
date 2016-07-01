@@ -382,7 +382,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
   if (builder) {
     int this_slot;
     // scopes are not a valid form of "this"
-    if (expr->key && expr->mode != REFMODE_VARIABLE) this_slot = expr->base;
+    if (expr->key) this_slot = expr->base;
     else this_slot = 0;
     
     int expr_slot = ref_access(builder, *expr);
