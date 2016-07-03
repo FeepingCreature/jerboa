@@ -170,9 +170,11 @@ void log_parser_error(char *location, char *format, ...) {
     
     fprintf(stderr, "\n");
     fprintf(stderr, "%.*s", (int) (line.end - line.start), line.start);
-    for (int i = 0; i < line.end - line.start; ++i) {
-      if (i < col) fprintf(stderr, " ");
-      else if (i == col) fprintf(stderr, "\x1b[1m\x1b[32m^\x1b[0m");
+    int utf8_col = utf8_strnlen(line.start, col);
+    int utf8_line_len = utf8_strnlen(line.start, line.end - line.start);
+    for (int i = 0; i < utf8_line_len; ++i) {
+      if (i < utf8_col) fprintf(stderr, " ");
+      else if (i == utf8_col) fprintf(stderr, "\x1b[1m\x1b[32m^\x1b[0m");
     }
     fprintf(stderr, "\n");
   } else {

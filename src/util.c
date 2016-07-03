@@ -56,6 +56,15 @@ static __thread TextRange last_line = {0};
 static __thread FileRecord *last_record = NULL;
 static __thread int last_row_nr;
 
+size_t utf8_strnlen(const char *ptr, size_t length) {
+  size_t utf8_len = 0;
+  const char *end = ptr + length;
+  for (; ptr != end; ++ptr) {
+    if ((*ptr & 0xC0) != 0x80) utf8_len++;
+  }
+  return utf8_len;
+}
+
 bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
   // cache lookup
   if (text >= last_line.start && text < last_line.end) {
