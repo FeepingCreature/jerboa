@@ -12,9 +12,11 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
   Object *float_base = state->shared->vcache.float_base; assert(float_base->flags & OBJ_NOINHERIT);
   Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
+  Object *pointer_base = state->shared->vcache.pointer_base;
   Object
     *sobj = obj_instance_of(obj, string_base),
-    *aobj = obj_instance_of(obj, array_base);
+    *aobj = obj_instance_of(obj, array_base),
+    *pobj = obj_instance_of(obj, pointer_base);
   if (obj->parent == int_base) {
     printf("%i", ((IntObject*)obj)->value);
     return;
@@ -30,6 +32,10 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
   }
   if (sobj) {
     printf("%s", ((StringObject*)sobj)->value);
+    return;
+  }
+  if (pobj) {
+    printf("(void*) %p", ((PointerObject*)pobj)->ptr);
     return;
   }
   if (aobj) {

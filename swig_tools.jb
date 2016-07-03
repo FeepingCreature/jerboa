@@ -137,7 +137,10 @@ function loadLibraryWithPrefix(xml_file, lib_file, prefix) {
   print("process typedefs");
   for (var i = 0; i < typedefs.length; i++) {
     var typedef = typedefs[i];
-    global_typemap[getAttr(typedef, "name")] = getAttr(typedef, "type");
+    var name = getAttr(typedef, "name");
+    var prefix = "";
+    if (getAttr(typedef, "decl").startsWith("p.")) prefix += "p.";
+    global_typemap[name] = prefix + getAttr(typedef, "type");
   }
   print("done.");
   function xml_type_to_ffi(type) {
@@ -162,8 +165,8 @@ function loadLibraryWithPrefix(xml_file, lib_file, prefix) {
     if (type == "unsigned int") return ffi.uint;
     if (type == "unsigned char") return null;
     if (type == "unsigned short") return null;
-    if (type == "long") return null;
-    if (type == "unsigned long") return null;
+    if (type == "long") return ffi.long;
+    if (type == "unsigned long") return ffi.ulong;
     if (type == "uint8_t") return ffi.uint8;
     if (type == "uint16_t") return ffi.uint16;
     if (type == "uint32_t") return ffi.uint32;
