@@ -132,18 +132,46 @@ ParseResult parse_string(char **textp, char **outp) {
   char *start = text;
   if (text[0] != '"') return PARSE_NONE;
   text++;
-  while (text[0] && text[0] != '"') text++; // TODO escape
+  int len_escaped = 0;
+  while (text[0] && text[0] != '"') {
+    if (text[0] == '\\') {
+      text++;
+      if (!text[0]) {
+        log_parser_error(text, "unterminated escape");
+        return PARSE_ERROR;
+      }
+    }
+    len_escaped ++;
+    text++;
+  }
   if (!text[0]) {
     log_parser_error(text, "closing quote mark is missing");
     return PARSE_ERROR;
   }
   text++;
   
+  char *scan = start + 1;
+  char *res = malloc(len_escaped + 1);
+  for (int i = 0; i < len_escaped; scan++, i++) {
+    if (scan[0] == '\\') {
+      scan++;
+      switch (scan[0]) {
+        case '"': res[i] = '"'; break;
+        case '\\': res[i] = '\\'; break;
+        case 'n': res[i] = '\n'; break;
+        case 'r': res[i] = '\r'; break;
+        case 't': res[i] = '\t'; break;
+        default:
+          log_parser_error(scan, "unknown escape sequence");
+          return PARSE_ERROR;
+      }
+      continue;
+    }
+    res[i] = scan[0];
+  }
+  res[len_escaped] = 0;
+  
   *textp = text;
-  int len = text - start;
-  char *res = malloc(len - 2 + 1);
-  memcpy(res, start + 1, len - 2);
-  res[len - 2] = 0;
   *outp = res;
   return PARSE_OK;
 }
