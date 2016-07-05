@@ -1,6 +1,7 @@
 #include "vm/runtime.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdint.h>
 
 #include "vm/call.h"
@@ -463,13 +464,74 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
   state->result_value = NULL;
 }
 
+static void file_print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  Object *file_base = OBJECT_LOOKUP_STRING(state->root, "file", NULL);
+  assert(file_base);
+  
+  VM_ASSERT(obj_instance_of(thisptr, file_base), "print() called on object that is not a file");
+  Object *hdl_obj = OBJECT_LOOKUP_STRING(thisptr, "_handle", NULL);
+  VM_ASSERT(hdl_obj, "missing _handle!");
+  PointerObject *hdl_ptrobj = (PointerObject*) obj_instance_of(hdl_obj, pointer_base);
+  VM_ASSERT(hdl_ptrobj, "_handle must be a pointer!");
+  FILE *file = hdl_ptrobj->ptr;
+  for (int i = 0; i < args_len; ++i) {
+    Object *arg = args_ptr[i];
+    print_recursive(state, file, arg, true);
+    if (state->runstate == VM_ERRORED) return;
+  }
+  fprintf(file, "\n");
+  state->result_value = NULL;
+}
+
+static void file_open_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+  Object *file_base = OBJECT_LOOKUP_STRING(state->root, "file", NULL);
+  Object *string_base = state->shared->vcache.string_base;
+  assert(file_base);
+  
+  VM_ASSERT(thisptr == file_base, "open() called on object other than file!");
+  StringObject *fnobj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(fnobj, "first parameter to file.open() must be string!");
+  StringObject *fmobj = (StringObject*) obj_instance_of(args_ptr[1], string_base);
+  VM_ASSERT(fmobj, "second parameter to file.open() must be string!");
+  
+  gc_disable(state);
+  FILE *fh = fopen(fnobj->value, fmobj->value);
+  if (fh == NULL) {
+    VM_ASSERT(false, "file could not be opened: '%s' as '%s': %s", fnobj->value, fmobj->value, strerror(errno));
+  }
+  Object *file_obj = alloc_object(state, file_base);
+  object_set(file_obj, "_handle", alloc_ptr(state, (void*) fh));
+  state->result_value = file_obj;
+  gc_enable(state);
+}
+
+static void file_close_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
+  Object *file_base = OBJECT_LOOKUP_STRING(state->root, "file", NULL);
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  assert(file_base);
+  
+  VM_ASSERT(obj_instance_of(thisptr, file_base), "close() called on object that is not a file!");
+  Object *hdl_obj = OBJECT_LOOKUP_STRING(thisptr, "_handle", NULL);
+  VM_ASSERT(hdl_obj, "missing _handle!");
+  PointerObject *hdl_ptrobj = (PointerObject*) obj_instance_of(hdl_obj, pointer_base);
+  VM_ASSERT(hdl_ptrobj, "_handle must be a pointer!");
+  FILE *file = hdl_ptrobj->ptr;
+  fclose(file);
+  object_set(thisptr, "_handle", NULL);
+  
+  state->result_value = NULL;
+}
+
 static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
-    print_recursive(state, arg, true);
+    print_recursive(state, stdout, arg, true);
     if (state->runstate == VM_ERRORED) return;
   }
-  printf("\n");
+  fprintf(stdout, "\n");
   state->result_value = NULL;
 }
 
@@ -819,7 +881,6 @@ Object *create_root(VMState *state) {
   object_set(ptr_obj, "null", alloc_fn(state, ptr_is_null_fn));
   state->shared->vcache.pointer_base = ptr_obj;
   
-  object_set(root, "print", alloc_fn(state, print_fn));
   object_set(root, "keys", alloc_fn(state, keys_fn));
   
   Object *xml_obj = alloc_object(state, NULL);
@@ -830,6 +891,24 @@ Object *create_root(VMState *state) {
   object_set(node_obj, "find_array_by_name", alloc_fn(state, xml_node_find_by_name_array_fn));
   xml_obj->flags |= OBJ_FROZEN;
   object_set(root, "xml", xml_obj);
+  
+  Object *file_obj = alloc_object(state, NULL);
+  object_set(file_obj, "_handle", NULL);
+  object_set(file_obj, "print", alloc_fn(state, file_print_fn));
+  object_set(file_obj, "open", alloc_fn(state, file_open_fn));
+  object_set(file_obj, "close", alloc_fn(state, file_close_fn));
+  file_obj->flags |= OBJ_FROZEN;
+  object_set(root, "file", file_obj);
+  
+  Object *stdout_obj = alloc_object(state, file_obj);
+  object_set(stdout_obj, "_handle", alloc_ptr(state, (void*) stdout));
+  object_set(root, "stdout", stdout_obj);
+  
+  Object *stderr_obj = alloc_object(state, file_obj);
+  object_set(stderr_obj, "_handle", alloc_ptr(state, (void*) stderr));
+  object_set(root, "stderr", stderr_obj);
+  
+  object_set(root, "print", alloc_fn(state, print_fn));
   
   object_set(root, "require", alloc_fn(state, require_fn));
   object_set(root, "freeze", alloc_fn(state, freeze_fn));

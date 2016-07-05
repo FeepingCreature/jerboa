@@ -2,9 +2,9 @@
 #include "vm/vm.h"
 #include <stdio.h>
 
-static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostring, int indent) {
+static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool allow_tostring, int indent) {
   if (obj == NULL) {
-    printf("(null)");
+    fprintf(fh, "(null)");
     return;
   }
   Object *int_base = state->shared->vcache.int_base; assert(int_base->flags & OBJ_NOINHERIT);
@@ -18,36 +18,36 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
     *aobj = obj_instance_of(obj, array_base),
     *pobj = obj_instance_of(obj, pointer_base);
   if (obj->parent == int_base) {
-    printf("%i", ((IntObject*)obj)->value);
+    fprintf(fh, "%i", ((IntObject*)obj)->value);
     return;
   }
   if (obj->parent == bool_base) {
-    if (((BoolObject*)obj)->value) printf("true");
-    else printf("false");
+    if (((BoolObject*)obj)->value) fprintf(fh, "true");
+    else fprintf(fh, "false");
     return;
   }
   if (obj->parent == float_base) {
-    printf("%f", ((FloatObject*)obj)->value);
+    fprintf(fh, "%f", ((FloatObject*)obj)->value);
     return;
   }
   if (sobj) {
-    printf("%s", ((StringObject*)sobj)->value);
+    fprintf(fh, "%s", ((StringObject*)sobj)->value);
     return;
   }
   if (pobj) {
-    printf("(void*) %p", ((PointerObject*)pobj)->ptr);
+    fprintf(fh, "(void*) %p", ((PointerObject*)pobj)->ptr);
     return;
   }
   if (aobj) {
-    printf("[ ");
+    fprintf(fh, "[ ");
     ArrayObject *a_obj = (ArrayObject*) aobj;
     for (int i = 0; i < a_obj->length; ++i) {
       Object *child = a_obj->ptr[i];
-      if (i) printf(", ");
-      print_recursive(state, child, allow_tostring);
+      if (i) fprintf(fh, ", ");
+      print_recursive(state, fh, child, allow_tostring);
       if (state->runstate == VM_ERRORED) return;
     }
-    printf(" ]");
+    fprintf(fh, " ]");
     return;
   }
   Object *toString_fn = object_lookup(obj, "toString", NULL);
@@ -72,50 +72,50 @@ static void print_recursive_indent(VMState *state, Object *obj, bool allow_tostr
     Object *str = substate.result_value;
     if (str != NULL) {
       gc_disable(state); // keep str alive
-      print_recursive(state, str, allow_tostring);
+      print_recursive(state, fh, str, allow_tostring);
       gc_enable(state);
       return;
     }
   }
-  printf("[object %p ", (void*) obj);
+  fprintf(fh, "[object %p ", (void*) obj);
   if (obj->flags == OBJ_NONE) { }
   else {
-    printf("(");
+    fprintf(fh, "(");
     if (obj->flags & OBJ_CLOSED) {
-      printf("CLS");
-      if (obj->flags & (OBJ_FROZEN|OBJ_NOINHERIT)) printf("|");
+      fprintf(fh, "CLS");
+      if (obj->flags & (OBJ_FROZEN|OBJ_NOINHERIT)) fprintf(fh, "|");
     }
     if (obj->flags & OBJ_FROZEN) {
-      printf("FRZ");
-      if (obj->flags & OBJ_NOINHERIT) printf("|");
+      fprintf(fh, "FRZ");
+      if (obj->flags & OBJ_NOINHERIT) fprintf(fh, "|");
     }
-    if (obj->flags & OBJ_NOINHERIT) printf("NOI");
-    printf(")");
+    if (obj->flags & OBJ_NOINHERIT) fprintf(fh, "NOI");
+    fprintf(fh, ")");
   }
   HashTable *tbl = &obj->tbl;
   bool first = true;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
     if (entry->name_ptr) {
-      printf("\n");
-      for (int k = 0; k < indent; ++k) printf("  ");
-      if (first) { first = false; printf("| "); }
-      else printf(", ");
-      printf("'%.*s': ", (int) entry->name_len, entry->name_ptr);
-      print_recursive_indent(state, entry->value, allow_tostring, indent+1);
+      fprintf(fh, "\n");
+      for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
+      if (first) { first = false; fprintf(fh, "| "); }
+      else fprintf(fh, ", ");
+      fprintf(fh, "'%.*s': ", (int) entry->name_len, entry->name_ptr);
+      print_recursive_indent(state, fh, entry->value, allow_tostring, indent+1);
     }
   }
   if (obj->parent) {
-    printf("\n");
-    for (int k = 0; k < indent; ++k) printf("  ");
-    printf("<- ");
-    print_recursive_indent(state, obj->parent, allow_tostring, indent+1);
+    fprintf(fh, "\n");
+    for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
+    fprintf(fh, "<- ");
+    print_recursive_indent(state, fh, obj->parent, allow_tostring, indent+1);
   }
-  printf("]");
+  fprintf(fh, "]");
   // vm_error(state, "don't know how to print %p", obj);
   return;
 }
 
-void print_recursive(VMState *state, Object *obj, bool allow_tostring) {
-  print_recursive_indent(state, obj, allow_tostring, 0);
+void print_recursive(VMState *state, FILE *fh, Object *obj, bool allow_tostring) {
+  print_recursive_indent(state, fh, obj, allow_tostring, 0);
 }
