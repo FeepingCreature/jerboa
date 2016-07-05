@@ -733,7 +733,10 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   int false_blk_idx = new_block(builder);
   set_int_var(builder, false_blk, false_blk_idx);
   if (eat_keyword(&text, "else")) {
-    parse_block(&text, builder);
+    res = parse_block(&text, builder);
+    if (res == PARSE_ERROR) return PARSE_ERROR;
+    assert(res == PARSE_OK);
+    
     IntVarRef end_blk2;
     use_range_start(builder, keywd_range);
     addinstr_branch(builder, &end_blk2);
@@ -779,7 +782,10 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   use_range_end(builder, range);
   
   set_int_var(builder, loop_blk, new_block(builder));
-  parse_block(&text, builder);
+  res = parse_block(&text, builder);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
+  
   use_range_start(builder, range);
   IntVarRef test_blk2;
   addinstr_branch(builder, &test_blk2);
@@ -964,7 +970,9 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   
   // begin loop body
   set_int_var(builder, loop_blk, new_block(builder));
-  parse_block(&text, builder);
+  res = parse_block(&text, builder);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
   
   res = parse_semicolon_statement(&text_step, builder);
   assert(res == PARSE_OK); // what? this already worked above...
@@ -1181,7 +1189,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   ParseResult res = parse_block(textp, builder);
   if (res == PARSE_ERROR) {
     free(fnframe_range);
-    return res;
+    return PARSE_ERROR;
   }
   assert(res == PARSE_OK);
   
