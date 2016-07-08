@@ -255,6 +255,17 @@ static void string_endswith_fn(VMState *state, Object *thisptr, Object *fn, Obje
   }
 }
 
+static void string_byte_len_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  
+  Object *sobj = obj_instance_of(thisptr, string_base);
+  VM_ASSERT(sobj, "internal error: string.endsWith() called on wrong type of object");
+  
+  char *str = ((StringObject*) sobj)->value;
+  state->result_value = alloc_int(state, strlen(str));
+}
+
 typedef enum {
   CMP_EQ,
   CMP_LT,
@@ -862,6 +873,7 @@ Object *create_root(VMState *state) {
   object_set(string_obj, "==", alloc_fn(state, string_eq_fn));
   object_set(string_obj, "startsWith", alloc_fn(state, string_startswith_fn));
   object_set(string_obj, "endsWith", alloc_fn(state, string_endswith_fn));
+  object_set(string_obj, "byte_len", alloc_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
   
   Object *array_obj = alloc_object(state, NULL);
