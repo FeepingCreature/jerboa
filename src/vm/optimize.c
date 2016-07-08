@@ -35,6 +35,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             slots[access_instr->obj_slot] = false;
           CASE(INSTR_ASSIGN, AssignInstr, assign_instr)
             slots[assign_instr->obj_slot] = slots[assign_instr->value_slot] = false;
+          CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr, key_in_obj_instr)
+            // TODO inline key?
           CASE(INSTR_CALL, CallInstr, call_instr)
             slots[call_instr->function_slot] = slots[call_instr->this_slot] = false;
             for (int i = 0; i < call_instr->args_length; ++i) {

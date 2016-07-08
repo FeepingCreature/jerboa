@@ -18,6 +18,7 @@ typedef enum {
   INSTR_FREEZE_OBJECT,
   INSTR_ACCESS,
   INSTR_ASSIGN,
+  INSTR_KEY_IN_OBJ,
   INSTR_CALL,
   INSTR_RETURN,
   INSTR_SAVE_RESULT, // separate instr to enable interruptions
@@ -145,6 +146,11 @@ typedef struct {
   int obj_slot, value_slot, key_slot;
   AssignType type;
 } AssignInstr;
+
+typedef struct {
+  Instr base;
+  int obj_slot, key_slot, target_slot;
+} KeyInObjInstr;
 
 typedef struct {
   Instr base;

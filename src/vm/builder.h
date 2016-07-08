@@ -50,6 +50,8 @@ int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot);
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type);
 
+int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot);
+
 void addinstr_close_object(FunctionBuilder *builder, int obj);
 
 void addinstr_freeze_object(FunctionBuilder *builder, int obj);

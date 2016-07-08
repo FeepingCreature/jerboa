@@ -16,6 +16,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr);
     CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr);
     CASE(INSTR_ACCESS, AccessInstr); CASE(INSTR_ASSIGN, AssignInstr);
+    CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr);
     CASE(INSTR_CALL, CallInstr); CASE(INSTR_RETURN, ReturnInstr);
     CASE(INSTR_SAVE_RESULT, SaveResultInstr);
     CASE(INSTR_BR, BranchInstr); CASE(INSTR_TESTBR, TestBranchInstr);

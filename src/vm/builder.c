@@ -105,6 +105,17 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
+int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
+  KeyInObjInstr *instr = malloc(sizeof(KeyInObjInstr));
+  instr->base.type = INSTR_KEY_IN_OBJ;
+  instr->base.belongs_to = NULL;
+  instr->key_slot = key_slot;
+  instr->obj_slot = obj_slot;
+  instr->target_slot = builder->slot_base++;
+  addinstr(builder, sizeof(KeyInObjInstr), (Instr*) instr);
+  return instr->target_slot;
+}
+
 void addinstr_close_object(FunctionBuilder *builder, int obj) {
   CloseObjectInstr *instr = malloc(sizeof(CloseObjectInstr));
   instr->base.type = INSTR_CLOSE_OBJECT;

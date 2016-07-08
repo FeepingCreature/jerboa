@@ -1,5 +1,7 @@
 #include "language.h"
 
+#include <stdio.h>
+
 #include "parser.h"
 #include "vm/builder.h"
 #include "vm/optimize.h"
@@ -564,16 +566,31 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     build_op(builder, "-", rv, zref, *rv, neg_range);
   }
   
-  if (level > 4) { *textp = text; return PARSE_OK; }
+  if (level > 5) { *textp = text; return PARSE_OK; }
   
   RefValue rhs_expr;
   while (true) {
     FileRange *range = alloc_and_record_start(text);
     if (eat_string(&text, "&")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 4, &rhs_expr);
+      res = parse_expr(&text, builder, 6, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "&", rv, *rv, rhs_expr, range);
+      continue;
+    }
+    free(range);
+    break;
+  }
+  
+  if (level > 4) { *textp = text; return PARSE_OK; }
+  
+  while (true) {
+    FileRange *range = alloc_and_record_start(text);
+    if (eat_string(&text, "|")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 5, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "|", rv, *rv, rhs_expr, range);
       continue;
     }
     free(range);
@@ -584,11 +601,18 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   
   while (true) {
     FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "|")) {
+    if (eat_string(&text, "*")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 4, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "|", rv, *rv, rhs_expr, range);
+      build_op(builder, "*", rv, *rv, rhs_expr, range);
+      continue;
+    }
+    if (eat_string(&text, "/")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 4, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "/", rv, *rv, rhs_expr, range);
       continue;
     }
     free(range);
@@ -599,18 +623,18 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   
   while (true) {
     FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "*")) {
+    if (eat_string(&text, "+")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "*", rv, *rv, rhs_expr, range);
+      build_op(builder, "+", rv, *rv, rhs_expr, range);
       continue;
     }
-    if (eat_string(&text, "/")) {
+    if (eat_string(&text, "-")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "/", rv, *rv, rhs_expr, range);
+      build_op(builder, "-", rv, *rv, rhs_expr, range);
       continue;
     }
     free(range);
@@ -621,18 +645,17 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   
   while (true) {
     FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "+")) {
+    if (eat_keyword(&text, "in")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 2, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "+", rv, *rv, rhs_expr, range);
-      continue;
-    }
-    if (eat_string(&text, "-")) {
-      record_end(text, range);
-      res = parse_expr(&text, builder, 2, &rhs_expr);
-      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "-", rv, *rv, rhs_expr, range);
+      int key_slot = ref_access(builder, *rv);
+      int obj_slot = ref_access(builder, rhs_expr);
+      int in_slot = 0;
+      use_range_start(builder, range);
+      if (builder) addinstr_key_in_obj(builder, key_slot, obj_slot);
+      use_range_end(builder, range);
+      *rv = ref_simple(in_slot);
       continue;
     }
     free(range);

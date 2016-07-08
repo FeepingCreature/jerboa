@@ -451,6 +451,7 @@ static FnWrap vm_instr_assign(FastVMState *state) {
   // Not sure how to correctly handle "key leakage".
   // TODO figure out better.
   // TODO update reststate?
+  // TODO copy key??
   gc_add_perm(state->reststate, key_obj);
   AssignType assign_type = assign_instr->type;
   // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
@@ -472,6 +473,29 @@ static FnWrap vm_instr_assign(FastVMState *state) {
       break;
   }
   state->instr = (Instr*)(assign_instr + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
+static FnWrap vm_instr_key_in_obj(FastVMState *state) {
+  KeyInObjInstr *key_in_obj_instr = (KeyInObjInstr*) state->instr;
+  int key_slot = key_in_obj_instr->key_slot, obj_slot = key_in_obj_instr->obj_slot;
+  int target_slot = key_in_obj_instr->target_slot;
+  VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
+  Object *obj = state->cf->slots_ptr[obj_slot];
+  Object *string_base = state->reststate->shared->vcache.string_base;
+  Object *key_obj = state->cf->slots_ptr[key_slot];
+  StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+  if (!skey) {
+    VM_ASSERT2(false, "'in' key is not string! TODO overload?");
+  }
+  char *key = skey->value;
+  bool object_found = false;
+  object_lookup(obj, key, &object_found);
+  state->cf->slots_ptr[target_slot] = alloc_bool(state->reststate, object_found);
+  
+  state->instr = (Instr*)(key_in_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -709,6 +733,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_FREEZE_OBJECT] = vm_instr_freeze_object;
   instr_fns[INSTR_ACCESS] = vm_instr_access;
   instr_fns[INSTR_ASSIGN] = vm_instr_assign;
+  instr_fns[INSTR_KEY_IN_OBJ] = vm_instr_key_in_obj;
   instr_fns[INSTR_CALL] = vm_instr_call;
   instr_fns[INSTR_RETURN] = vm_instr_return;
   instr_fns[INSTR_SAVE_RESULT] = vm_instr_save_result;

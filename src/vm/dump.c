@@ -67,6 +67,11 @@ void dump_instr(Instr **instr_p) {
       *instr_p = (Instr*) ((AssignInstr*) instr + 1);
       break;
     }
+    case INSTR_KEY_IN_OBJ:
+      fprintf(stderr, "    key_in_obj: %%%i = %%%i in %%%i\n",
+              ((KeyInObjInstr*) instr)->target_slot, ((KeyInObjInstr*) instr)->key_slot, ((KeyInObjInstr*) instr)->obj_slot);
+      *instr_p = (Instr*) ((KeyInObjInstr*) instr + 1);
+      break;
     case INSTR_CALL:
       fprintf(stderr, "    call: %%%i . %%%i ( ",
               ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);
