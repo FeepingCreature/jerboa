@@ -89,9 +89,26 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   } else assert("TODO" && false);
 }
 
+static void ffi_ptr_add(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *int_base = state->shared->vcache.int_base;
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  
+  PointerObject *thisptr_obj = (PointerObject*) obj_instance_of(thisptr, pointer_base);
+  assert(thisptr);
+  void *ptr = (void*) thisptr_obj->ptr;
+  
+  IntObject *offset_obj = (IntObject*) args_ptr[0];
+  VM_ASSERT(offset_obj->base.parent == int_base, "offset must be integer");
+  int offset = offset_obj->value;
+  
+  state->result_value = make_ffi_pointer(state, (void*) ((char*)ptr + offset));
+}
+
 static Object *make_ffi_pointer(VMState *state, void *ptr) {
   Object *ptr_obj = alloc_ptr(state, ptr);
   object_set(ptr_obj, "dereference", alloc_fn(state, ffi_ptr_dereference));
+  object_set(ptr_obj, "+", alloc_fn(state, ffi_ptr_add));
   return ptr_obj;
 }
 
