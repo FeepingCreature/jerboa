@@ -855,7 +855,7 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
     bool key_found = false;
     table_lookup_with_hash(&cur->tbl, key_ptr, key_len, key_hash, &key_found);
     if (key_found) {
-      VM_ASSERT(cur->tbl.entries_num == 1, "more than one var in this scope: something bad has happened??");
+      VM_ASSERT(cur->tbl.entries_stored == 1, "more than one var in this scope: something bad has happened??");
       cur->flags |= OBJ_FROZEN;
       return;
     }
@@ -876,8 +876,8 @@ Object *create_root(VMState *state) {
   Object *function_obj = alloc_object(state, NULL);
   function_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "function", function_obj);
-  object_set(function_obj, "apply", alloc_fn(state, fn_apply_fn));
   state->shared->vcache.function_base = function_obj;
+  object_set(function_obj, "apply", alloc_fn(state, fn_apply_fn));
   
   Object *int_obj = alloc_object(state, NULL);
   int_obj->flags |= OBJ_NOINHERIT;
@@ -897,6 +897,7 @@ Object *create_root(VMState *state) {
   state->shared->vcache.int_base = int_obj;
   int_obj->flags |= OBJ_FROZEN;
   state->shared->vcache.int_zero = alloc_int(state, 0);
+  gc_add_perm(state, state->shared->vcache.int_zero);
   
   Object *float_obj = alloc_object(state, NULL);
   float_obj->flags |= OBJ_NOINHERIT;

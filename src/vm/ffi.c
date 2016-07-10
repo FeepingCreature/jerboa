@@ -251,9 +251,12 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     else if (type == ffi->char_pointer_obj) {
       if (i == -1) ret_ptr = data;
       else {
-        StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[i], string_base);
-        VM_ASSERT(sobj, "ffi char* argument must be string");
-        *(char**) data = sobj->value;
+        if (!args_ptr[i]) *(char**) data = NULL;
+        else {
+          StringObject *sobj = (StringObject*) obj_instance_of(args_ptr[i], string_base);
+          VM_ASSERT(sobj, "ffi char* argument must be string");
+          *(char**) data = sobj->value;
+        }
         par_ptrs[i] = data;
       }
       data = (char*) data + ((sizeof(char*)>sizeof(long))?sizeof(char*):sizeof(long));

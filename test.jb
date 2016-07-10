@@ -53,7 +53,7 @@ var event = malloc(64);
 var running = true;
 while (running) {
   while (sdl.SDL_PollEvent(event)) {
-    if (event.dereference(ffi.uint8) == sdl.SDL_QUIT) running = false;
+    if (event.dereference(ffi.uint8, 0) == sdl.SDL_QUIT) running = false;
   }
   drawGL();
   sdl.SDL_GL_SwapBuffers();

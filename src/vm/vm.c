@@ -687,6 +687,7 @@ static void vm_step(VMState *state) {
   VMInstrFn fn = (VMInstrFn) instr_fns[fast_state.instr->type];
   int i;
   for (i = 0; i < 128 && fn != vm_halt; i++) {
+    // { fprintf(stderr, "run "); Instr *instr = fast_state.instr; dump_instr(&instr); }
     fn = fn(&fast_state).self;
     fn = fn(&fast_state).self;
     fn = fn(&fast_state).self;
