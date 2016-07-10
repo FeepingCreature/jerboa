@@ -11,4 +11,6 @@ void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_p
 
 Object *alloc_closure_fn(VMState *state, Object *context, UserFunction *fn);
 
+bool setup_call(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
+
 #endif

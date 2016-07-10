@@ -59,3 +59,15 @@ Object *alloc_closure_fn(VMState *state, Object *context, UserFunction *fn) {
   obj->vmfun = fn;
   return (Object*) obj;
 }
+
+bool setup_call(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  Object *closure_base = state->shared->vcache.closure_base;
+  Object *function_base = state->shared->vcache.function_base;
+  FunctionObject *fn_obj = (FunctionObject*) obj_instance_of(fn, function_base);
+  ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn, closure_base);
+  VM_ASSERT(fn_obj || cl_obj, "object is neither function nor closure") false;
+  
+  if (fn_obj) fn_obj->fn_ptr(state, thisptr, fn, args_ptr, args_len);
+  else cl_obj->base.fn_ptr(state, thisptr, fn, args_ptr, args_len);
+  return true;
+}

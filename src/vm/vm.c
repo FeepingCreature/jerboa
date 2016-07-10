@@ -323,11 +323,6 @@ static FnWrap vm_instr_access(FastVMState *state) {
   if (!object_found) {
     Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
     if (index_op) {
-      Object *function_base = state->reststate->shared->vcache.function_base;
-      Object *closure_base = state->reststate->shared->vcache.closure_base;
-      FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
-      ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
-      VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
       Object *key_obj = state->cf->slots_ptr[access_instr->key_slot];
       
       VMState substate = {0};
@@ -336,8 +331,7 @@ static FnWrap vm_instr_access(FastVMState *state) {
       substate.root = state->root;
       substate.shared = state->reststate->shared;
       
-      if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
-      else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
+      if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
       
       vm_run(&substate);
       VM_ASSERT2(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
@@ -363,11 +357,6 @@ static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
   Object *obj = state->cf->slots_ptr[aski->obj_slot];
   Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
   if (index_op) {
-    Object *function_base = state->reststate->shared->vcache.function_base;
-    Object *closure_base = state->reststate->shared->vcache.closure_base;
-    FunctionObject *fn_index_op = (FunctionObject*) obj_instance_of(index_op, function_base);
-    ClosureObject *cl_index_op = (ClosureObject*) obj_instance_of(index_op, closure_base);
-    VM_ASSERT2(fn_index_op || cl_index_op, "index op is neither function nor closure");
     Object *key_obj = alloc_string(state->reststate, aski->key_ptr, aski->key_len);
     
     VMState substate = {0};
@@ -376,8 +365,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
     substate.root = state->root;
     substate.shared = state->reststate->shared;
     
-    if (fn_index_op) fn_index_op->fn_ptr(&substate, obj, index_op, &key_obj, 1);
-    else cl_index_op->base.fn_ptr(&substate, obj, index_op, &key_obj, 1);
+    if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
     
     vm_run(&substate);
     VM_ASSERT2(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
@@ -432,14 +420,8 @@ static FnWrap vm_instr_assign(FastVMState *state) {
     // non-string key, goes to []=
     Object *index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (index_assign_op) {
-      Object *function_base = state->reststate->shared->vcache.function_base;
-      Object *closure_base = state->reststate->shared->vcache.closure_base;
-      FunctionObject *fn_index_assign_op = (FunctionObject*) obj_instance_of(index_assign_op, function_base);
-      ClosureObject *cl_index_assign_op = (ClosureObject*) obj_instance_of(index_assign_op, closure_base);
-      VM_ASSERT2(fn_index_assign_op || cl_index_assign_op, "'[]=' is neither function nor closure");
       Object *key_value_pair[] = {state->cf->slots_ptr[assign_instr->key_slot], value_obj};
-      if (fn_index_assign_op) fn_index_assign_op->fn_ptr(state->reststate, obj, index_assign_op, key_value_pair, 2);
-      else cl_index_assign_op->base.fn_ptr(state->reststate, obj, index_assign_op, key_value_pair, 2);
+      if (!setup_call(state->reststate, obj, index_assign_op, key_value_pair, 2)) return (FnWrap) { vm_halt };
       // TODO run vm here - bad bug right now!
       abort();
       state->instr = (Instr*)(assign_instr + 1);
@@ -537,12 +519,6 @@ static FnWrap vm_instr_call(FastVMState *state) {
   VM_ASSERT2_SLOT(this_slot < state->cf->slots_len, "slot numbering error");
   Object *this_obj = state->cf->slots_ptr[this_slot];
   Object *fn_obj = state->cf->slots_ptr[function_slot];
-  // validate function type
-  Object *closure_base = state->reststate->shared->vcache.closure_base;
-  Object *function_base = state->reststate->shared->vcache.function_base;
-  FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
-  ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
-  VM_ASSERT2(cl || fn, "cannot call: object is neither function nor closure");
   // form args array from slots
   
   Object **args;
@@ -557,8 +533,7 @@ static FnWrap vm_instr_call(FastVMState *state) {
   
   int prev_stacklen = state->reststate->stack_len;
   
-  if (cl) cl->base.fn_ptr(state->reststate, this_obj, fn_obj, args, args_length);
-  else fn->fn_ptr(state->reststate, this_obj, fn_obj, args, args_length);
+  if (!setup_call(state->reststate, this_obj, fn_obj, args, args_length)) return (FnWrap) { vm_halt };
   
   // intrinsic may have errored.
   if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };

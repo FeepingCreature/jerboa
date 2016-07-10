@@ -1,5 +1,6 @@
 #include "print.h"
 #include "vm/vm.h"
+#include "vm/call.h"
 #include <stdio.h>
 
 static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool allow_tostring, int indent) {
@@ -52,19 +53,12 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
   }
   Object *toString_fn = object_lookup(obj, "toString", NULL);
   if (allow_tostring && toString_fn) {
-    Object *function_base = state->shared->vcache.function_base;
-    Object *closure_base = state->shared->vcache.closure_base;
-    FunctionObject *fn_toString = (FunctionObject*) obj_instance_of(toString_fn, function_base);
-    ClosureObject *cl_toString = (ClosureObject*) obj_instance_of(toString_fn, closure_base);
-    VM_ASSERT(fn_toString || cl_toString, "'toString' property is neither function nor closure");
-    
     VMState substate = {0};
     substate.parent = state;
     substate.root = state->root;
     substate.shared = state->shared;
     
-    if (fn_toString) fn_toString->fn_ptr(&substate, obj, toString_fn, NULL, 0);
-    else cl_toString->base.fn_ptr(&substate, obj, toString_fn, NULL, 0);
+    if (!setup_call(&substate, obj, toString_fn, NULL, 0)) return;
     
     vm_run(&substate);
     VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error);

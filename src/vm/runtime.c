@@ -687,19 +687,13 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
 static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
 {
   Object *bool_base = state->shared->vcache.bool_base;
-  Object *closure_base = state->shared->vcache.closure_base;
-  Object *function_base = state->shared->vcache.function_base;
-  FunctionObject *fn_pred = (FunctionObject*) obj_instance_of(pred, function_base);
-  ClosureObject *cl_pred = (ClosureObject*) obj_instance_of(pred, closure_base);
-  VM_ASSERT(fn_pred || cl_pred, "predicate is neither function nor closure") false;
   
   VMState substate = {0};
   substate.parent = state;
   substate.root = state->root;
   substate.shared = state->shared;
   
-  if (fn_pred) fn_pred->fn_ptr(&substate, node, pred, &node, 1);
-  else cl_pred->base.fn_ptr(&substate, node, pred, &node, 1);
+  if (!setup_call(&substate, node, pred, &node, 1)) return false;
   
   vm_run(&substate);
   VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error) false;
