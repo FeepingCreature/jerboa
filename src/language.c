@@ -653,7 +653,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       int obj_slot = ref_access(builder, rhs_expr);
       int in_slot = 0;
       use_range_start(builder, range);
-      if (builder) addinstr_key_in_obj(builder, key_slot, obj_slot);
+      if (builder) in_slot = addinstr_key_in_obj(builder, key_slot, obj_slot);
       use_range_end(builder, range);
       *rv = ref_simple(in_slot);
       continue;
