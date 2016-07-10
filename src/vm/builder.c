@@ -141,6 +141,14 @@ int addinstr_get_context(FunctionBuilder *builder) {
   return instr->slot;
 }
 
+void addinstr_set_context(FunctionBuilder *builder, int obj) {
+  SetContextInstr *instr = malloc(sizeof(SetContextInstr));
+  instr->base.type = INSTR_SET_CONTEXT;
+  instr->base.belongs_to = NULL;
+  instr->slot = obj;
+  addinstr(builder, sizeof(*instr), (Instr*) instr);
+}
+
 int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
   AllocObjectInstr *instr = malloc(sizeof(AllocObjectInstr));
   instr->base.type = INSTR_ALLOC_OBJECT;
@@ -190,12 +198,11 @@ int addinstr_alloc_string_object(FunctionBuilder *builder, char *value) {
   return instr->target_slot;
 }
 
-int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFunction *fn) {
+int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
   AllocClosureObjectInstr *instr = malloc(sizeof(AllocClosureObjectInstr));
   instr->base.type = INSTR_ALLOC_CLOSURE_OBJECT;
   instr->base.belongs_to = NULL;
   instr->target_slot = builder->slot_base++;
-  instr->context_slot = ctxslot;
   instr->fn = fn;
   addinstr(builder, sizeof(*instr), (Instr*) instr);
   return instr->target_slot;

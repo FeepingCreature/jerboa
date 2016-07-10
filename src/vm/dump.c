@@ -14,6 +14,10 @@ void dump_instr(Instr **instr_p) {
       fprintf(stderr, "    get_context: %%%i\n", ((GetContextInstr*) instr)->slot);
       *instr_p = (Instr*) ((GetContextInstr*) instr + 1);
       break;
+    case INSTR_SET_CONTEXT:
+      fprintf(stderr, "    set_context: %%%i\n", ((SetContextInstr*) instr)->slot);
+      *instr_p = (Instr*) ((SetContextInstr*) instr + 1);
+      break;
     case INSTR_ALLOC_OBJECT:
       fprintf(stderr, "    alloc_object: %%%i = new object(%%%i)\n",
               ((AllocObjectInstr*) instr)->target_slot, ((AllocObjectInstr*) instr)->parent_slot);
@@ -40,8 +44,8 @@ void dump_instr(Instr **instr_p) {
       *instr_p = (Instr*) ((AllocStringObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_CLOSURE_OBJECT:
-      fprintf(stderr, "    alloc_closure_object: %%%i = new function(%%%i), dumped later\n",
-              ((AllocClosureObjectInstr*) instr)->target_slot, ((AllocClosureObjectInstr*) instr)->context_slot);
+      fprintf(stderr, "    alloc_closure_object: %%%i = new function(), dumped later\n",
+              ((AllocClosureObjectInstr*) instr)->target_slot);
       *instr_p = (Instr*) ((AllocClosureObjectInstr*) instr + 1);
       break;
     case INSTR_CLOSE_OBJECT:

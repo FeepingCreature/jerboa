@@ -59,6 +59,8 @@ void addinstr_freeze_object(FunctionBuilder *builder, int obj);
 
 int addinstr_get_context(FunctionBuilder *builder);
 
+void addinstr_set_context(FunctionBuilder *builder, int obj);
+
 int addinstr_alloc_object(FunctionBuilder *builder, int parent);
 
 int addinstr_alloc_int_object(FunctionBuilder *builder, int value);
@@ -69,7 +71,7 @@ int addinstr_alloc_array_object(FunctionBuilder *builder);
 
 int addinstr_alloc_string_object(FunctionBuilder *builder, char *value);
 
-int addinstr_alloc_closure_object(FunctionBuilder *builder, int ctxslot, UserFunction *fn);
+int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn);
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len);
 

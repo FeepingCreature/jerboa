@@ -21,6 +21,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
         case INSTR_INVALID: { assert(false); int _stepsize = -1;
           CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
           CASE(INSTR_GET_CONTEXT, GetContextInstr, get_context_instr)
+          CASE(INSTR_SET_CONTEXT, SetContextInstr, set_context_instr)
+            slots[set_context_instr->slot] = false;
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr, alloc_obj_instr)
             slots[alloc_obj_instr->parent_slot] = false;
           CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr, alloc_int_obj_instr)
@@ -28,7 +30,6 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr, alloc_array_obj_instr)
           CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr, alloc_string_obj_instr)
           CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr, alloc_closure_obj_instr)
-            slots[alloc_closure_obj_instr->context_slot] = false;
           CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr, close_obj_instr)
           CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr, freeze_obj_instr)
           CASE(INSTR_ACCESS, AccessInstr, access_instr)
@@ -397,7 +398,9 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
     Instr *instr = block->instrs_ptr;
     Instr *instr_end = block->instrs_ptr_end;
     while (instr != instr_end) {
-      if (instr->type == INSTR_GET_CONTEXT) {
+      // because we can change context, this only works if it's
+      // the first instruction in the function (which it usually is)
+      if (i == 0 && instr == block->instrs_ptr && instr->type == INSTR_GET_CONTEXT) {
         GetContextInstr *gci = (GetContextInstr*) instr;
         object_known[gci->slot] = true;
         known_objects_table[gci->slot] = context;

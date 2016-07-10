@@ -828,6 +828,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   // (this is important for recursion, ie. var foo = function() { foo(); }; )
   use_range_start(builder, var_range);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
+  addinstr_set_context(builder, builder->scope);
   int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
   use_range_end(builder, var_range);
   
@@ -1034,6 +1035,7 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   // alloc scope for fun var
   use_range_start(builder, range);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
+  addinstr_set_context(builder, builder->scope);
   use_range_end(builder, range);
   
   UserFunction *fn;
@@ -1213,6 +1215,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   use_range_start(builder, fnframe_range);
   int ctxslot = addinstr_get_context(builder);
   builder->scope = addinstr_alloc_object(builder, ctxslot);
+  addinstr_set_context(builder, builder->scope);
   for (int i = 0; i < arg_list_len; ++i) {
     int argname_slot = addinstr_alloc_string_object(builder, arg_list_ptr[i]);
     addinstr_assign(builder, builder->scope, argname_slot, 1 + i, ASSIGN_PLAIN);
@@ -1247,6 +1250,7 @@ ParseResult parse_module(char **textp, UserFunction **uf_p) {
   use_range_start(builder, modrange);
   new_block(builder);
   builder->scope = addinstr_get_context(builder);
+  addinstr_set_context(builder, builder->scope);
   use_range_end(builder, modrange);
   
   if (eat_string(textp, "#!")) {

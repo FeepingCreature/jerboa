@@ -8,6 +8,7 @@ typedef enum {
   INSTR_INVALID = -1,
   INSTR_GET_ROOT = 0,
   INSTR_GET_CONTEXT,
+  INSTR_SET_CONTEXT,
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
   INSTR_ALLOC_FLOAT_OBJECT,
@@ -88,6 +89,11 @@ typedef struct {
   int slot;
 } GetContextInstr;
 
+typedef struct {
+  Instr base;
+  int slot;
+} SetContextInstr;
+
 struct _Object;
 typedef struct _Object Object;
 
@@ -121,7 +127,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int target_slot, context_slot;
+  int target_slot;
   UserFunction *fn;
 } AllocClosureObjectInstr;
 
