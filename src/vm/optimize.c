@@ -78,8 +78,8 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
     Instr *instr = block->instrs_ptr;
     Instr *instr_end = block->instrs_ptr_end;
     while (instr != instr_end) {
-      Instr *instr2 = instr;
-      dump_instr(&instr2);
+      // Instr *instr2 = instr;
+      // dump_instr(&instr2);
       
       if (instr->type == INSTR_ALLOC_OBJECT) {
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
@@ -509,6 +509,11 @@ UserFunction *optimize(UserFunction *uf) {
   uf = redirect_predictable_lookup_misses(uf);
   uf = access_vars_via_refslots(uf);
   
+  if (uf->name) {
+    fprintf(stderr, "static optimized %s to\n", uf->name);
+    dump_fn(uf);
+  }
+  
   return uf;
 }
 
@@ -520,8 +525,10 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   */
   uf = inline_static_lookups_to_constants(state, uf, context);
   
-  fprintf(stderr, "runtime optimized %s to\n", uf->name);
-  dump_fn(uf);
+  if (uf->name) {
+    fprintf(stderr, "runtime optimized %s to\n", uf->name);
+    dump_fn(uf);
+  }
   
   return uf;
 }

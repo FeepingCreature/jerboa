@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   assert(res == PARSE_OK);
-  dump_fn(module);
+  // dump_fn(module);
   
   int args_len = argc - 2;
   Object **args_ptr = malloc(sizeof(Object*) * args_len);
