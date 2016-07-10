@@ -864,6 +864,29 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   VM_ASSERT(false, "cannot mark const: variable not found");
 }
 
+static bool is_truthy(VMState *state, Object *obj) {
+  Object *int_base = state->shared->vcache.int_base;
+  Object *bool_base = state->shared->vcache.bool_base;
+  if (obj->parent == bool_base) {
+    return ((BoolObject*) obj)->value;
+  }
+  if (obj->parent == int_base) {
+    return ((IntObject*) obj)->value != 0;
+  }
+  return !!obj;
+}
+
+static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+  bool test = is_truthy(state, args_ptr[0]);
+  Object *string_base = state->shared->vcache.string_base;
+  StringObject *msg_obj = (StringObject*) obj_instance_of(args_ptr[1], string_base);
+  VM_ASSERT(msg_obj, "second parameter to assert() must be string");
+  
+  VM_ASSERT(test, "assert failed: %s", msg_obj->value);
+  state->result_value = NULL;
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -998,6 +1021,7 @@ Object *create_root(VMState *state) {
   object_set(root, "require", alloc_fn(state, require_fn));
   object_set(root, "freeze", alloc_fn(state, freeze_fn));
   object_set(root, "_mark_const", alloc_fn(state, mark_const_fn));
+  object_set(root, "assert", alloc_fn(state, assert_fn));
   
   ffi_setup_root(state, root);
   
