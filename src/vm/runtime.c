@@ -833,6 +833,37 @@ static void freeze_fn(VMState *state, Object *thisptr, Object *fn, Object **args
   obj->flags |= OBJ_FROZEN;
 }
 
+static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  StringObject *key_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(key_obj, "argument to _mark_const must be string");
+  
+  char *key_ptr = key_obj->value;
+  int key_len = strlen(key_ptr);
+  size_t key_hash = hash(key_ptr, key_len);
+  
+  state->result_value = NULL;
+  
+  // frames are only allocated for user functions
+  // so we're still in the calling frame
+  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
+  Object *context = cf->context;
+  
+  Object *cur = context;
+  while (cur) {
+    bool key_found = false;
+    table_lookup_with_hash(&cur->tbl, key_ptr, key_len, key_hash, &key_found);
+    if (key_found) {
+      VM_ASSERT(cur->tbl.entries_num == 1, "more than one var in this scope: something bad has happened??");
+      cur->flags |= OBJ_FROZEN;
+      return;
+    }
+    cur = cur->parent;
+  }
+  VM_ASSERT(false, "cannot mark const: variable not found");
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
@@ -965,6 +996,7 @@ Object *create_root(VMState *state) {
   
   object_set(root, "require", alloc_fn(state, require_fn));
   object_set(root, "freeze", alloc_fn(state, freeze_fn));
+  object_set(root, "_mark_const", alloc_fn(state, mark_const_fn));
   
   ffi_setup_root(state, root);
   
