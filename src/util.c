@@ -65,6 +65,30 @@ size_t utf8_strnlen(const char *ptr, size_t length) {
   return utf8_len;
 }
 
+static bool find_text_pos_from_to(char *text, FileRecord *record, char *text_to, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
+  int row_nr = *row_p;
+  TextRange line = *line_p;
+  while (line.start < text_to) {
+    while (line.end < text_to && *line.end != '\n') line.end ++; // scan to newline
+    if (line.end < text_to) line.end ++; // scan past newline
+    if (text >= line.start && text < line.end) {
+      last_line = line;
+      last_record = record;
+      last_row_nr = row_nr;
+      
+      int col_nr = text - line.start;
+      *name_p = record->name;
+      *line_p = line;
+      *row_p = row_nr + record->row_start;
+      *col_p = col_nr + ((row_nr == 0) ? record->col_start : 0);
+      return true;
+    }
+    line.start = line.end;
+    row_nr ++;
+  }
+  return false;
+}
+
 bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
   // cache lookup
   if (text >= last_line.start && text < last_line.end) {
@@ -76,31 +100,25 @@ bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_
     return true;
   }
   
+  // read forward from last cache hit
+  if (last_record && text >= last_record->text.start && text < last_record->text.end) {
+    if (text >= last_line.end) {
+      *row_p = last_row_nr + 1;
+      *line_p = (TextRange) { last_line.end, last_line.end };
+      bool res = find_text_pos_from_to(text, last_record, last_record->text.end, name_p, line_p, row_p, col_p);
+      if (res) return true;
+    }
+  }
+  
+  // full rescan
   FileRecord *rec = record;
   while (rec) {
     if (text >= rec->text.start && text < rec->text.end) {
-      *name_p = rec->name;
-      
-      int row_nr = 0;
-      TextRange line = (TextRange) { rec->text.start, rec->text.start };
-      while (line.start < rec->text.end) {
-        while (line.end < rec->text.end && *line.end != '\n') line.end ++; // scan to newline
-        if (line.end < rec->text.end) line.end ++; // scan past newline
-        if (text >= line.start && text < line.end) {
-          last_line = line;
-          last_record = rec;
-          last_row_nr = row_nr;
-          
-          int col_nr = text - line.start;
-          *line_p = line;
-          *row_p = row_nr + rec->row_start;
-          *col_p = col_nr + ((row_nr == 0) ? rec->col_start : 0);
-          return true;
-        }
-        line.start = line.end;
-        row_nr ++;
-      }
-      assert(false); // logic error, wtf - text in range but not in any line??
+      *row_p = 0;
+      *line_p = (TextRange) { rec->text.start, rec->text.start };
+      bool res = find_text_pos_from_to(text, rec, rec->text.end, name_p, line_p, row_p, col_p);
+      assert(res); // logic error, wtf - text in range but not in any line??
+      if (res) return true;
     }
     rec = rec->prev;
   }
