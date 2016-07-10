@@ -475,6 +475,44 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
   state->result_value = NULL;
 }
 
+static void array_join_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  Object *string_base = state->shared->vcache.string_base;
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
+  StringObject *str_arg = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(arr_obj, "internal error: 'join' called on object that is not an array");
+  VM_ASSERT(str_arg, "argument to array.join() must be string");
+  
+  int joiner_len = strlen(str_arg->value);
+  int res_len = 0;
+  for (int i = 0; i < arr_obj->length; i++) {
+    if (i > 0) res_len += joiner_len;
+    Object *entry = arr_obj->ptr[i];
+    StringObject *entry_str = (StringObject*) obj_instance_of(entry, string_base);
+    VM_ASSERT(entry_str, "contents of array must be strings");
+    res_len += strlen(entry_str->value);
+  }
+  char *res = malloc(res_len + 1);
+  char *res_cur = res;
+  for (int i = 0; i < arr_obj->length; i++) {
+    if (i > 0) {
+      memcpy(res_cur, str_arg->value, joiner_len);
+      res_cur += joiner_len;
+    }
+    Object *entry = arr_obj->ptr[i];
+    StringObject *entry_str = (StringObject*) obj_instance_of(entry, string_base);
+    // TODO is there a way to write this that doesn't need two scans here?
+    int len = strlen(entry_str->value);
+    memcpy(res_cur, entry_str->value, len);
+    res_cur += len;
+  }
+  res_cur[0] = 0;
+  // TODO make string constructor that takes ownership of the pointer instead
+  state->result_value = alloc_string(state, res, res_len);
+  free(res);
+}
+
 static void file_print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   Object *pointer_base = state->shared->vcache.pointer_base;
   Object *file_base = OBJECT_LOOKUP_STRING(state->root, "file", NULL);
@@ -885,6 +923,7 @@ Object *create_root(VMState *state) {
   object_set(array_obj, "pop", alloc_fn(state, array_pop_fn));
   object_set(array_obj, "[]", alloc_fn(state, array_index_fn));
   object_set(array_obj, "[]=", alloc_fn(state, array_index_assign_fn));
+  object_set(array_obj, "join", alloc_fn(state, array_join_fn));
   state->shared->vcache.array_base = array_obj;
   
   Object *ptr_obj = alloc_object(state, NULL);
