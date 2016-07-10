@@ -684,9 +684,11 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   xmlCleanupParser();
 }
 
-static bool xml_node_check_pred(VMState *state, Object *node, Object *pred,
-                                Object *function_base, Object *closure_base, Object *bool_base)
+static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
 {
+  Object *bool_base = state->shared->vcache.bool_base;
+  Object *closure_base = state->shared->vcache.closure_base;
+  Object *function_base = state->shared->vcache.function_base;
   FunctionObject *fn_pred = (FunctionObject*) obj_instance_of(pred, function_base);
   ClosureObject *cl_pred = (ClosureObject*) obj_instance_of(pred, closure_base);
   VM_ASSERT(fn_pred || cl_pred, "predicate is neither function nor closure") false;
@@ -709,10 +711,10 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred,
   return ((BoolObject*) res)->value;
 }
 
-static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Object ***array_p_p, int *array_l_p,
-                                  Object *function_base, Object *closure_base, Object *bool_base, Object *array_base)
+static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Object ***array_p_p, int *array_l_p)
 {
-  bool res = xml_node_check_pred(state, node, pred, function_base, closure_base, bool_base);
+  Object *array_base = state->shared->vcache.array_base;
+  bool res = xml_node_check_pred(state, node, pred);
   if (state->runstate == VM_ERRORED) return;
   if (res) {
     (*array_p_p) = realloc((void*) *array_p_p, sizeof(Object*) * ++(*array_l_p));
@@ -725,31 +727,26 @@ static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Ob
   VM_ASSERT(children_aobj, "'children' property in node is not an array");
   for (int i = 0; i < children_aobj->length; ++i) {
     Object *child = children_aobj->ptr[i];
-    xml_node_find_recurse(state, child, pred, array_p_p, array_l_p,
-                          function_base, closure_base, bool_base, array_base);
+    xml_node_find_recurse(state, child, pred, array_p_p, array_l_p);
     if (state->runstate == VM_ERRORED) return;
   }
 }
 
 static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *bool_base = state->shared->vcache.bool_base;
-  Object *array_base = state->shared->vcache.array_base;
-  Object *closure_base = state->shared->vcache.closure_base;
-  Object *function_base = state->shared->vcache.function_base;
   
   Object **array_ptr = NULL; int array_length = 0;
   gc_disable(state);
-  xml_node_find_recurse(state, thisptr, args_ptr[0], &array_ptr, &array_length,
-                        function_base, closure_base, bool_base, array_base);
+  xml_node_find_recurse(state, thisptr, args_ptr[0], &array_ptr, &array_length);
   IntObject *array_len_obj = (IntObject*) alloc_int(state, array_length);
   state->result_value = alloc_array(state, array_ptr, array_len_obj);
   gc_enable(state);
 }
 
-static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *name, Object ***array_p_p, int *array_l_p,
-                                  Object *string_base, Object *array_base)
+static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *name, Object ***array_p_p, int *array_l_p)
 {
+  Object *string_base = state->shared->vcache.string_base;
+  Object *array_base = state->shared->vcache.array_base;
   Object *node_name = OBJECT_LOOKUP_STRING(node, "nodeName", NULL);
   VM_ASSERT(node_name, "missing 'nodeName' property in node");
   StringObject *nodeName_str = (StringObject*) obj_instance_of(node_name, string_base);
@@ -764,15 +761,13 @@ static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *na
   VM_ASSERT(children_aobj, "'children' property in node is not an array");
   for (int i = 0; i < children_aobj->length; ++i) {
     Object *child = children_aobj->ptr[i];
-    xml_node_find_by_name_recurse(state, child, name, array_p_p, array_l_p,
-                          string_base, array_base);
+    xml_node_find_by_name_recurse(state, child, name, array_p_p, array_l_p);
     if (state->runstate == VM_ERRORED) return;
   }
 }
 
 static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
   
   StringObject *name_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
@@ -780,8 +775,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Obje
   
   Object **array_ptr = NULL; int array_length = 0;
   gc_disable(state);
-  xml_node_find_by_name_recurse(state, thisptr, name_obj->value, &array_ptr, &array_length,
-                                string_base, array_base);
+  xml_node_find_by_name_recurse(state, thisptr, name_obj->value, &array_ptr, &array_length);
   IntObject *array_len_obj = (IntObject*) alloc_int(state, array_length);
   state->result_value = alloc_array(state, array_ptr, array_len_obj);
   gc_enable(state);
