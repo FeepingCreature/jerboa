@@ -151,7 +151,7 @@ int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
   return instr->target_slot;
 }
 
-int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value) {
+int addinstr_alloc_int_object(FunctionBuilder *builder, int value) {
   AllocIntObjectInstr *instr = malloc(sizeof(AllocIntObjectInstr));
   instr->base.type = INSTR_ALLOC_INT_OBJECT;
   instr->base.belongs_to = NULL;
@@ -161,7 +161,7 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int ctxslot, int value) 
   return instr->target_slot;
 }
 
-int addinstr_alloc_float_object(FunctionBuilder *builder, int ctxslot, float value) {
+int addinstr_alloc_float_object(FunctionBuilder *builder, float value) {
   AllocFloatObjectInstr *instr = malloc(sizeof(AllocFloatObjectInstr));
   instr->base.type = INSTR_ALLOC_FLOAT_OBJECT;
   instr->base.belongs_to = NULL;
@@ -171,7 +171,7 @@ int addinstr_alloc_float_object(FunctionBuilder *builder, int ctxslot, float val
   return instr->target_slot;
 }
 
-int addinstr_alloc_array_object(FunctionBuilder *builder, int ctxslot) {
+int addinstr_alloc_array_object(FunctionBuilder *builder) {
   AllocArrayObjectInstr *instr = malloc(sizeof(AllocArrayObjectInstr));
   instr->base.type = INSTR_ALLOC_ARRAY_OBJECT;
   instr->base.belongs_to = NULL;
@@ -180,7 +180,7 @@ int addinstr_alloc_array_object(FunctionBuilder *builder, int ctxslot) {
   return instr->target_slot;
 }
 
-int addinstr_alloc_string_object(FunctionBuilder *builder, int ctxslot, char *value) {
+int addinstr_alloc_string_object(FunctionBuilder *builder, char *value) {
   AllocStringObjectInstr *instr = malloc(sizeof(AllocStringObjectInstr));
   instr->base.type = INSTR_ALLOC_STRING_OBJECT;
   instr->base.belongs_to = NULL;

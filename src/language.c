@@ -85,7 +85,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
   if (!builder) return (RefValue) {0, -1, REFMODE_VARIABLE, NULL};
   assert(builder->current_range);
-  int name_slot = addinstr_alloc_string_object(builder, builder->scope, name);
+  int name_slot = addinstr_alloc_string_object(builder, name);
   return (RefValue) {builder->scope, name_slot, REFMODE_VARIABLE, builder->current_range};
 }
 
@@ -118,7 +118,7 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
       int value_slot = ref_access(builder, value);
       
       use_range_start(builder, add_entry_range);
-      int key_slot = addinstr_alloc_string_object(builder, builder->scope, key_name);
+      int key_slot = addinstr_alloc_string_object(builder, key_name);
       addinstr_assign(builder, obj_slot, key_slot, value_slot, ASSIGN_PLAIN);
       use_range_end(builder, add_entry_range);
     }
@@ -173,14 +173,14 @@ static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *build
   *textp = text;
   if (builder) {
     use_range_start(builder, range);
-    int keyslot1 = addinstr_alloc_string_object(builder, builder->scope, "resize");
-    int keyslot2 = addinstr_alloc_string_object(builder, builder->scope, "[]=");
+    int keyslot1 = addinstr_alloc_string_object(builder, "resize");
+    int keyslot2 = addinstr_alloc_string_object(builder, "[]=");
     int resizefn = ref_access(builder, (RefValue) {obj_slot, keyslot1, REFMODE_OBJECT, range});
     int assignfn = ref_access(builder, (RefValue) {obj_slot, keyslot2, REFMODE_OBJECT, range});
-    int newsize_slot = addinstr_alloc_int_object(builder, builder->scope, values_len);
+    int newsize_slot = addinstr_alloc_int_object(builder, values_len);
     obj_slot = addinstr_call1(builder, resizefn, obj_slot, newsize_slot);
     for (int i = 0; i < values_len; ++i) {
-      int index_slot = addinstr_alloc_int_object(builder, builder->scope, i);
+      int index_slot = addinstr_alloc_int_object(builder, i);
       use_range_end(builder, range);
       int value_slot = ref_access(builder, values_ptr[i]);
       use_range_start(builder, range);
@@ -202,7 +202,7 @@ static ParseResult parse_array_literal(char **textp, FunctionBuilder *builder, R
   
   int obj_slot = 0;
   use_range_start(builder, lit_range);
-  if (builder) obj_slot = addinstr_alloc_array_object(builder, builder->scope);
+  if (builder) obj_slot = addinstr_alloc_array_object(builder);
   *textp = text;
   *rv_p = ref_simple(obj_slot);
   use_range_end(builder, lit_range);
@@ -234,7 +234,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     int slot = 0;
     if (builder) {
       use_range_start(builder, range);
-      slot = addinstr_alloc_float_object(builder, builder->scope, f_value);
+      slot = addinstr_alloc_float_object(builder, f_value);
       use_range_end(builder, range);
     }
     *rv = ref_simple(slot);
@@ -248,7 +248,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     int slot = 0;
     if (builder) {
       use_range_start(builder, range);
-      slot = addinstr_alloc_int_object(builder, builder->scope, i_value);
+      slot = addinstr_alloc_int_object(builder, i_value);
       use_range_end(builder, range);
     }
     *rv = ref_simple(slot);
@@ -265,7 +265,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
       record_end(text, range);
       if (builder) {
         use_range_start(builder, range);
-        slot = addinstr_alloc_string_object(builder, builder->scope, t_value);
+        slot = addinstr_alloc_string_object(builder, t_value);
         use_range_end(builder, range);
       }
     }
@@ -315,7 +315,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     if (builder) {
       fn->is_method = is_method;
       use_range_start(builder, range); // count the closure allocation under 'function'
-      slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
+      slot = addinstr_alloc_closure_object(builder, fn);
       use_range_end(builder, range);
     }
     *rv = ref_simple(slot);
@@ -445,7 +445,7 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
   int key_slot = 0;
   if (builder) expr_slot = ref_access(builder, *expr);
   use_range_start(builder, prop_range);
-  if (builder) key_slot = addinstr_alloc_string_object(builder, builder->scope, keyname);
+  if (builder) key_slot = addinstr_alloc_string_object(builder, keyname);
   *expr = (RefValue) {expr_slot, key_slot, REFMODE_OBJECT, prop_range};
   use_range_end(builder, prop_range);
   
@@ -457,7 +457,7 @@ void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs
     int lhs_value = ref_access(builder, lhs_expr);
     int rhs_value = ref_access(builder, rhs_expr);
     use_range_start(builder, range);
-    int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, op));
+    int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, op));
     *res_rv = ref_simple(addinstr_call1(builder, fn, lhs_value, rhs_value));
     use_range_end(builder, range);
   }
@@ -494,7 +494,7 @@ static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefV
   if (builder) {
     prev_slot = ref_access(builder, *rv);
     use_range_start(builder, op_range);
-    one_slot = addinstr_alloc_int_object(builder, builder->scope, 1);
+    one_slot = addinstr_alloc_int_object(builder, 1);
     use_range_end(builder, op_range);
   }
   
@@ -560,7 +560,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   if (negate) {
     use_range_start(builder, neg_range);
     int zero_slot = 0;
-    if (builder) zero_slot = addinstr_alloc_int_object(builder, builder->scope, 0);
+    if (builder) zero_slot = addinstr_alloc_int_object(builder, 0);
     use_range_end(builder, neg_range);
     RefValue zref = ref_simple(zero_slot);
     build_op(builder, "-", rv, zref, *rv, neg_range);
@@ -712,7 +712,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   if (negate_expr && builder) {
     use_range_start(builder, range);
     int lhs_value = ref_access(builder, *rv);
-    int notfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, builder->scope, "!"));
+    int notfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, "!"));
     *rv = ref_simple(addinstr_call0(builder, notfn, lhs_value));
     use_range_end(builder, range);
   }
@@ -836,7 +836,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   record_end(text, alloc_var_name);
   
   use_range_start(builder, alloc_var_name);
-  int value, varname_slot = addinstr_alloc_string_object(builder, var_scope, varname);
+  int value, varname_slot = addinstr_alloc_string_object(builder, varname);
   addinstr_assign(builder, var_scope, varname_slot, 0, ASSIGN_PLAIN);
   addinstr_close_object(builder, var_scope);
   use_range_end(builder, alloc_var_name);
@@ -1041,8 +1041,8 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
   use_range_start(builder, range);
-  int name_slot = addinstr_alloc_string_object(builder, builder->scope, fn->name);
-  int slot = addinstr_alloc_closure_object(builder, builder->scope, fn);
+  int name_slot = addinstr_alloc_string_object(builder, fn->name);
+  int slot = addinstr_alloc_closure_object(builder, fn);
   addinstr_assign(builder, builder->scope, name_slot, slot, ASSIGN_PLAIN);
   addinstr_close_object(builder, builder->scope);
   addinstr_freeze_object(builder, builder->scope);
@@ -1214,7 +1214,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   int ctxslot = addinstr_get_context(builder);
   builder->scope = addinstr_alloc_object(builder, ctxslot);
   for (int i = 0; i < arg_list_len; ++i) {
-    int argname_slot = addinstr_alloc_string_object(builder, builder->scope, arg_list_ptr[i]);
+    int argname_slot = addinstr_alloc_string_object(builder, arg_list_ptr[i]);
     addinstr_assign(builder, builder->scope, argname_slot, 1 + i, ASSIGN_PLAIN);
   }
   addinstr_close_object(builder, builder->scope);
