@@ -86,14 +86,24 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         instr = (Instr*) (alobi + 1);
         bool failed = false;
         char **names_ptr = 0; int names_len = 0;
-        while (instr != instr_end && instr->type == INSTR_ASSIGN_STRING_KEY) {
-          AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
-          if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
-          instr = (Instr*) (aski + 1);
-          names_ptr = realloc(names_ptr, sizeof(char*) * ++names_len);
-          names_ptr[names_len - 1] = aski->key;
+        while (instr != instr_end) {
+          if (instr->type == INSTR_ASSIGN_STRING_KEY) {
+            AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
+            if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
+            instr = (Instr*) (aski + 1);
+            names_ptr = realloc(names_ptr, sizeof(char*) * ++names_len);
+            names_ptr[names_len - 1] = aski->key;
+          } else if (instr->type == INSTR_SET_CONTEXT) {
+            // can be safely skipped
+            SetContextInstr *sci = (SetContextInstr*) instr;
+            instr = (Instr*) (sci + 1);
+          } else if (instr->type == INSTR_CLOSE_OBJECT) {
+            break;
+          } else {
+            failed = true;
+            break;
+          }
         }
-        if (instr->type != INSTR_CLOSE_OBJECT) failed = true;
         if (failed) {
           free(names_ptr);
           continue;
