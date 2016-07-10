@@ -15,7 +15,11 @@
 #include "util.h"
 
 int main(int argc, char **argv) {
-  (void) argc; assert(argc == 2);
+  // TODO feed spare argv to script as [arguments]
+  if (argc < 2) {
+    fprintf(stderr, "expected: jerboa [script file] [arguments]\n");
+    return 1;
+  }
   
   init_instr_fn_table();
   
@@ -41,6 +45,14 @@ int main(int argc, char **argv) {
   }
   assert(res == PARSE_OK);
   dump_fn(module);
+  
+  int args_len = argc - 2;
+  Object **args_ptr = malloc(sizeof(Object*) * args_len);
+  for (int i = 2; i < argc; ++i) {
+    args_ptr[i-2] = alloc_string(&vmstate, argv[i], strlen(argv[i]));
+  }
+  Object *args = alloc_array(&vmstate, args_ptr, (IntObject*) alloc_int(&vmstate, args_len));
+  object_set(root, "arguments", args);
   
   call_function(&vmstate, root, module, NULL, 0);
   vm_run(&vmstate);
