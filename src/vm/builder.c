@@ -303,6 +303,7 @@ UserFunction *build_function(FunctionBuilder *builder) {
   assert(builder->block_terminated);
   UserFunction *fn = malloc(sizeof(UserFunction));
   fn->arity = builder->arglist_len;
+  fn->variadic_tail = builder->variadic_tail;
   fn->slots = builder->slot_base;
   fn->refslots = builder->refslot_base;
   fn->name = builder->name;

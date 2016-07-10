@@ -1,0 +1,6 @@
+#!build/jerboa
+var test = function(...) {
+  print("arguments = ", arguments);
+};
+test(2, 3, 4);
+test.apply([2, 3, 4]);

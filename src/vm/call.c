@@ -12,7 +12,11 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
   gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
   gc_add_roots(state, &cf->context, 1, &cf->frameroot_ctx);
   
-  if (args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
+  if (fn->variadic_tail) {
+    if (args_len < cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
+  } else {
+    if (args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
+  }
   for (int i = 0; i < args_len; ++i) {
     cf->slots_ptr[1 + i] = args_ptr[i];
   }
@@ -33,20 +37,42 @@ void call_closure(VMState *state, Object *context, ClosureObject *cl, Object **a
   call_function(state, context, cl->vmfun, args_ptr, args_len);
 }
 
-void function_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  // discard calling context (lexical scoping!)
-  ClosureObject *fn_obj = (ClosureObject*) fn;
-  call_closure(state, fn_obj->context, fn_obj, args_ptr, args_len);
+static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, Object **args_ptr, int args_len) {
+  if (!uf->variadic_tail) return context;
+  context = alloc_object(state, context);
+  // should have been checked before
+  assert(args_len >= uf->arity);
+  int varargs_len = args_len - uf->arity;
+  // TODO when/how is this actually freed??
+  // TODO owned_array?
+  Object **varargs_ptr = malloc(sizeof(Object*) * varargs_len);
+  for (int i = 0; i < varargs_len; ++i) {
+    varargs_ptr[i] = args_ptr[uf->arity + i];
+  }
+  object_set(context, "arguments", alloc_array(state, varargs_ptr, (IntObject*) alloc_int(state, varargs_len)));
+  context->flags |= OBJ_CLOSED;
+  return context;
 }
 
-void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+static void function_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   // discard calling context (lexical scoping!)
-  ClosureObject *fn_obj = (ClosureObject*) fn;
-  Object *context = alloc_object(state, fn_obj->context);
+  ClosureObject *cl_obj = (ClosureObject*) fn;
+  Object *context = cl_obj->context;
+  gc_disable(state); // keep context alive, if need be
+  context = setup_vararg(state, context, cl_obj->vmfun, args_ptr, args_len);
+  call_closure(state, context, cl_obj, args_ptr, args_len);
+  gc_enable(state);
+}
+
+static void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  // discard calling context (lexical scoping!)
+  ClosureObject *cl_obj = (ClosureObject*) fn;
+  Object *context = alloc_object(state, cl_obj->context);
   object_set(context, "this", thisptr);
   context->flags |= OBJ_CLOSED;
   gc_disable(state); // keep context alive
-  call_closure(state, context, fn_obj, args_ptr, args_len);
+  context = setup_vararg(state, context, cl_obj->vmfun, args_ptr, args_len);
+  call_closure(state, context, cl_obj, args_ptr, args_len);
   gc_enable(state);
 }
 

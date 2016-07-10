@@ -1171,11 +1171,21 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   }
   
   char **arg_list_ptr = NULL, arg_list_len = 0;
+  bool variadic_tail = false;
   while (!eat_string(&text, ")")) {
     if (arg_list_len && !eat_string(&text, ",")) {
       log_parser_error(text, "comma expected");
       free(fnframe_range);
       return PARSE_ERROR;
+    }
+    if (eat_string(&text, "...")) {
+      if (!eat_string(&text, ")")) {
+        log_parser_error(text, "variadic marker must be the last argument to the function");
+        free(fnframe_range);
+        return PARSE_ERROR;
+      }
+      variadic_tail = true;
+      break;
     }
     char *arg = parse_identifier(&text);
     if (!arg) {
@@ -1193,6 +1203,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->arglist_ptr = arg_list_ptr;
   builder->arglist_len = arg_list_len;
+  builder->variadic_tail = variadic_tail;
   builder->slot_base = 1 + arg_list_len;
   builder->name = fun_name;
   builder->block_terminated = true;

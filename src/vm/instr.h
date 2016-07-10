@@ -73,7 +73,7 @@ typedef struct {
   int arity; // first n slots are reserved for parameters
   int slots, refslots;
   char *name;
-  bool is_method;
+  bool is_method, variadic_tail;
   FunctionBody body;
 } UserFunction;
 

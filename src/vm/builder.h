@@ -10,6 +10,7 @@ typedef struct {
   
   char **arglist_ptr;
   int arglist_len;
+  bool variadic_tail;
   
   int scope;
   int slot_base; // base-1; 0 is reserved for "null"

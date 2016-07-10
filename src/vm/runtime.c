@@ -12,6 +12,18 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+static void fn_apply_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *args_array = (ArrayObject*) obj_instance_of(args_ptr[0], array_base);
+  VM_ASSERT(args_array, "argument to apply() must be array!");
+  Object *call_fn = thisptr;
+  // passthrough call to actual function
+  // note: may set its own errors
+  setup_call(state, NULL, call_fn, args_array->ptr, args_array->length);
+}
+
+// TODO add "IS_TRUTHY" instr so we can promote, say, null, to bool before calling this
 static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *bool_base = state->shared->vcache.bool_base;
@@ -833,6 +845,7 @@ Object *create_root(VMState *state) {
   Object *function_obj = alloc_object(state, NULL);
   function_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "function", function_obj);
+  object_set(function_obj, "apply", alloc_fn(state, fn_apply_fn));
   state->shared->vcache.function_base = function_obj;
   
   Object *int_obj = alloc_object(state, NULL);
@@ -873,6 +886,7 @@ Object *create_root(VMState *state) {
   closure_obj->flags |= OBJ_NOINHERIT;
   closure_obj->mark_fn = closure_mark_fn;
   object_set(root, "closure", closure_obj);
+  object_set(closure_obj, "apply", alloc_fn(state, fn_apply_fn));
   state->shared->vcache.closure_base = closure_obj;
   
   Object *bool_obj = alloc_object(state, NULL);
