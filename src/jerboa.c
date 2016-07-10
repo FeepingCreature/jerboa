@@ -59,10 +59,12 @@ int main(int argc, char **argv) {
   
   save_profile_output("profile.html", source, &vmstate.shared->profstate);
   
+  int resvalue = 0;
   if (vmstate.runstate == VM_ERRORED) {
     fprintf(stderr, "at:\n");
     vm_print_backtrace(&vmstate);
     fprintf(stderr, "vm failure: %s\n", vmstate.error);
+    resvalue = 1;
   }
   
   printf("(%i cycles)\n", vmstate.shared->cyclecount);
@@ -72,5 +74,5 @@ int main(int argc, char **argv) {
   // one last run, deleting everything
   gc_run(&vmstate);
   
-  return 0;
+  return resvalue;
 }
