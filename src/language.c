@@ -1238,6 +1238,15 @@ ParseResult parse_module(char **textp, UserFunction **uf_p) {
   builder->scope = addinstr_get_context(builder);
   use_range_end(builder, modrange);
   
+  if (eat_string(textp, "#!")) {
+    while ((*textp)[0] && (*textp)[0] != '\n') (*textp)++;
+    if ((*textp)[0] != '\n') {
+      log_parser_error(*textp, "Hashbang found but no terminating newline!");
+      return PARSE_ERROR;
+    }
+    (*textp)++;
+  }
+  
   while (true) {
     eat_filler(textp);
     if (!**textp) break;
