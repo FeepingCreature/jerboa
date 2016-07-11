@@ -239,17 +239,20 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         int obj_slot = aski->obj_slot;
         char *key = aski->key_ptr;
         if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
+          bool continue_outer = false;
           for (int k = 0; k < info[obj_slot].names_len; ++k) {
             char *name = info[obj_slot].names_ptr[k];
             if (strcmp(key, name) == 0) {
               int refslot = ref_slots_ptr[obj_slot][k];
               use_range_start(builder, instr->belongs_to);
-              addinstr_read_refslot(builder, refslot, aski->target_slot);
+              addinstr_read_refslot(builder, refslot, aski->target_slot, my_asprintf("refslot reading '%s'", name));
               use_range_end(builder, instr->belongs_to);
               instr = (Instr*) (aski + 1);
-              continue;
+              continue_outer = true;
+              break;
             }
           }
+          if (continue_outer) continue;
         }
       }
       
@@ -258,17 +261,20 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         int obj_slot = aski->obj_slot;
         char *key = aski->key;
         if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
+          bool continue_outer = false;
           for (int k = 0; k < info[obj_slot].names_len; ++k) {
             char *name = info[obj_slot].names_ptr[k];
             if (strcmp(key, name) == 0) {
               int refslot = ref_slots_ptr[obj_slot][k];
               use_range_start(builder, instr->belongs_to);
-              addinstr_write_refslot(builder, aski->value_slot, refslot);
+              addinstr_write_refslot(builder, aski->value_slot, refslot, my_asprintf("refslot writing '%s'", name));
               use_range_end(builder, instr->belongs_to);
               instr = (Instr*) (aski + 1);
-              continue;
+              continue_outer = true;
+              break;
             }
           }
+          if (continue_outer) continue;
         }
       }
       
@@ -519,10 +525,10 @@ UserFunction *optimize(UserFunction *uf) {
   uf = redirect_predictable_lookup_misses(uf);
   uf = access_vars_via_refslots(uf);
   
-  if (uf->name) {
+  /*if (uf->name) {
     fprintf(stderr, "static optimized %s to\n", uf->name);
     dump_fn(uf);
-  }
+  }*/
   
   return uf;
 }
@@ -535,10 +541,10 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   */
   uf = inline_static_lookups_to_constants(state, uf, context);
   
-  if (uf->name) {
+  // if (uf->name) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);
     dump_fn(uf);
-  }
+  // }
   
   return uf;
 }

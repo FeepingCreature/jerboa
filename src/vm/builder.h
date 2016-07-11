@@ -89,9 +89,9 @@ void addinstr_return(FunctionBuilder *builder, int slot);
 
 int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key);
 
-void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot);
+void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot, char *opt_info);
 
-void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot);
+void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot, char *opt_info);
 
 UserFunction *build_function(FunctionBuilder *builder);
 

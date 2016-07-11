@@ -117,50 +117,53 @@ char *vm_record_backtrace(VMState *state, int *depth) {
   return res_ptr;
 }
 
-static void vm_record_profile(VMState *state) {
+void vm_record_profile(VMState *state) {
+  int cyclecount = state->shared->cyclecount;
+  HashTable *direct_tbl = &state->shared->profstate.direct_table;
+  HashTable *indirect_tbl = &state->shared->profstate.indirect_table;
+  
+  VMState *curstate = state;
+  // fprintf(stderr, "generate backtrace\n");
+  int k = 0;
+  while (curstate) {
+    for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
+      Callframe *curf = &curstate->stack_ptr[i];
+      Instr *instr = curf->instr_ptr;
+      // ranges are unique (and instrs must live as long as the vm state lives anyways)
+      // so we can just use the pointer stored in the instr as the key
+      char *key_ptr = (char*) &instr->belongs_to;
+      int key_len = sizeof(instr->belongs_to);
+      
+      size_t key_hash = hash(key_ptr, key_len);
+      
+      if (k == 0) {
+        void **freeptr;
+        void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
+        if (entry_p) (*(int*) entry_p) ++;
+        else (*(int*) freeptr) = 1;
+      } else {
+        // don't double-count ranges in case of recursion
+        bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
+        
+        if (!range_already_counted) {
+          void **freeptr;
+          void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
+          if (entry_p) (*(int*) entry_p) ++;
+          else (*(int*) freeptr) = 1;
+        }
+      }
+      instr->belongs_to->last_cycle_seen = cyclecount;
+    }
+    curstate = curstate->parent;
+  }
+}
+
+static void vm_maybe_record_profile(VMState *state) {
   struct timespec prof_time;
   long long ns_diff = get_clock_and_difference(&prof_time, &state->shared->profstate.last_prof_time);
   if (ns_diff > sample_stepsize) {
     state->shared->profstate.last_prof_time = prof_time;
-    
-    int cyclecount = state->shared->cyclecount;
-    HashTable *direct_tbl = &state->shared->profstate.direct_table;
-    HashTable *indirect_tbl = &state->shared->profstate.indirect_table;
-    
-    VMState *curstate = state;
-    // fprintf(stderr, "generate backtrace\n");
-    int k = 0;
-    while (curstate) {
-      for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
-        Callframe *curf = &curstate->stack_ptr[i];
-        Instr *instr = curf->instr_ptr;
-        // ranges are unique (and instrs must live as long as the vm state lives anyways)
-        // so we can just use the pointer stored in the instr as the key
-        char *key_ptr = (char*) &instr->belongs_to;
-        int key_len = sizeof(instr->belongs_to);
-        
-        size_t key_hash = hash(key_ptr, key_len);
-        
-        if (k == 0) {
-          void **freeptr;
-          void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
-          if (entry_p) (*(int*) entry_p) ++;
-          else (*(int*) freeptr) = 1;
-        } else {
-          // don't double-count ranges in case of recursion
-          bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
-          
-          if (!range_already_counted) {
-            void **freeptr;
-            void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
-            if (entry_p) (*(int*) entry_p) ++;
-            else (*(int*) freeptr) = 1;
-          }
-        }
-        instr->belongs_to->last_cycle_seen = cyclecount;
-      }
-      curstate = curstate->parent;
-    }
+    vm_record_profile(state);
     long long ns_taken = get_clock_and_difference(NULL, &prof_time);
     if (ns_taken > sample_stepsize / 10) {
       fprintf(stderr, "warning: collecting profiling info took %lli%% of the last step.\n", ns_taken * 100LL / sample_stepsize);
@@ -700,7 +703,8 @@ static void vm_step(VMState *state) {
   }
   state->shared->cyclecount += i * 9;
   state->stack_ptr[state->stack_len - 1].instr_ptr = fast_state.instr;
-  vm_record_profile(state);
+  vm_maybe_record_profile(state);
+  // (void) vm_maybe_record_profile;
   fast_state.cf->instr_ptr = fast_state.instr;
 }
 
@@ -757,9 +761,11 @@ void vm_run(VMState *state) {
       break;
     }
     if (state->shared->gcstate.num_obj_allocated > state->shared->gcstate.next_gc_run) {
+      // fprintf(stderr, "allocated %i, next_gc_run %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
       gc_run(state);
       // run gc after 50% growth or 10000 allocated or thereabouts
-      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + 10000;
+      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + (10000000/64); // don't even get out of bed for less than 10MB
+      // fprintf(stderr, "left over %i, set next to %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
     }
   }
   gc_remove_roots(state, &result_set);

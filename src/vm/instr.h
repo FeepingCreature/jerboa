@@ -218,11 +218,13 @@ typedef struct {
 typedef struct {
   Instr base;
   int source_refslot, target_slot;
+  char *opt_info;
 } ReadRefslotInstr;
 
 typedef struct {
   Instr base;
   int source_slot, target_refslot;
+  char *opt_info;
 } WriteRefslotInstr;
 
 #endif

@@ -139,16 +139,16 @@ void dump_instr(Instr **instr_p) {
     case INSTR_READ_REFSLOT:
     {
       ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
-      fprintf(stderr, "    %%%i = &%i \t\t (opt: refslot)\n",
-              rri->target_slot, rri->source_refslot);
+      fprintf(stderr, "    %%%i = &%i \t\t (opt: %s)\n",
+              rri->target_slot, rri->source_refslot, rri->opt_info);
       *instr_p = (Instr*) (rri + 1);
       break;
     }
     case INSTR_WRITE_REFSLOT:
     {
       WriteRefslotInstr *wri = (WriteRefslotInstr*) instr;
-      fprintf(stderr, "    &%i = %%%i \t\t (opt: refslot)\n",
-              wri->target_refslot, wri->source_slot);
+      fprintf(stderr, "    &%i = %%%i \t\t (opt: %s)\n",
+              wri->target_refslot, wri->source_slot, wri->opt_info);
       *instr_p = (Instr*) (wri + 1);
       break;
     }

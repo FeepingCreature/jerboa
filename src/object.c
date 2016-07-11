@@ -167,6 +167,7 @@ bool object_set_shadowing(Object *obj, const char *key, Object *value) {
 void object_set(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   void **freeptr;
+  // TODO check flags beforehand to avoid clobbering tables that are frozen
   Object **ptr = (Object **) table_lookup_ref_alloc(&obj->tbl, key, strlen(key), &freeptr);
   if (ptr) {
     assert(!(obj->flags & OBJ_FROZEN));
@@ -177,6 +178,7 @@ void object_set(Object *obj, const char *key, Object *value) {
   *ptr = value;
 }
 
+void vm_record_profile(VMState *state);
 void *alloc_object_internal(VMState *state, int size) {
   Object *res = cache_alloc(size);
   res->prev = state->shared->gcstate.last_obj_allocated;
@@ -187,6 +189,8 @@ void *alloc_object_internal(VMState *state, int size) {
 #if DEBUG_MEM
   fprintf(stderr, "alloc object %p\n", (void*) obj);
 #endif
+  
+  // if(state->runstate == VM_RUNNING) vm_record_profile(state);
   
   return res;
 }
@@ -240,7 +244,7 @@ Object *alloc_string(VMState *state, const char *ptr, int len) {
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
   obj->base.parent = state->shared->vcache.string_base;
-  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
+  // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = ((char*) obj) + sizeof(StringObject);
   strncpy(obj->value, ptr, len);
   obj->value[len] = 0;
@@ -251,7 +255,7 @@ Object *alloc_string_foreign(VMState *state, char *value) {
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
   obj->base.parent = state->shared->vcache.string_base;
-  // obj->base.flags |= OBJ_IMMUTABLE | OBJ_CLOSED;
+  // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
   return (Object*) obj;
 }

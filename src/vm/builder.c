@@ -286,22 +286,24 @@ int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key) {
   return instr->target_refslot;
 }
 
-void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot) {
+void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot, char *opt_info) {
   ReadRefslotInstr *instr = malloc(sizeof(ReadRefslotInstr));
   instr->base.type = INSTR_READ_REFSLOT;
   instr->base.belongs_to = NULL;
   instr->source_refslot = source_refslot;
   instr->target_slot = target_slot;
+  instr->opt_info = opt_info;
   
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
-void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot) {
+void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot, char *opt_info) {
   WriteRefslotInstr *instr = malloc(sizeof(WriteRefslotInstr));
   instr->base.type = INSTR_WRITE_REFSLOT;
   instr->base.belongs_to = NULL;
   instr->source_slot = source_slot;
   instr->target_refslot = target_refslot;
+  instr->opt_info = opt_info;
   
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
