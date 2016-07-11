@@ -1,0 +1,247 @@
+#!build/jerboa
+
+if (arguments.length < 2) {
+  print("Expected: swig_xml_to_c.jb [swig xml file] [library file] [prefix]*, not ", arguments);
+  assert(false, "bad arguments");
+}
+
+var xmlfile = arguments[0], libfile = arguments[1];
+var prefixes = [];
+for (var i = 2; i < arguments.length; i++) prefixes.push(arguments[i]);
+
+function startswithnum(str) {
+  // TODO
+  // pls, add slice and find soon
+  if (str.startsWith("0")) return true;
+  if (str.startsWith("1")) return true;
+  if (str.startsWith("2")) return true;
+  if (str.startsWith("3")) return true;
+  if (str.startsWith("4")) return true;
+  if (str.startsWith("5")) return true;
+  if (str.startsWith("6")) return true;
+  if (str.startsWith("7")) return true;
+  if (str.startsWith("8")) return true;
+  if (str.startsWith("9")) return true;
+  return false;
+}
+
+function short_name(str) {
+  for (var i = 0; i < prefixes.length; i++) {
+    var rest = str.startsWith(prefixes[i]);
+    // don't accidentally turn it into a bad identifier
+    if (rest) if (startswithnum(rest)) {} else { str = rest; }
+  }
+  return str;
+}
+
+const xmltools = require("xmltools.jb");
+const getAttr = xmltools.getAttr;
+
+var xmldata = xml.load(xmlfile);
+
+print("select decls");
+var decls = xmldata.findByName("cdecl");
+print("done. ", decls.length);
+
+var global_typemap = {};
+
+print("filter typedefs");
+var typedefs = decls.filter(function(node) {
+  return getAttr(node, "kind") == "typedef";
+});
+print("done. ", typedefs.length);
+print("process typedefs");
+for (var i = 0; i < typedefs.length; i++) {
+  var typedef = typedefs[i];
+  var name = getAttr(typedef, "name");
+  var prefix = getAttr(typedef, "decl");
+  // print(name, " = ", prefix + getAttr(typedef, "type"));
+  global_typemap[name] = prefix + getAttr(typedef, "type");
+}
+print("done.");
+
+function xml_type_to_ffi_str(type) {
+  // print("  debug: ", type);
+  if (type == "p.char") return "ffi.char_pointer";
+  if (type == "p.q(const).char") return "ffi.char_pointer";
+  if (type.startsWith("a(")) return "null";
+  if (type.startsWith("q(const).")) type = type.startsWith("q(const).");
+  if (type.startsWith("p.")) return "ffi.pointer";
+  if (type.startsWith("v(")) return "null";
+  if (type.startsWith("enum ")) return "ffi.sint";
+  if (type.startsWith("struct ")) return "null";
+  if (type == "char") return "null";
+  if (type == "iconv_t") return "null";
+  if (type == "int") return "ffi.sint";
+  if (type == "size_t") return "ffi.pointer";
+  if (type == "void") return "ffi.void";
+  if (type == "float") return "ffi.float";
+  if (type == "short") return "null";
+  if (type == "double") return "ffi.double";
+  if (type == "signed char") return "null";
+  if (type == "unsigned int") return "ffi.uint";
+  if (type == "unsigned char") return "null";
+  if (type == "unsigned short") return "null";
+  if (type == "long") return "ffi.long";
+  if (type == "unsigned long") return "ffi.ulong";
+  if (type == "uint8_t") return "ffi.uint8";
+  if (type == "uint16_t") return "ffi.uint16";
+  if (type == "uint32_t") return "ffi.uint32";
+  if (type == "uint64_t") return "ffi.uint64";
+  if (type == "int8_t") return "ffi.int8";
+  if (type == "int16_t") return "ffi.int16";
+  if (type == "int32_t") return "ffi.int32";
+  if (type == "int64_t") return "ffi.int64";
+  // print(type, " in ", global_typemap, " -- ", type in global_typemap);
+  if (type in global_typemap) {
+    return xml_type_to_ffi_str(global_typemap[type]);
+  }
+  return "null";
+}
+
+var top = xmldata.findByName("top")[0];
+var inputfile = getAttr(top, "inputfile");
+
+var cfile = file.open("swig_c_gen.c", "w");
+cfile.print("#include <stdio.h>");
+cfile.print("#include <", inputfile, ">");
+cfile.print("int main() {");
+cfile.print("  printf(\"var library = ffi.open(\\\"", libfile, "\\\");\\n\");");
+
+print("filter constants");
+var constants = xmldata.findByName("constant");
+print("done.");
+print("parse ", constants.length, " constants");
+for (var i = 0; i < constants.length; i++) {
+  var constant = constants[i];
+  var name = getAttr(constant, "name");
+  var value = getAttr(constant, "value");
+  value = int.parse(value);
+  cfile.print("  printf(\"const ", short_name(name), " = ", value, ";\\n\");");
+}
+print("done.");
+
+print("filter enum items");
+var enumitems = xmldata.findByName("enumitem");
+print("done.");
+print("parse ", enumitems.length, " flags");
+for (var i = 0; i < enumitems.length; i++) {
+  var enumitem = enumitems[i];
+  var name = getAttr(enumitem, "name");
+  var value = getAttr(enumitem, "value");
+  value = int.parse(value);
+  cfile.print("  printf(\"const ", short_name(name), " = %i;\\n\", ", name, ");");
+}
+
+/*
+const SDL_Overlay = {
+  pointer: null,
+  "[]": function(key) {
+    if (key == "w") return this.pointer.dereference(ffi.sint, 0);
+    if (key == "h") return this.pointer.dereference(ffi.sint, 4);
+    if (key == "planes") return this.pointer.dereference(ffi.sint, 8);
+    abort;
+  }
+};
+*/
+
+var structs = xmldata.findByName("class");
+print("process structs");
+for (var i = 0; i < structs.length; i++) {
+  var struct = structs[i];
+  var kind = getAttr(struct, "kind");
+  if (kind == "struct") {
+    var nested = getAttr(struct, "nested");
+    var skip = false;
+    if (nested) if (nested == "1") skip = true;
+    if (skip) { }
+    else {
+      var structname = getAttr(struct, "name");
+      var members = struct.findByName("cdecl");
+      cfile.print("  printf(\"const ", structname, " = {\\n\");");
+      cfile.print("  printf(\"  pointer: null,\\n\");");
+      cfile.print("  printf(\"  \\\"[]\\\": function(key) {\\n\");");
+      cfile.print("  {");
+      cfile.print("    ", structname, " ", "var;");
+      for (var k = 0; k < members.length; k++) {
+        var member = members[k];
+        var isgood = false;
+        if (getAttr(member, "ismember") == "1") isgood = true;
+        if (getAttr(member, "bitfield")) isgood = false;
+        if (getAttr(member, "kind") != "variable") isgood = false;
+        if (isgood) {
+          var name = getAttr(member, "name");
+          var decl = getAttr(member, "decl");
+          var type = getAttr(member, "type");
+          type = decl + type;
+          type = xml_type_to_ffi_str(type);
+          if (type != "null") {
+            // print(type, " ", structname, " . ", name, "?");
+            cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", type, ", %li);\\n\",");
+            cfile.print("           (char*)&var.", name, " - (char*)&var);");
+          }
+        }
+      }
+      cfile.print("  }");
+      cfile.print("  printf(\"  }\\n\");");
+      cfile.print("  printf(\"};\\n\");");
+    }
+  }
+}
+
+print("done.");
+
+print("select fn decls");
+var fndecls = decls.filter(function(node) {
+  return getAttr(node, "kind") == "function";
+});
+print("done.");
+
+print("parse ", fndecls.length, " fn decls");
+for (var i = 0; i < fndecls.length; i++) {
+  var decl = fndecls[i];
+  // print("? ", getAttr(decl, "name"));
+  var ret_type;
+  // print(getAttr(decl, "decl"), ", ", getAttr(decl, "type"), " # ", getAttr(decl, "decl").endsWith(".p."));
+  if (getAttr(decl, "decl").endsWith(".p.")) ret_type = "ffi.pointer"; // why, ffi
+  else ret_type = xml_type_to_ffi_str(getAttr(decl, "type"));
+  if (ret_type != "null") {
+    var parms = decl.findByName("parm");
+    var par_types = [];
+    var good = true;
+    for (var k = 0; k < parms.length; k++) {
+      var parm = parms[k];
+      var typestr = getAttr(parm, "type");
+      var skip = 0;
+      if (parms.length == 1) { if (typestr == "void") { skip = 1; } }
+      if (skip == 0) {
+        var type = xml_type_to_ffi_str(typestr);
+        if (type == "null") {
+          good = false;
+          print("arg skip ", getAttr(decl, "name"), " due to ", typestr);
+        }
+        par_types.push(type);
+      }
+    }
+    if (good) {
+      var par_types_str = "[" + par_types.join(", ") + "]";
+      var name = getAttr(decl, "name");
+      var shortn = short_name(name);
+      cfile.print("  printf(\"var ", shortn, " = function(...) {\\n\");");
+      cfile.print("  printf(\"  var sym = library.sym(\\\"", name, "\\\", ", ret_type, ", ", par_types_str, ");\\n\");");
+      cfile.print("  printf(\"  if (sym) {\\n\");");
+      cfile.print("  printf(\"    ", shortn, " = sym;\\n\");");
+      cfile.print("  printf(\"    _mark_const(\\\"", shortn, "\\\");\\n\");");
+      cfile.print("  printf(\"    return ", shortn, ".apply(arguments);\\n\");");
+      cfile.print("  printf(\"  } else abort;\\n\");");
+      cfile.print("  printf(\"};\\n\");");
+    } else print("bad skip ", getAttr(decl, "name"));
+  } else print("ret skip ", getAttr(decl, "name"));
+}
+print("done.");
+
+cfile.print("  return 0;");
+cfile.print("}");
+cfile.close();
+
+print("Now, please do gcc swigify.c -o swigify && ./swigify > [libfile].jb");
