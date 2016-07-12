@@ -54,9 +54,9 @@ print("process typedefs");
 for (var i = 0; i < typedefs.length; i++) {
   var typedef = typedefs[i];
   var name = getAttr(typedef, "name");
-  var prefix = getAttr(typedef, "decl");
-  // print(name, " = ", prefix + getAttr(typedef, "type"));
-  global_typemap[name] = prefix + getAttr(typedef, "type");
+  var decl = getAttr(typedef, "decl");
+  var type = getAttr(typedef, "type");
+  global_typemap[name] = decl + type;
 }
 print("done.");
 
@@ -66,24 +66,29 @@ function xml_type_to_ffi_str(type) {
   if (type == "p.q(const).char") return "ffi.char_pointer";
   if (type.startsWith("a(")) return "null";
   if (type.startsWith("q(const).")) type = type.startsWith("q(const).");
-  if (type.startsWith("p.")) return "ffi.pointer";
+  var p_rest = type.startsWith("p.");
+  if (p_rest) {
+    var rest_resolve = xml_type_to_ffi_str(p_rest);
+    // print("::", rest_resolve, " from ", type, ", ", p_rest);
+    if (rest_resolve == "ffi.int8") return "ffi.char_pointer";
+    return "ffi.pointer";
+  }
   if (type.startsWith("v(")) return "null";
-  if (type.startsWith("enum ")) return "ffi.sint";
+  if (type.startsWith("enum ")) return "ffi.int";
   if (type.startsWith("struct ")) return "null";
-  if (type == "char") return "null";
-  if (type == "iconv_t") return "null";
-  if (type == "int") return "ffi.sint";
-  if (type == "size_t") return "ffi.pointer";
   if (type == "void") return "ffi.void";
-  if (type == "float") return "ffi.float";
-  if (type == "short") return "null";
-  if (type == "double") return "ffi.double";
-  if (type == "signed char") return "null";
-  if (type == "unsigned int") return "ffi.uint";
-  if (type == "unsigned char") return "null";
-  if (type == "unsigned short") return "null";
+  if (type == "char") return "ffi.int8";
+  if (type == "signed char") return "ffi.int8";
+  if (type == "short") return "ffi.short";
+  if (type == "int") return "ffi.int";
   if (type == "long") return "ffi.long";
+  // if (type == "size_t") return "ffi.pointer"; // what
+  if (type == "unsigned char") return "null";
+  if (type == "unsigned short") return "ffi.ushort";
+  if (type == "unsigned int") return "ffi.uint";
   if (type == "unsigned long") return "ffi.ulong";
+  if (type == "float") return "ffi.float";
+  if (type == "double") return "ffi.double";
   if (type == "uint8_t") return "ffi.uint8";
   if (type == "uint16_t") return "ffi.uint16";
   if (type == "uint32_t") return "ffi.uint32";
@@ -137,14 +142,15 @@ for (var i = 0; i < enumitems.length; i++) {
 const SDL_Overlay = {
   pointer: null,
   "[]": function(key) {
-    if (key == "w") return this.pointer.dereference(ffi.sint, 0);
-    if (key == "h") return this.pointer.dereference(ffi.sint, 4);
-    if (key == "planes") return this.pointer.dereference(ffi.sint, 8);
+    if (key == "w") return this.pointer.dereference(ffi.int, 0);
+    if (key == "h") return this.pointer.dereference(ffi.int, 4);
+    if (key == "planes") return this.pointer.dereference(ffi.int, 8);
     abort;
   }
 };
 */
 
+// TODO typedefs of structs
 var structs = xmldata.findByName("class");
 print("process structs");
 for (var i = 0; i < structs.length; i++) {
@@ -152,35 +158,38 @@ for (var i = 0; i < structs.length; i++) {
   var kind = getAttr(struct, "kind");
   if (kind == "struct") {
     var nested = getAttr(struct, "nested");
+    var structname = getAttr(struct, "name");
     var skip = false;
     if (nested) if (nested == "1") skip = true;
-    if (skip) { }
+    if (getAttr(struct, "code")) skip = true;
+    if (skip) { print("skip ", structname); }
     else {
-      var structname = getAttr(struct, "name");
+      print("process ", structname);
       var members = struct.findByName("cdecl");
-      cfile.print("  printf(\"const ", structname, " = {\\n\");");
-      cfile.print("  printf(\"  pointer: null,\\n\");");
-      cfile.print("  printf(\"  \\\"[]\\\": function(key) {\\n\");");
       cfile.print("  {");
-      cfile.print("    ", structname, " ", "var;");
+      cfile.print("    struct ", structname, " ", "var;");
+      cfile.print("    printf(\"const ", short_name(structname), " = {\\n\");");
+      cfile.print("    printf(\"  pointer: null,\\n\");");
+      cfile.print("    printf(\"  sizeof: %lu,\\n\", sizeof(var));");
+      cfile.print("    printf(\"  \\\"[]\\\": method(key) {\\n\");");
       for (var k = 0; k < members.length; k++) {
         var member = members[k];
         var isgood = false;
         if (getAttr(member, "ismember") == "1") isgood = true;
         if (getAttr(member, "bitfield")) isgood = false;
         if (getAttr(member, "kind") != "variable") isgood = false;
+        var name = getAttr(member, "name");
         if (isgood) {
-          var name = getAttr(member, "name");
           var decl = getAttr(member, "decl");
           var type = getAttr(member, "type");
-          type = decl + type;
-          type = xml_type_to_ffi_str(type);
-          if (type != "null") {
-            // print(type, " ", structname, " . ", name, "?");
-            cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", type, ", %li);\\n\",");
+          var combined_type = decl + type;
+          var ffi_type = xml_type_to_ffi_str(combined_type);
+          if (ffi_type != "null") {
+            // print(ffi_type, " ", structname, " . ", name, "?");
+            cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", ffi_type, ", %li);\\n\",");
             cfile.print("           (char*)&var.", name, " - (char*)&var);");
-          }
-        }
+          } else print("skip ", name, " (unknown type ", combined_type, ")");
+        } else print("skip ", name);
       }
       cfile.print("  }");
       cfile.print("  printf(\"  }\\n\");");

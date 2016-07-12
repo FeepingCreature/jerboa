@@ -1,0 +1,17 @@
+#!build/jerboa
+const sdl = require("sdl.jb");
+var libc_so = ffi.open("libc.so.6");
+const malloc = libc_so.sym("malloc", ffi.pointer, [ffi.int]);
+
+var running = true;
+var event = malloc(64);
+sdl.SDL_Init(sdl.SDL_INIT_EVERYTHING);
+sdl.SDL_WM_SetCaption("Hello World! :D", null);
+sdl.SDL_SetVideoMode(800, 600, 32, sdl.SDL_HWSURFACE);
+while (running) {
+  sdl.SDL_WaitEvent(event);
+  if (event.dereference(ffi.uint8, 0) == sdl.SDL_QUIT) {
+    running = false;
+  }
+}
+sdl.SDL_Quit();

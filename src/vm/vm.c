@@ -345,7 +345,12 @@ static FnWrap vm_instr_access(FastVMState *state) {
       if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
       
       vm_run(&substate);
-      VM_ASSERT2(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
+      
+      if (substate.runstate == VM_ERRORED) {
+        vm_error(state->reststate, "[] overload failed: %s\n", substate.error);
+        state->reststate->backtrace = vm_record_backtrace(&substate, &state->reststate->backtrace_depth);
+        return (FnWrap) { vm_halt };
+      }
       
       state->cf->slots_ptr[target_slot] = substate.result_value;
       
@@ -379,7 +384,12 @@ static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
     if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
     
     vm_run(&substate);
-    VM_ASSERT2(substate.runstate != VM_ERRORED, "[] overload failed: %s\n", substate.error);
+    
+    if (substate.runstate == VM_ERRORED) {
+      vm_error(state->reststate, "[] overload failed: %s\n", substate.error);
+      state->reststate->backtrace = vm_record_backtrace(&substate, &state->reststate->backtrace_depth);
+      return (FnWrap) { vm_halt };
+    }
     
     state->cf->slots_ptr[aski->target_slot] = substate.result_value;
     

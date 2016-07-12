@@ -8,8 +8,10 @@
 typedef struct {
   Object base;
   Object *void_obj,
-    *sint_obj, *uint_obj,
+    *short_obj, *ushort_obj,
+    *int_obj, *uint_obj,
     *long_obj, *ulong_obj,
+    *char_obj,
     *float_obj, *double_obj,
     *int8_obj, *int16_obj, *int32_obj, *int64_obj,
     *uint8_obj, *uint16_obj, *uint32_obj, *uint64_obj,

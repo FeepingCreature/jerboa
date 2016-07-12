@@ -541,10 +541,10 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   */
   uf = inline_static_lookups_to_constants(state, uf, context);
   
-  // if (uf->name) {
+  /*if (uf->name) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);
     dump_fn(uf);
-  // }
+  }*/
   
   return uf;
 }

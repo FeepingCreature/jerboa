@@ -834,6 +834,10 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   
   FileRange *alloc_var_name = alloc_and_record_start(text);
   char *varname = parse_identifier(&text);
+  if (!varname) {
+    log_parser_error(text, "invalid identifier for variable");
+    return PARSE_ERROR;
+  }
   record_end(text, alloc_var_name);
   
   use_range_start(builder, alloc_var_name);

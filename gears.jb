@@ -1,5 +1,5 @@
-const glfw = require("glfw3.jb");
-const gl = require("gl.jb");
+const glfw = require("c/glfw3.jb");
+const gl = require("c/gl.jb");
 
 var libm_so = ffi.open("libm.so.6");
 const sin = libm_so.sym("sin", ffi.double, [ffi.double]);

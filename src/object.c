@@ -113,6 +113,10 @@ void obj_free(Object *obj) {
 }
 
 Object *obj_instance_of(Object *obj, Object *proto) {
+  if (proto == NULL) {
+    fprintf(stderr, "vacuous case\n");
+    abort();
+  }
   while (obj) {
     if (obj->parent == proto) return obj;
     obj = obj->parent;
