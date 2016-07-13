@@ -35,9 +35,10 @@ LIB_FILE=$1; shift
 JB_FILE=$1; shift
 echo "-- Running SWIG -> XML"
 swig -xml -o swig.xml -module swig -includeall -ignoremissing $@ "$HEADER_FILE"
+echo "-- Reencoding as UTF-8"
+iconv -f ISO-8859-15 -t UTF-8 swig.xml > swig.2.xml
 echo "-- Running XML -> C"
-echo ./swig_xml_to_c.jb swig.xml "$LIB_FILE" ${prefixes[@]}
-./swig_xml_to_c.jb swig.xml "$LIB_FILE" ${prefixes[@]}
+./swig_xml_to_c.jb swig.2.xml "$LIB_FILE" ${prefixes[@]}
 echo "-- Building C"
 gcc swig_c_gen.c -o swig_c_gen $@
 echo "-- Running C -> Jb"

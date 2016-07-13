@@ -56,7 +56,7 @@ Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
 }
 
 void vm_error(VMState *state, char *fmt, ...) {
-  assert(state->runstate == VM_RUNNING);
+  assert(state->runstate != VM_ERRORED);
   char *errorstr;
   va_list ap;
   va_start(ap, fmt);
@@ -97,7 +97,7 @@ char *vm_record_backtrace(VMState *state, int *depth) {
     res_len = strlen(state->backtrace);
     res_ptr = malloc(res_len + 1);
     strncpy(res_ptr, state->backtrace, res_len + 1);
-  }
+  } else res_ptr = malloc(1);
   for (int i = state->stack_len - 1; i >= 0; --i, ++k) {
     Callframe *curf = &state->stack_ptr[i];
     Instr *instr = curf->instr_ptr;
@@ -442,9 +442,21 @@ static FnWrap vm_instr_assign(FastVMState *state) {
     Object *index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (index_assign_op) {
       Object *key_value_pair[] = {state->cf->slots_ptr[assign_instr->key_slot], value_obj};
-      if (!setup_call(state->reststate, obj, index_assign_op, key_value_pair, 2)) return (FnWrap) { vm_halt };
-      // TODO run vm here - bad bug right now!
-      abort();
+      VMState substate = {0};
+      
+      substate.parent = state->reststate;
+      substate.root = state->root;
+      substate.shared = state->reststate->shared;
+      
+      if (!setup_call(&substate, obj, index_assign_op, key_value_pair, 2)) return (FnWrap) { vm_halt };
+      vm_run(&substate);
+      
+      if (substate.runstate == VM_ERRORED) {
+        vm_error(state->reststate, "[]= overload failed: %s\n", substate.error);
+        state->reststate->backtrace = vm_record_backtrace(&substate, &state->reststate->backtrace_depth);
+        return (FnWrap) { vm_halt };
+      }
+      
       state->instr = (Instr*)(assign_instr + 1);
       return (FnWrap) { instr_fns[state->instr->type] };
     }

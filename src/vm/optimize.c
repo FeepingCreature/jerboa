@@ -18,7 +18,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
 #define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
         case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
       switch (instr->type) {
-        case INSTR_INVALID: { assert(false); int _stepsize = -1;
+        case INSTR_INVALID: { abort(); int _stepsize = -1;
           CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
           CASE(INSTR_GET_CONTEXT, GetContextInstr, get_context_instr)
           CASE(INSTR_SET_CONTEXT, SetContextInstr, set_context_instr)
@@ -222,6 +222,8 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
     Instr *instr = block->instrs_ptr;
     while (instr != block->instrs_ptr_end) {
       // O(n²) but nbd
+      // TODO bdaa
+      // TODO store block/instr index with after_object_decl, invert into array of arrays for instrs
       for (int k = 0; k < info_slots_len; ++k) {
         int slot = info_slots_ptr[k];
         if (instr == info[slot].after_object_decl) {
@@ -523,7 +525,6 @@ UserFunction *optimize(UserFunction *uf) {
   uf = inline_primitive_accesses(uf, primitive_slots);
   
   uf = redirect_predictable_lookup_misses(uf);
-  uf = access_vars_via_refslots(uf);
   
   /*if (uf->name) {
     fprintf(stderr, "static optimized %s to\n", uf->name);
@@ -539,6 +540,9 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   if (uf->name && strcmp(uf->name, "gear") == 0) print_recursive(state, context, false);
   printf("\n-----\n");
   */
+  
+  // moved here because it can be kind of expensive due to lazy coding, and I'm too lazy to fix it
+  uf = access_vars_via_refslots(uf);
   uf = inline_static_lookups_to_constants(state, uf, context);
   
   /*if (uf->name) {

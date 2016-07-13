@@ -1,6 +1,6 @@
 var libc_so = ffi.open("libc.so.6");
-const puts = libc_so.sym("puts", ffi.sint, [ffi.char_pointer]);
-const malloc = libc_so.sym("malloc", ffi.pointer, [ffi.sint]);
+const puts = libc_so.sym("puts", ffi.int, [ffi.char_pointer]);
+const malloc = libc_so.sym("malloc", ffi.pointer, [ffi.int]);
 puts("Hello World from libffi!");
 
 var swig_tools = require("swig_tools.jb");

@@ -472,7 +472,7 @@ static bool assign_value(FunctionBuilder *builder, RefValue rv, int value, FileR
     case REFMODE_VARIABLE: ref_assign_existing(builder, rv, value); break;
     case REFMODE_OBJECT: ref_assign_shadowing(builder, rv, value); break;
     case REFMODE_INDEX: ref_assign(builder, rv, value); break;
-    default: assert(false);
+    default: abort();
   }
   use_range_end(builder, assign_range);
   return true;
@@ -900,7 +900,7 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
   res = parse_expr_base(&text, builder, &rv);
   assert(res == PARSE_OK);
   FileRange *assign_range = alloc_and_record_start(text);
-  if (!eat_string(&text, assign_text)) assert(false); // Internal inconsistency
+  if (!eat_string(&text, assign_text)) abort(); // Internal inconsistency
   record_end(text, assign_range);
   
   RefValue value_expr;

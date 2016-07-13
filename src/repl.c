@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     printf("> ");
     if (getline(&line, &length, stdin) == -1) {
       fprintf(stderr, "error reading line: %s\n", strerror(errno));
-      assert(false);
+      abort();
     }
     UserFunction *line_fn;
     ParseResult res = parse_module(&line, &line_fn);

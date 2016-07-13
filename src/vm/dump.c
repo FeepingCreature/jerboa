@@ -154,7 +154,7 @@ void dump_instr(Instr **instr_p) {
     }
     default:
       fprintf(stderr, "    unknown instruction: %i\n", instr->type);
-      assert(false);
+      abort();
       break;
   }
 }
