@@ -414,7 +414,8 @@ static void array_mark_fn(VMState *state, Object *obj) {
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *pointer_base = state->shared->vcache.pointer_base;
-  PointerObject *ptr_obj = (PointerObject*) obj_instance_of(thisptr, pointer_base);
+  VM_ASSERT(thisptr->parent == pointer_base, "internal error");
+  PointerObject *ptr_obj = (PointerObject*) thisptr;
   state->result_value = alloc_bool(state, ptr_obj->ptr == NULL);
 }
 
@@ -533,8 +534,8 @@ static void file_print_fn(VMState *state, Object *thisptr, Object *fn, Object **
   VM_ASSERT(obj_instance_of(thisptr, file_base), "print() called on object that is not a file");
   Object *hdl_obj = OBJECT_LOOKUP_STRING(thisptr, "_handle", NULL);
   VM_ASSERT(hdl_obj, "missing _handle!");
-  PointerObject *hdl_ptrobj = (PointerObject*) obj_instance_of(hdl_obj, pointer_base);
-  VM_ASSERT(hdl_ptrobj, "_handle must be a pointer!");
+  VM_ASSERT(hdl_obj->parent == pointer_base, "_handle must be a pointer!");
+  PointerObject *hdl_ptrobj = (PointerObject*) hdl_obj;
   FILE *file = hdl_ptrobj->ptr;
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
@@ -577,8 +578,8 @@ static void file_close_fn(VMState *state, Object *thisptr, Object *fn, Object **
   VM_ASSERT(obj_instance_of(thisptr, file_base), "close() called on object that is not a file!");
   Object *hdl_obj = OBJECT_LOOKUP_STRING(thisptr, "_handle", NULL);
   VM_ASSERT(hdl_obj, "missing _handle!");
-  PointerObject *hdl_ptrobj = (PointerObject*) obj_instance_of(hdl_obj, pointer_base);
-  VM_ASSERT(hdl_ptrobj, "_handle must be a pointer!");
+  VM_ASSERT(hdl_obj->parent == pointer_base, "_handle must be a pointer!");
+  PointerObject *hdl_ptrobj = (PointerObject*) hdl_obj;
   FILE *file = hdl_ptrobj->ptr;
   fclose(file);
   object_set(thisptr, "_handle", NULL);

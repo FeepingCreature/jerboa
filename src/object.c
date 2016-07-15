@@ -7,14 +7,10 @@
 #include "object.h"
 
 #define DEBUG_MEM 0
-/*
+
 void *freelist[128] = {0};
-*/
 
 void *cache_alloc(int size) {
-  return calloc(size, 1);
-  // just using jemalloc is faster than this
-  /*
   void *res = NULL;
   if (size >= sizeof(void*) && size < 128) {
     if (freelist[size]) {
@@ -26,18 +22,17 @@ void *cache_alloc(int size) {
     // printf("::alloc %i\n", size);
     return calloc(size, 1);
   }
-  memset(res, 0, size);
-  return res;*/
+  bzero(res, size);
+  return res;
 }
 
 void cache_free(int size, void *ptr) {
-  free(ptr); return;
-  /*if (size >= sizeof(void*) && size < 128) {
+  if (size >= sizeof(void*) && size < 128) {
     *(void**) ptr = freelist[size];
     freelist[size] = ptr;
     return;
   }
-  free(ptr);*/
+  free(ptr);
 }
 
 Object **object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
@@ -273,9 +268,11 @@ Object *alloc_array(VMState *state, Object **ptr, IntObject *length) {
   return (Object*) obj;
 }
 
-Object *alloc_ptr(VMState *state, void *ptr) { // TODO unify with alloc_fn
+Object *alloc_ptr(VMState *state, void *ptr) {
   PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject));
   obj->base.parent = state->shared->vcache.pointer_base;
+  // see alloc_int
+  obj->base.flags = OBJ_NOINHERIT;
   obj->ptr = ptr;
   return (Object*) obj;
 }

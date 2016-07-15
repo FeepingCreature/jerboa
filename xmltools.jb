@@ -1,0 +1,122 @@
+// swig -v -includeall -ignoremissing -module [name] -outcurrentdir -xml /usr/include/[header]
+function print_xml(node, depth) {
+  var spacing = "";
+  for (var i = 0; i < depth; i++) {
+    spacing = spacing + "  ";
+  }
+  if (node.nodeType == 1) {
+    var attrs = "";
+    var attr_names = keys(node.attr);
+    for (var i = 0; i < attr_names.length; i++) {
+      attrs = attrs + " " + attr_names[i]+"='"+node.attr[attr_names[i]]+"'";
+    }
+    print(spacing, "<", node.nodeName, attrs, ">");
+    for (var i = 0; i < node.children.length; i++) {
+      print_xml(node.children[i], depth + 1);
+    }
+    print(spacing, "</", node.nodeName, ">");
+  }
+}
+xml.node["toString"] = method() {
+  if (this.nodeType == 1) {
+    var res = "";
+    var attrs = "";
+    var attr_names = keys(this.attr);
+    for (var i = 0; i < attr_names.length; i++) {
+      attrs = attrs + " " + attr_names[i]+"='"+this.attr[attr_names[i]]+"'";
+    }
+    res = res + "<"+this.nodeName+attrs+">";
+    for (var i = 0; i < this.children.length; i++) {
+      var str = this.children[i].toString();
+      if (str) res = res + str;
+    }
+    res = res + "</" + this.nodeName + ">";
+    return res;
+  }
+  return null;
+};
+var XmlResults = {
+  array = [];
+  length = 0;
+  "[]" = method(i) { return this.array[i]; };
+  combine = method(res2) {
+    var array2 = [];
+    for (var i = 0; i < this.array.length; i++) {
+      array2.push(this.array[i]);
+    }
+    for (var i = 0; i < res2.array.length; i++) {
+      array2.push(res2.array[i]);
+    }
+    return new XmlResults {
+      array = array2;
+      length = array2.length;
+    };
+  };
+  filter = method(pred) {
+    var res = [];
+    for (var i = 0; i < this.array.length; i++) {
+      var entry = this.array[i];
+      if (pred(entry)) res.push(entry);
+    }
+    return new XmlResults {
+      array = res;
+      length = res.length;
+    };
+  };
+  children = method(pred) {
+    var res = [];
+    for (var i = 0; i < this.array.length; i++) {
+      var entry = this.array[i];
+      for (var k = 0; k < entry.children.length; k++) {
+        var child = entry.children[k];
+        if (pred(child)) res.push(child);
+      }
+    }
+    return new XmlResults {
+      array = res;
+      length = res.length;
+    };
+  };
+  find = method(pred) {
+    var res = new XmlResults;
+    for (var i = 0; i < this.array.length; i++) {
+      res = res.combine(this.array[i].find(pred));
+    }
+    return res;
+  };
+};
+xml.node["find"] = method(pred) {
+  var array = this.find_array(pred);
+  return new XmlResults {
+    array = array;
+    length = array.length;
+  };
+};
+xml.node["findByName"] = method(name) {
+  // var array = this.find_array(function(node) { return node.nodeName == name; });
+  var array = this.find_array_by_name(name);
+  return new XmlResults {
+    array = array;
+    length = array.length;
+  };
+};
+function getAttr(node, name) {
+  // <attributelist><attribute></attribute></attributelist>
+  var firstSubNode = null;
+  var i = 0;
+  var children = node.children;
+  while (children[i].nodeType != 1) {
+    i++;
+    if (i == children.length) { print("fail"); (1/0); }
+  }
+  var attrs = children[i].children;
+  for (var i = 0; i < attrs.length; i++) {
+    var attr = attrs[i];
+    if (attr.nodeName == "attribute") {
+      if (attr.attr["name"] == name) {
+        return attr.attr["value"];
+      }
+    }
+  }
+  return null;
+}

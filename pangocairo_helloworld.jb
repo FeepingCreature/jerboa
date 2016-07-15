@@ -1,0 +1,35 @@
+const libc_so = ffi.open("libc.so.6");
+const malloc = libc_so.sym("malloc", ffi.pointer, [ffi.int]);
+const cairo = require("c/cairo.jb");
+const pango = require("c/pangocairo.jb");
+
+var surface = cairo.image_surface_create(cairo.FORMAT_ARGB32, 240, 110);
+var cr = cairo.create(surface);
+
+var fontdes = pango.font_description_new();
+pango.font_description_set_family(fontdes, "serif");
+pango.font_description_set_weight(fontdes, pango.WEIGHT_BOLD);
+pango.font_description_set_absolute_size(fontdes, 32 * pango.SCALE);
+
+var layout = pango.cairo_create_layout(cr);
+
+pango.layout_set_font_description(layout, fontdes);
+pango.layout_set_text(layout, "Heflo, world", -1);
+var devcoords = new pango._PangoRectangle { pointer = malloc(pango._PangoRectangle.sizeof); };
+pango.layout_get_pixel_extents(layout, devcoords.pointer, null);
+print("  x ", devcoords.x, ", y ", devcoords.y);
+print("  width ", devcoords.width, ", height ", devcoords.height);
+cairo.set_source_rgb(cr, 0, 0, 1);
+cairo.move_to(cr, 10, 50 - devcoords.height);
+pango.cairo_show_layout(cr, layout);
+
+cairo.select_font_face(cr, "serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD);
+cairo.set_font_size(cr, 32);
+cairo.set_source_rgb(cr, 0, 0, 1);
+cairo.move_to(cr, 10, 80);
+cairo.show_text(cr, "Heflo, world");
+pango.g_object_unref(layout);
+pango.font_description_free(fontdes);
+cairo.destroy(cr);
+cairo.surface_write_to_png(surface, "pangocairo_helloworld.png");
+cairo.surface_destroy(surface);

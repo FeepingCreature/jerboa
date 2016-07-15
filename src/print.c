@@ -16,8 +16,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
   Object *pointer_base = state->shared->vcache.pointer_base;
   Object
     *sobj = obj_instance_of(obj, string_base),
-    *aobj = obj_instance_of(obj, array_base),
-    *pobj = obj_instance_of(obj, pointer_base);
+    *aobj = obj_instance_of(obj, array_base);
   if (obj->parent == int_base) {
     fprintf(fh, "%i", ((IntObject*)obj)->value);
     return;
@@ -35,8 +34,8 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
     fprintf(fh, "%s", ((StringObject*)sobj)->value);
     return;
   }
-  if (pobj) {
-    fprintf(fh, "(void*) %p", ((PointerObject*)pobj)->ptr);
+  if (obj->parent == pointer_base) {
+    fprintf(fh, "(void*) %p", ((PointerObject*)obj)->ptr);
     return;
   }
   if (aobj) {

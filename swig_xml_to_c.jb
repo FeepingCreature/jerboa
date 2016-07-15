@@ -126,6 +126,20 @@ for (var i = 0; i < constants.length; i++) {
 }
 print("done.");
 
+print("emit constants");
+{
+  var keys = object.keys(global_typemap);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    var type = global_typemap[key];
+    var resolved = xml_type_to_ffi_str(type);
+    if (resolved != "null") {
+      cfile.print("  printf(\"const ", key, " = ", resolved, ";\\n\");");
+    }
+  }
+}
+print("done.");
+
 print("filter enum items");
 var enumitems = xmldata.findByName("enumitem");
 print("done.");
