@@ -865,6 +865,23 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   VM_ASSERT(false, "cannot mark const: variable not found");
 }
 
+static void obj_keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *obj = args_ptr[0];
+  int keys_len = obj->tbl.entries_stored;
+  Object **keys_ptr = malloc(sizeof(Object*) * keys_len);
+  int k = 0;
+  for (int i = 0; i < obj->tbl.entries_num; i++) {
+    const char *name_ptr = obj->tbl.entries_ptr[i].name_ptr;
+    int name_len = obj->tbl.entries_ptr[i].name_len;
+    if (name_ptr) {
+      keys_ptr[k++] = alloc_string(state, name_ptr, name_len);
+    }
+  }
+  assert(k == keys_len);
+  state->result_value = alloc_array(state, keys_ptr, (IntObject*) alloc_int(state, keys_len));
+}
+
 static bool is_truthy(VMState *state, Object *obj) {
   Object *int_base = state->shared->vcache.int_base;
   Object *bool_base = state->shared->vcache.bool_base;
@@ -1023,6 +1040,12 @@ Object *create_root(VMState *state) {
   object_set(root, "freeze", alloc_fn(state, freeze_fn));
   object_set(root, "_mark_const", alloc_fn(state, mark_const_fn));
   object_set(root, "assert", alloc_fn(state, assert_fn));
+  
+  Object *obj_tools = alloc_object(state, NULL);
+  obj_tools->flags |= OBJ_NOINHERIT;
+  object_set(obj_tools, "keys", alloc_fn(state, obj_keys_fn));
+  
+  object_set(root, "object", obj_tools);
   
   ffi_setup_root(state, root);
   
