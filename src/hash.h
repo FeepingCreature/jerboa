@@ -25,19 +25,15 @@ typedef struct {
   size_t bloom;
 } HashTable;
 
-void **table_lookup_ref(HashTable *tbl, const char *key_ptr, int key_len) __attribute__ ((pure));
+TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, int key_len) __attribute__ ((pure));
 
-void **table_lookup_ref_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash) __attribute__ ((pure));
+TableEntry *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash) __attribute__ ((pure));
 
 // if the key was not found, return null but allocate a mapping in first_free_ptr
-void **table_lookup_ref_alloc(HashTable *tbl, const char *key_ptr, int key_len, void*** first_free_ptr);
+TableEntry *table_lookup_alloc(HashTable *tbl, const char *key_ptr, int key_len, TableEntry** first_free_ptr);
 
 // added in case you've already precomputed the hash for other reasons, and wanna avoid double computing it
-void **table_lookup_ref_alloc_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash, void*** first_free_ptr);
-
-void *table_lookup(HashTable *tbl, const char *key_ptr, int key_len, bool *key_found_p);
-
-void *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv, bool *key_found_p);
+TableEntry *table_lookup_alloc_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash, TableEntry** first_free_ptr);
 
 // thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
 static inline size_t hash(const char *ptr, int len) {

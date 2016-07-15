@@ -137,19 +137,19 @@ void vm_record_profile(VMState *state) {
       size_t key_hash = hash(key_ptr, key_len);
       
       if (k == 0) {
-        void **freeptr;
-        void **entry_p = table_lookup_ref_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
-        if (entry_p) (*(int*) entry_p) ++;
-        else (*(int*) freeptr) = 1;
+        TableEntry *freeptr;
+        TableEntry *entry_p = table_lookup_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
+        if (entry_p) (*(int*) &entry_p->value) ++;
+        else (*(int*) &freeptr->value) = 1;
       } else {
         // don't double-count ranges in case of recursion
         bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
         
         if (!range_already_counted) {
-          void **freeptr;
-          void **entry_p = table_lookup_ref_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
-          if (entry_p) (*(int*) entry_p) ++;
-          else (*(int*) freeptr) = 1;
+          TableEntry *freeptr;
+          TableEntry *entry_p = table_lookup_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
+          if (entry_p) (*(int*) &entry_p->value) ++;
+          else (*(int*) &freeptr->value) = 1;
         }
       }
       instr->belongs_to->last_cycle_seen = cyclecount;

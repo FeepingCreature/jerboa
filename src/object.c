@@ -37,7 +37,7 @@ void cache_free(int size, void *ptr) {
 
 Object **object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
   while (obj) {
-    Object **value_p = (Object**) table_lookup_ref_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv);
+    Object **value_p = (Object**) &table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv)->value;
     if (value_p) return value_p;
     obj = obj->parent;
   }
@@ -53,17 +53,15 @@ Object **object_lookup_ref(Object *obj, const char *key_ptr) {
 Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
   if (!key_found_p) {
     while (obj) {
-      bool key_found;
-      Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv, &key_found);
-      if (key_found) return value;
+      TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv);
+      if (entry) return entry->value;
       obj = obj->parent;
     }
     return NULL;
   }
   while (obj) {
-    bool key_found;
-    Object *value = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv, &key_found);
-    if (key_found) { *key_found_p = true; return value; }
+    TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, strlen(key_ptr), hashv);
+    if (entry) { *key_found_p = true; return entry->value; }
     obj = obj->parent;
   }
   *key_found_p = false;
@@ -130,14 +128,14 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    Object **ptr = (Object**) table_lookup_ref(&current->tbl, key, strlen(key));
-    if (ptr != NULL) {
+    TableEntry *entry = table_lookup(&current->tbl, key, strlen(key));
+    if (entry != NULL) {
       if (current->flags & OBJ_FROZEN) {
         char *error = NULL;
         if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was frozen.", key, (void*) current)) abort();
         return error;
       }
-      *ptr = value;
+      entry->value = value;
       return NULL;
     }
     current = current->parent;
@@ -152,8 +150,8 @@ bool object_set_shadowing(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    Object **ptr = (Object**) table_lookup_ref(&current->tbl, key, strlen(key));
-    if (ptr) {
+    TableEntry *entry = table_lookup(&current->tbl, key, strlen(key));
+    if (entry) {
       // so create it in obj (not current!)
       object_set(obj, key, value);
       return true;
@@ -165,16 +163,16 @@ bool object_set_shadowing(Object *obj, const char *key, Object *value) {
 
 void object_set(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
-  void **freeptr;
+  TableEntry *freeptr;
   // TODO check flags beforehand to avoid clobbering tables that are frozen
-  Object **ptr = (Object **) table_lookup_ref_alloc(&obj->tbl, key, strlen(key), &freeptr);
-  if (ptr) {
+  TableEntry *entry = table_lookup_alloc(&obj->tbl, key, strlen(key), &freeptr);
+  if (entry) {
     assert(!(obj->flags & OBJ_FROZEN));
+    entry->value = (void*) value;
   } else {
     assert(!(obj->flags & OBJ_CLOSED));
-    ptr = (Object **) freeptr;
+    freeptr->value = (void*) value;
   }
-  *ptr = value;
 }
 
 void vm_record_profile(VMState *state);

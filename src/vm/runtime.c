@@ -853,9 +853,8 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   
   Object *cur = context;
   while (cur) {
-    bool key_found = false;
-    table_lookup_with_hash(&cur->tbl, key_ptr, key_len, key_hash, &key_found);
-    if (key_found) {
+    TableEntry *entry = table_lookup_with_hash(&cur->tbl, key_ptr, key_len, key_hash);
+    if (entry) {
       VM_ASSERT(cur->tbl.entries_stored == 1, "more than one var in this scope: something bad has happened??");
       cur->flags |= OBJ_FROZEN;
       return;
