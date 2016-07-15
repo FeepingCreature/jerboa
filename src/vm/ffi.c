@@ -108,6 +108,96 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   } else assert("TODO" && false);
 }
 
+bool ffi_pointer_write(VMState *state, Object *type, void *ptr, Object *value_obj) {
+  ValueCache *vcache = &state->shared->vcache;
+  Object *string_base = vcache->string_base;
+  FFIObject *ffi = (FFIObject*) vcache->ffi_obj;
+  if (type == ffi->float_obj) {
+    if (value_obj->parent == vcache->float_base) {
+      *(float*) ptr = ((FloatObject*) value_obj)->value;
+    } else if (value_obj->parent == vcache->int_base) {
+      *(float*) ptr = ((IntObject*) value_obj)->value;
+    } else {
+      VM_ASSERT(false, "invalid value for float type") false;
+    }
+    return true;
+  } else {
+    Object *c_type_obj = OBJECT_LOOKUP_STRING(type, "c_type", NULL);
+    StringObject *c_type = (StringObject*) obj_instance_of_or_equal(c_type_obj, string_base);
+    assert(c_type);
+    VM_ASSERT(false, "unhandled pointer write type: %s", c_type->value) false;
+  }
+}
+
+Object *ffi_pointer_read(VMState *state, Object *type, void *ptr) {
+  ValueCache *vcache = &state->shared->vcache;
+  Object *string_base = vcache->string_base;
+  FFIObject *ffi = (FFIObject*) vcache->ffi_obj;
+  if (type == ffi->float_obj) {
+    float f = *(float*) ptr;
+    return alloc_float(state, f);
+  } else if (type == ffi->uint_obj) {
+    unsigned int i = *(unsigned int*) ptr;
+    return alloc_int(state, i);
+  } else {
+    Object *c_type_obj = OBJECT_LOOKUP_STRING(type, "c_type", NULL);
+    StringObject *c_type = (StringObject*) obj_instance_of_or_equal(c_type_obj, string_base);
+    VM_ASSERT(c_type, "internal type error") NULL;
+    VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) NULL;
+  }
+}
+
+static void ffi_ptr_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *int_base = state->shared->vcache.int_base;
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  
+  VM_ASSERT(thisptr->parent == pointer_base, "invalid pointer index on non-pointer object");
+  PointerObject *thisptr_obj = (PointerObject*) thisptr;
+  
+  Object *ffi_type_obj = OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL);
+  VM_ASSERT(ffi_type_obj, "cannot index read on untyped pointer!");
+  
+  Object *offs_obj = args_ptr[0];
+  VM_ASSERT(offs_obj->parent == int_base, "offset must be integer");
+  int offs = ((IntObject*) offs_obj)->value;
+  
+  IntObject *sizeof_obj = (IntObject*) OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
+  VM_ASSERT(sizeof_obj && sizeof_obj->base.parent == int_base, "internal error: sizeof wrong type or undefined");
+  int elemsize = sizeof_obj->value;
+  
+  char *offset_ptr = (char*) thisptr_obj->ptr + elemsize * offs;
+  
+  state->result_value = ffi_pointer_read(state, ffi_type_obj, (void*) offset_ptr);
+}
+
+static void ffi_ptr_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+  Object *int_base = state->shared->vcache.int_base;
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  
+  VM_ASSERT(thisptr->parent == pointer_base, "invalid pointer index write on non-pointer object");
+  PointerObject *thisptr_obj = (PointerObject*) thisptr;
+  
+  Object *ffi_type_obj = OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL);
+  VM_ASSERT(ffi_type_obj, "cannot assign index on untyped pointer!");
+  
+  Object *offs_obj = args_ptr[0];
+  VM_ASSERT(offs_obj->parent == int_base, "offset must be integer");
+  int offs = ((IntObject*) offs_obj)->value;
+  
+  IntObject *sizeof_obj = (IntObject*) OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
+  VM_ASSERT(sizeof_obj && sizeof_obj->base.parent == int_base, "internal error: sizeof wrong type or undefined");
+  int elemsize = sizeof_obj->value;
+  
+  char *offset_ptr = (char*) thisptr_obj->ptr + elemsize * offs;
+  
+  bool res = ffi_pointer_write(state, ffi_type_obj, (void*) offset_ptr, args_ptr[1]);
+  if (!res) return;
+  
+  state->result_value = NULL;
+}
+
 static void ffi_ptr_add(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *int_base = state->shared->vcache.int_base;
@@ -128,6 +218,9 @@ static Object *make_ffi_pointer(VMState *state, void *ptr) {
   Object *ptr_obj = alloc_ptr(state, ptr);
   object_set(ptr_obj, "dereference", alloc_fn(state, ffi_ptr_dereference));
   object_set(ptr_obj, "+", alloc_fn(state, ffi_ptr_add));
+  object_set(ptr_obj, "target_type", NULL);
+  object_set(ptr_obj, "[]", alloc_fn(state, ffi_ptr_index_fn));
+  object_set(ptr_obj, "[]=", alloc_fn(state, ffi_ptr_index_assign_fn));
   return ptr_obj;
 }
 
