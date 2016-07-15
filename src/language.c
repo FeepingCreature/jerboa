@@ -721,7 +721,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   return PARSE_OK;
 }
 
-static ParseResult parse_block(char **textp, FunctionBuilder *builder);
+static ParseResult parse_block(char **textp, FunctionBuilder *builder, bool force_brackets);
 
 static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *keywd_range) {
   char *text = *textp;
@@ -745,7 +745,7 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   
   set_int_var(builder, true_blk, new_block(builder));
   
-  res = parse_block(&text, builder);
+  res = parse_block(&text, builder, false);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
@@ -756,7 +756,7 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   int false_blk_idx = new_block(builder);
   set_int_var(builder, false_blk, false_blk_idx);
   if (eat_keyword(&text, "else")) {
-    res = parse_block(&text, builder);
+    res = parse_block(&text, builder, false);
     if (res == PARSE_ERROR) return PARSE_ERROR;
     assert(res == PARSE_OK);
     
@@ -805,7 +805,7 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   use_range_end(builder, range);
   
   set_int_var(builder, loop_blk, new_block(builder));
-  res = parse_block(&text, builder);
+  res = parse_block(&text, builder, false);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
@@ -998,7 +998,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   
   // begin loop body
   set_int_var(builder, loop_blk, new_block(builder));
-  res = parse_block(&text, builder);
+  res = parse_block(&text, builder, false);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
@@ -1113,21 +1113,28 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     *textp = text;
     return parse_for(textp, builder, keyword_range);
   }
-  ParseResult res = parse_semicolon_statement(&text, builder);
+  ParseResult res = parse_block(&text, builder, true);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  if (res == PARSE_OK) {
+    *textp = text;
+    return PARSE_OK;
+  }
+  
+  res = parse_semicolon_statement(&text, builder);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   if (res == PARSE_OK) {
     if (!eat_string(&text, ";")) {
       log_parser_error(text, "';' expected after statement");
       return PARSE_ERROR;
     }
-    if (res == PARSE_OK) *textp = text;
-    return res;
+    *textp = text;
+    return PARSE_OK;
   }
   log_parser_error(text, "unknown statement");
   return PARSE_ERROR;
 }
 
-static ParseResult parse_block(char **textp, FunctionBuilder *builder) {
+static ParseResult parse_block(char **textp, FunctionBuilder *builder, bool force_brackets) {
   char *text = *textp;
   
   int scope_backup = begin_lex_scope(builder);
@@ -1140,6 +1147,7 @@ static ParseResult parse_block(char **textp, FunctionBuilder *builder) {
       assert(res == PARSE_OK);
     }
   } else {
+    if (force_brackets) return PARSE_NONE;
     res = parse_statement(&text, builder);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
@@ -1227,7 +1235,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   addinstr_close_object(builder, builder->scope);
   use_range_end(builder, fnframe_range);
   
-  ParseResult res = parse_block(textp, builder);
+  ParseResult res = parse_block(textp, builder, true);
   if (res == PARSE_ERROR) {
     free(fnframe_range);
     return PARSE_ERROR;
