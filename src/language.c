@@ -104,8 +104,8 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     }
     record_end(text, add_entry_range);
     
-    if (!eat_string(&text, ":")) {
-      log_parser_error(text, "object literal expects 'name: value'");
+    if (!eat_string(&text, "=")) {
+      log_parser_error(text, "object literal expects 'name = value;'");
       return PARSE_ERROR;
     }
     
@@ -113,6 +113,11 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     ParseResult res = parse_expr(&text, builder, 0, &value);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
+    
+    if (!eat_string(&text, ";")) {
+      log_parser_error(text, "object literal entry requires terminating semicolon");
+      return PARSE_ERROR;
+    }
     
     if (builder) {
       int value_slot = ref_access(builder, value);
@@ -122,11 +127,6 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
       addinstr_assign(builder, obj_slot, key_slot, value_slot, ASSIGN_PLAIN);
       use_range_end(builder, add_entry_range);
     }
-    
-    if (eat_string(&text, ",")) continue;
-    if (eat_string(&text, "}")) break;
-    log_parser_error(text, "expected commad or closing bracket");
-    return PARSE_ERROR;
   }
   *textp = text;
   return PARSE_OK;

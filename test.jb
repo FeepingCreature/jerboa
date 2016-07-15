@@ -5,66 +5,64 @@ puts("Hello World from libffi!");
 
 var swig_tools = require("swig_tools.jb");
 
-const gl = swig_tools.loadLibrary("gl_wrap.xml", "libGL.so");
-const sdl = swig_tools.loadLibrary("SDL_wrap.xml", "libSDL.so");
+const gl = require("c/gl.jb");
+const sdl = require("c/sdl.jb");
 
-sdl["SDL_QUIT"] = 12;
-
-const glu = swig_tools.loadLibrary("glu_wrap.xml", "libGLU.so");
+const glu = require("c/glu.jb");
 
 function drawGL() {
-  gl.glViewport(0, 0, 800, 600);
-  gl.glMatrixMode(gl.GL_PROJECTION);
-  gl.glLoadIdentity();
-  glu.gluPerspective(45, 800.0/600, 0.1, 100);
-  gl.glMatrixMode(gl.GL_MODELVIEW);
-  gl.glLoadIdentity();
+  gl.Viewport(0, 0, 800, 600);
+  gl.MatrixMode(gl.PROJECTION);
+  gl.LoadIdentity();
+  glu.Perspective(45, 800.0/600, 0.1, 100);
+  gl.MatrixMode(gl.MODELVIEW);
+  gl.LoadIdentity();
   
-  gl.glShadeModel(gl.GL_SMOOTH);
-  gl.glClearDepth(1);
-  gl.glDepthFunc(gl.GL_LEQUAL);
-  gl.glEnable(gl.GL_DEPTH_TEST);
-  gl.glClearColor(0.2, 0.2, 0.2, 0);
-  gl.glHint(gl.GL_PERSPECTIVE_CORRECTION_HINT, gl.GL_NICEST);
+  gl.ShadeModel(gl.SMOOTH);
+  gl.ClearDepth(1);
+  gl.DepthFunc(gl.LEQUAL);
+  gl.Enable(gl.DEPTH_TEST);
+  gl.ClearColor(0.2, 0.2, 0.2, 0);
+  gl.Hint(gl.PERSPECTIVE_CORRECTION_HINT, gl.NICEST);
   
-  gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT);
-  gl.glLoadIdentity();
-  gl.glTranslatef(-1.5, 0.0, -6.0);
-  gl.glColor3f(1, 1, 1);
-  gl.glBegin(gl.GL_TRIANGLES);
-  gl.glVertex3f( 0.0,  1.0, 0.0);
-  gl.glVertex3f(-1.0, -1.0, 0.0);
-  gl.glVertex3f( 1.0, -1.0, 0.0);
-  gl.glEnd();
+  gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.LoadIdentity();
+  gl.Translatef(-1.5, 0.0, -6.0);
+  gl.Color3f(1, 1, 1);
+  gl.Begin(gl.TRIANGLES);
+  gl.Vertex3f( 0.0,  1.0, 0.0);
+  gl.Vertex3f(-1.0, -1.0, 0.0);
+  gl.Vertex3f( 1.0, -1.0, 0.0);
+  gl.End();
   
-  gl.glTranslatef(3.0, 0.0, 0.0);
+  gl.Translatef(3.0, 0.0, 0.0);
   
-  gl.glBegin(gl.GL_QUADS);
-  gl.glVertex3f(-1.0, 1.0, 0.0);
-  gl.glVertex3f( 1.0, 1.0, 0.0);
-  gl.glVertex3f( 1.0,-1.0, 0.0);
-  gl.glVertex3f(-1.0,-1.0, 0.0);
-  gl.glEnd();
+  gl.Begin(gl.QUADS);
+  gl.Vertex3f(-1.0, 1.0, 0.0);
+  gl.Vertex3f( 1.0, 1.0, 0.0);
+  gl.Vertex3f( 1.0,-1.0, 0.0);
+  gl.Vertex3f(-1.0,-1.0, 0.0);
+  gl.End();
 }
 
-sdl.SDL_Init(sdl.SDL_INIT_EVERYTHING);
-sdl.SDL_SetVideoMode(800, 600, 32, sdl.SDL_OPENGL | sdl.SDL_RESIZABLE);
+sdl.Init(sdl.INIT_EVERYTHING);
+sdl.SetVideoMode(800, 600, 32, sdl.OPENGL | sdl.RESIZABLE);
 var event = malloc(64);
 var running = true;
 while (running) {
-  while (sdl.SDL_PollEvent(event)) {
-    if (event.dereference(ffi.uint8, 0) == sdl.SDL_QUIT) running = false;
+  while (sdl.PollEvent(event)) {
+    if (event.dereference(ffi.uint8, 0) == sdl.QUIT) running = false;
   }
   drawGL();
-  sdl.SDL_GL_SwapBuffers();
+  sdl.GL_SwapBuffers();
 }
-sdl.SDL_Quit();
+sdl.Quit();
 return 0;
 
-var obj = {a: 5, b: null, bar: method() { print(this.a - this.b); } };
+var obj = {a = 5; b = null; bar = method() { print(this.a - this.b); }; };
 obj.b = /* test */ 7;
-var obj2 = new obj { b: 9 };
-var objx = new 5 { bar: 7 }; print("objx = "+(objx + objx.bar));
+var obj2 = new obj { b = 9; };
+var objx = new 5 { bar = 7; }; print("objx = "+(objx + objx.bar));
 var arr = [2, 3, 4];
 arr[1] = 7;
 var vv = arr.push(5).pop(); print("vv = " + vv);
@@ -74,8 +72,8 @@ obj.foo();
 obj.bar();
 obj2.foo();
 obj2.bar();
-var Class = { a: 0 };
-var SubClass = new Class { b: 0, test: method() { print("a + b = " + (this.a + this.b)); } };
+var Class = { a = 0; };
+var SubClass = new Class { b = 0; test = method() { print("a + b = " + (this.a + this.b)); }; };
 var obj = new SubClass;
 obj.a = 5;
 obj.b = 8;

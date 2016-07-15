@@ -2,19 +2,19 @@ const cairo = require("c/cairo.jb");
 
 var surface = cairo.image_surface_create(cairo.FORMAT_ARGB32, 240, 80);
 var cr = {
-  cr: cairo.create(surface),
-  "[]": method(key) { return function(...) {
+  cr = cairo.create(surface);
+  "[]" = method(key) { return function(...) {
       var args = [this.cr];
       for (var i = 0; i < arguments.length; i++) args.push(arguments[i]);
       return cairo[key].apply(args);
     };
-  }
+  };
 };
 cr.select_font_face("serif", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD);
 cr.set_font_size(32);
 cr.set_source_rgb(0, 0, 1);
 cr.move_to(10, 50);
-cr.show_text("Hello, world");
+cr.show_text("Heflo, world");
 cr.destroy();
 cairo.surface_write_to_png(surface, "cairo_helloworld.png");
 cairo.surface_destroy(surface);

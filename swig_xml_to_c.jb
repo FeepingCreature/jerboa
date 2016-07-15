@@ -169,9 +169,9 @@ for (var i = 0; i < structs.length; i++) {
       cfile.print("  {");
       cfile.print("    struct ", structname, " ", "var;");
       cfile.print("    printf(\"const ", short_name(structname), " = {\\n\");");
-      cfile.print("    printf(\"  pointer: null,\\n\");");
-      cfile.print("    printf(\"  sizeof: %lu,\\n\", sizeof(var));");
-      cfile.print("    printf(\"  \\\"[]\\\": method(key) {\\n\");");
+      cfile.print("    printf(\"  pointer = null;\\n\");");
+      cfile.print("    printf(\"  sizeof = %lu;\\n\", sizeof(var));");
+      cfile.print("    printf(\"  \\\"[]\\\" = method(key) {\\n\");");
       for (var k = 0; k < members.length; k++) {
         var member = members[k];
         var isgood = false;
@@ -191,9 +191,9 @@ for (var i = 0; i < structs.length; i++) {
           } else print("skip ", name, " (unknown type ", combined_type, ")");
         } else print("skip ", name);
       }
-      cfile.print("  }");
-      cfile.print("  printf(\"  }\\n\");");
-      cfile.print("  printf(\"};\\n\");");
+      cfile.print("    printf(\"  };\\n\");");
+      cfile.print("    printf(\"};\\n\");");
+      cfile.print("  };");
     }
   }
 }
