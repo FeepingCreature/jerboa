@@ -849,7 +849,8 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   // frames are only allocated for user functions
   // so we're still in the calling frame
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
-  Object *context = cf->context;
+  int context_slot = cf->instr_ptr->context_slot;
+  Object *context = cf->slots_ptr[context_slot];
   
   Object *cur = context;
   while (cur) {
@@ -923,7 +924,6 @@ Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   
   state->root = root;
-  state->stack_ptr[state->stack_len - 1].context = root;
   
   GCRootSet pin_root;
   gc_add_roots(state, &root, 1, &pin_root);

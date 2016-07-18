@@ -32,7 +32,6 @@ Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
       // tear down old gc roots
       for (int i = 0; i < state->stack_len; ++i) {
         gc_remove_roots(state, &state->stack_ptr[i].frameroot_slots);
-        gc_remove_roots(state, &state->stack_ptr[i].frameroot_ctx);
       }
       memcpy(ptr, old_ptr, capacity);
       state->stack_ptr = ptr;
@@ -40,7 +39,6 @@ Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
       for (int i = 0; i < state->stack_len; ++i) {
         Callframe *cf = &state->stack_ptr[i];
         gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
-        gc_add_roots(state, &cf->context, 1, &cf->frameroot_ctx);
       }
       free(old_ptr_base);
     }
@@ -207,24 +205,6 @@ static FnWrap vm_instr_get_root(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static FnWrap vm_instr_get_context(FastVMState *state) {
-  GetContextInstr *get_context_instr = (GetContextInstr*) state->instr;
-  int slot = get_context_instr->slot;
-  VM_ASSERT2_SLOT(slot < state->cf->slots_len, "internal slot error");
-  state->cf->slots_ptr[slot] = state->cf->context;
-  state->instr = (Instr*)(get_context_instr + 1);
-  return (FnWrap) { instr_fns[state->instr->type] };
-}
-
-static FnWrap vm_instr_set_context(FastVMState *state) {
-  SetContextInstr *set_context_instr = (SetContextInstr*) state->instr;
-  int slot = set_context_instr->slot;
-  VM_ASSERT2_SLOT(slot < state->cf->slots_len, "internal slot error");
-  state->cf->context = state->cf->slots_ptr[slot];
-  state->instr = (Instr*)(set_context_instr + 1);
-  return (FnWrap) { instr_fns[state->instr->type] };
-}
-
 static FnWrap vm_instr_alloc_object(FastVMState *state) {
   AllocObjectInstr *alloc_obj_instr = (AllocObjectInstr*) state->instr;
   int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
@@ -277,8 +257,11 @@ static FnWrap vm_instr_alloc_string_object(FastVMState *state) {
 static FnWrap vm_instr_alloc_closure_object(FastVMState *state) {
   AllocClosureObjectInstr *alloc_closure_obj_instr = (AllocClosureObjectInstr*) state->instr;
   int target_slot = alloc_closure_obj_instr->target_slot;
+  int context_slot = alloc_closure_obj_instr->base.context_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  state->cf->slots_ptr[target_slot] = alloc_closure_fn(state->reststate, state->cf->context, alloc_closure_obj_instr->fn);
+  VM_ASSERT2_SLOT(context_slot < state->cf->slots_len, "slot numbering error");
+  Object *context = state->cf->slots_ptr[context_slot];
+  state->cf->slots_ptr[target_slot] = alloc_closure_fn(state->reststate, context, alloc_closure_obj_instr->fn);
   state->instr = (Instr*)(alloc_closure_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -609,6 +592,9 @@ static FnWrap vm_instr_call(FastVMState *state) {
   
   int prev_stacklen = state->reststate->stack_len;
   
+  // update, because mark_const which is called sometimes needs cf->instr
+  state->cf->instr_ptr = state->instr;
+  
   if (!setup_call(state->reststate, this_obj, fn_obj, args, args_length)) return (FnWrap) { vm_halt };
   
   // intrinsic may have errored.
@@ -649,7 +635,6 @@ static FnWrap vm_instr_return(FastVMState *state) {
   VM_ASSERT2_SLOT(ret_slot < state->cf->slots_len, "slot numbering error");
   Object *res = state->cf->slots_ptr[ret_slot];
   gc_remove_roots(state->reststate, &state->cf->frameroot_slots);
-  gc_remove_roots(state->reststate, &state->cf->frameroot_ctx);
   vm_remove_frame(state->reststate);
   state->reststate->result_value = res;
   
@@ -775,8 +760,6 @@ static void vm_step(VMState *state) {
 
 void init_instr_fn_table() {
   instr_fns[INSTR_GET_ROOT] = vm_instr_get_root;
-  instr_fns[INSTR_GET_CONTEXT] = vm_instr_get_context;
-  instr_fns[INSTR_SET_CONTEXT] = vm_instr_set_context;
   instr_fns[INSTR_ALLOC_OBJECT] = vm_instr_alloc_object;
   instr_fns[INSTR_ALLOC_INT_OBJECT] = vm_instr_alloc_int_object;
   instr_fns[INSTR_ALLOC_FLOAT_OBJECT] = vm_instr_alloc_float_object;

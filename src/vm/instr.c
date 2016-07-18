@@ -7,8 +7,6 @@ int instr_size(Instr *instr) {
   switch (instr->type) {
 #define CASE(EN, TY) case EN: return sizeof(TY)
     CASE(INSTR_GET_ROOT, GetRootInstr);
-    CASE(INSTR_GET_CONTEXT, GetContextInstr);
-    CASE(INSTR_SET_CONTEXT, SetContextInstr);
     CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr);
     CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr);
     CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr);

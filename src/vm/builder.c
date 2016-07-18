@@ -55,8 +55,9 @@ void terminate(FunctionBuilder *builder) {
 
 void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   assert(!builder->block_terminated);
-  if (!builder->current_range) { int i = 0; i /= i; }
+  if (!builder->current_range) abort();
   instr->belongs_to = builder->current_range;
+  instr->context_slot = builder->scope;
   FunctionBody *body = &builder->body;
   InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
   int current_len = (char*) block->instrs_ptr_end - (char*) block->instrs_ptr;
@@ -67,6 +68,15 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
     builder->block_terminated = true;
   }
+}
+
+void addinstr_like(FunctionBuilder *builder, Instr *basis, int size, Instr *instr) {
+  int backup = builder->scope;
+  use_range_start(builder, basis->belongs_to);
+  builder->scope = basis->context_slot;
+  addinstr(builder, size, instr);
+  use_range_end(builder, basis->belongs_to);
+  builder->scope = backup;
 }
 
 static IntVarRef ref_to_instr_about_to_be_added(FunctionBuilder *builder, char *instr, char *ptr) {
@@ -137,23 +147,6 @@ void addinstr_close_object(FunctionBuilder *builder, int obj) {
 void addinstr_freeze_object(FunctionBuilder *builder, int obj) {
   FreezeObjectInstr *instr = malloc(sizeof(FreezeObjectInstr));
   instr->base.type = INSTR_FREEZE_OBJECT;
-  instr->base.belongs_to = NULL;
-  instr->slot = obj;
-  addinstr(builder, sizeof(*instr), (Instr*) instr);
-}
-
-int addinstr_get_context(FunctionBuilder *builder) {
-  GetContextInstr *instr = malloc(sizeof(GetContextInstr));
-  instr->base.type = INSTR_GET_CONTEXT;
-  instr->base.belongs_to = NULL;
-  instr->slot = builder->slot_base++;
-  addinstr(builder, sizeof(*instr), (Instr*) instr);
-  return instr->slot;
-}
-
-void addinstr_set_context(FunctionBuilder *builder, int obj) {
-  SetContextInstr *instr = malloc(sizeof(SetContextInstr));
-  instr->base.type = INSTR_SET_CONTEXT;
   instr->base.belongs_to = NULL;
   instr->slot = obj;
   addinstr(builder, sizeof(*instr), (Instr*) instr);

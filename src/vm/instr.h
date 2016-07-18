@@ -7,8 +7,6 @@
 typedef enum {
   INSTR_INVALID = -1,
   INSTR_GET_ROOT = 0,
-  INSTR_GET_CONTEXT,
-  INSTR_SET_CONTEXT,
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
   INSTR_ALLOC_FLOAT_OBJECT,
@@ -59,6 +57,7 @@ typedef struct {
 
 typedef struct {
   InstrType type;
+  int context_slot;
   FileRange *belongs_to;
 } Instr;
 
@@ -85,16 +84,6 @@ typedef struct {
   Instr base;
   int slot;
 } GetRootInstr;
-
-typedef struct {
-  Instr base;
-  int slot;
-} GetContextInstr;
-
-typedef struct {
-  Instr base;
-  int slot;
-} SetContextInstr;
 
 struct _Object;
 typedef struct _Object Object;

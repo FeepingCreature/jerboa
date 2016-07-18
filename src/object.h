@@ -62,10 +62,9 @@ typedef struct {
 
 typedef struct {
   UserFunction *uf;
-  Object *context;
   Object **slots_ptr; int slots_len;
   Object ***refslots_ptr; int refslots_len; // references to values in closed objects
-  GCRootSet frameroot_slots, frameroot_ctx; // gc entries
+  GCRootSet frameroot_slots; // gc entries
   Instr *instr_ptr;
 } Callframe;
 

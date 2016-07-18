@@ -20,9 +20,6 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
       switch (instr->type) {
         case INSTR_INVALID: { abort(); int _stepsize = -1;
           CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
-          CASE(INSTR_GET_CONTEXT, GetContextInstr, get_context_instr)
-          CASE(INSTR_SET_CONTEXT, SetContextInstr, set_context_instr)
-            slots[set_context_instr->slot] = false;
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr, alloc_obj_instr)
             slots[alloc_obj_instr->parent_slot] = false;
           CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr, alloc_int_obj_instr)
@@ -95,10 +92,6 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
             instr = (Instr*) (aski + 1);
             names_ptr = realloc(names_ptr, sizeof(char*) * ++names_len);
             names_ptr[names_len - 1] = aski->key;
-          } else if (instr->type == INSTR_SET_CONTEXT) {
-            // can be safely skipped
-            SetContextInstr *sci = (SetContextInstr*) instr;
-            instr = (Instr*) (sci + 1);
           } else if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
             SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
             for (int k = 0; k < names_len; ++k) {
@@ -122,6 +115,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         (*slots_p)[target_slot].names_ptr = names_ptr;
         (*slots_p)[target_slot].names_len = names_len;
         (*slots_p)[target_slot].belongs_to = instr->belongs_to;
+        (*slots_p)[target_slot].context_slot = instr->context_slot;
         
         instr = (Instr*)((CloseObjectInstr*) instr + 1);
         (*slots_p)[target_slot].after_object_decl = instr;
@@ -164,8 +158,8 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           int obj_slot = aski_new->obj_slot;
           if (!info[obj_slot].static_object) break;
           bool key_in_obj = false;
-          for (int i = 0; i < info[obj_slot].names_len; ++i) {
-            char *objkey = info[obj_slot].names_ptr[i];
+          for (int k = 0; k < info[obj_slot].names_len; ++k) {
+            char *objkey = info[obj_slot].names_ptr[k];
             if (strcmp(objkey, aski_new->key_ptr) == 0) {
               key_in_obj = true;
               break;
@@ -179,17 +173,12 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           // so instead look up in the (known) parent object from the start
           aski_new->obj_slot = info[obj_slot].parent_slot;
         }
-        use_range_start(builder, instr->belongs_to);
-        addinstr(builder, sizeof(*aski_new), (Instr*) aski_new);
-        use_range_end(builder, instr->belongs_to);
+        addinstr_like(builder, instr, sizeof(*aski_new), (Instr*) aski_new);
         instr = (Instr*) (aski + 1);
         continue;
       }
       
-      use_range_start(builder, instr->belongs_to);
-      addinstr(builder, instr_size(instr), instr);
-      use_range_end(builder, instr->belongs_to);
-      
+      addinstr_like(builder, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
@@ -236,6 +225,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         int slot = info_slots_ptr[k];
         if (instr == info[slot].after_object_decl) {
           use_range_start(builder, info[slot].belongs_to);
+          builder->scope = info[slot].context_slot;
           for (int l = 0; l < info[slot].names_len; ++l) {
             ref_slots_ptr[slot][l] = addinstr_def_refslot(builder, slot, info[slot].names_ptr[l]);
           }
@@ -255,6 +245,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
             if (strcmp(key, name) == 0) {
               int refslot = ref_slots_ptr[obj_slot][k];
               use_range_start(builder, instr->belongs_to);
+              builder->scope = instr->context_slot;
               addinstr_read_refslot(builder, refslot, aski->target_slot, my_asprintf("refslot reading '%s'", name));
               use_range_end(builder, instr->belongs_to);
               instr = (Instr*) (aski + 1);
@@ -277,6 +268,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
             if (strcmp(key, name) == 0) {
               int refslot = ref_slots_ptr[obj_slot][k];
               use_range_start(builder, instr->belongs_to);
+              builder->scope = instr->context_slot;
               addinstr_write_refslot(builder, aski->value_slot, refslot, my_asprintf("refslot writing '%s'", name));
               use_range_end(builder, instr->belongs_to);
               instr = (Instr*) (aski + 1);
@@ -288,10 +280,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         }
       }
       
-      use_range_start(builder, instr->belongs_to);
-      addinstr(builder, instr_size(instr), instr);
-      use_range_end(builder, instr->belongs_to);
-      
+      addinstr_like(builder, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
@@ -353,9 +342,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         aski->key_ptr = slot_table_ptr[acci->key_slot];
         aski->key_len = strlen(aski->key_ptr);
         aski->key_hash = hash(aski->key_ptr, aski->key_len);
-        use_range_start(builder, acci->base.belongs_to);
-        addinstr(builder, sizeof(*aski), (Instr*) aski);
-        use_range_end(builder, acci->base.belongs_to);
+        addinstr_like(builder, instr, sizeof(*aski), (Instr*) aski);
         instr = (Instr*)(acci + 1);
         continue;
       }
@@ -368,9 +355,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         aski->value_slot = assi->value_slot;
         aski->key = slot_table_ptr[assi->key_slot];
         aski->type = assi->type;
-        use_range_start(builder, assi->base.belongs_to);
-        addinstr(builder, sizeof(*aski), (Instr*) aski);
-        use_range_end(builder, assi->base.belongs_to);
+        addinstr_like(builder, instr, sizeof(*aski), (Instr*) aski);
         instr = (Instr*)(assi + 1);
         continue;
       }
@@ -384,15 +369,11 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         scski.constraint_slot = sci->constraint_slot;
         scski.key_ptr = slot_table_ptr[sci->key_slot];
         scski.key_len = strlen(scski.key_ptr);
-        use_range_start(builder, sci->base.belongs_to);
-        addinstr(builder, sizeof(scski), (Instr*) &scski);
-        use_range_end(builder, sci->base.belongs_to);
+        addinstr_like(builder, instr, sizeof(scski), (Instr*) &scski);
         instr = (Instr*)(sci + 1);
         continue;
       }
-      use_range_start(builder, instr->belongs_to);
-      addinstr(builder, instr_size(instr), instr);
-      use_range_end(builder, instr->belongs_to);
+      addinstr_like(builder, instr, instr_size(instr), instr);
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
@@ -435,18 +416,13 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
 UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context) {
   bool *object_known = calloc(sizeof(bool), uf->slots);
   Object **known_objects_table = calloc(sizeof(Object*), uf->slots);
+  object_known[1] = true;
+  known_objects_table[1] = context;
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
     Instr *instr = block->instrs_ptr;
     Instr *instr_end = block->instrs_ptr_end;
     while (instr != instr_end) {
-      // because we can change context, this only works if it's
-      // the first instruction in the function (which it usually is)
-      if (i == 0 && instr == block->instrs_ptr && instr->type == INSTR_GET_CONTEXT) {
-        GetContextInstr *gci = (GetContextInstr*) instr;
-        object_known[gci->slot] = true;
-        known_objects_table[gci->slot] = context;
-      }
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         if (object_known[aski->obj_slot]) {
@@ -525,13 +501,9 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         ssi->target_slot = target_slot;
         ssi->value = obj;
         ssi->opt_info = opt_info;
-        use_range_start(builder, instr->belongs_to);
-        addinstr(builder, sizeof(*ssi), (Instr*) ssi);
-        use_range_end(builder, instr->belongs_to);
+        addinstr_like(builder, instr, sizeof(*ssi), (Instr*) ssi);
       } else {
-        use_range_start(builder, instr->belongs_to);
-        addinstr(builder, instr_size(instr), instr);
-        use_range_end(builder, instr->belongs_to);
+        addinstr_like(builder, instr, instr_size(instr), instr);
       }
       
       instr = (Instr*) ((char*) instr + instr_size(instr));

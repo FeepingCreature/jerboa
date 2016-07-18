@@ -8,9 +8,8 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
   Callframe *cf = vm_alloc_frame(state, fn->slots, fn->refslots);
   
   cf->uf = fn;
-  cf->context = context;
+  cf->slots_ptr[1] = context;
   gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
-  gc_add_roots(state, &cf->context, 1, &cf->frameroot_ctx);
   
   if (fn->variadic_tail) {
     if (args_len < cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
@@ -18,7 +17,7 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
     if (args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
   }
   for (int i = 0; i < args_len; ++i) {
-    cf->slots_ptr[1 + i] = args_ptr[i];
+    cf->slots_ptr[2 + i] = args_ptr[i];
   }
   
   if (cf->uf->body.blocks_len == 0) {
