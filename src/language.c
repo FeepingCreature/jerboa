@@ -823,14 +823,6 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
 
 static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRange *var_range, bool isconst) {
   char *text = *textp;
-  // allocate the new scope immediately, so that the variable
-  // is in scope for the value expression.
-  // (this is important for recursion, ie. var foo = function() { foo(); }; )
-  use_range_start(builder, var_range);
-  builder->scope = addinstr_alloc_object(builder, builder->scope);
-  addinstr_set_context(builder, builder->scope);
-  int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
-  use_range_end(builder, var_range);
   
   FileRange *alloc_var_name = alloc_and_record_start(text);
   char *varname = parse_identifier(&text);
@@ -839,6 +831,30 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     return PARSE_ERROR;
   }
   record_end(text, alloc_var_name);
+  
+  FileRange *define_constraint = alloc_and_record_start(text);
+  int constraint_slot = -1;
+  if (eat_string(&text, ":")) {
+    char *constraint = parse_identifier(&text);
+    if (!constraint) {
+      log_parser_error(text, "invalid type constraint");
+      return PARSE_ERROR;
+    }
+    record_end(text, define_constraint);
+    use_range_start(builder, define_constraint);
+    int constraint_name_slot = addinstr_alloc_string_object(builder, constraint);
+    constraint_slot = addinstr_access(builder, builder->scope, constraint_name_slot);
+    use_range_end(builder, define_constraint);
+  }
+  
+  // allocate the new scope upfront, so that the variable
+  // is in scope for the value expression.
+  // (this is important for recursion, ie. var foo = function() { foo(); }; )
+  use_range_start(builder, var_range);
+  builder->scope = addinstr_alloc_object(builder, builder->scope);
+  addinstr_set_context(builder, builder->scope);
+  int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
+  use_range_end(builder, var_range);
   
   use_range_start(builder, alloc_var_name);
   int value, varname_slot = addinstr_alloc_string_object(builder, varname);
@@ -870,6 +886,12 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   addinstr_assign(builder, var_scope, varname_slot, value, ASSIGN_EXISTING);
   if (isconst) addinstr_freeze_object(builder, var_scope);
   use_range_end(builder, assign_value);
+  
+  if (constraint_slot != -1) {
+    use_range_start(builder, define_constraint);
+    addinstr_set_constraint(builder, var_scope, varname_slot, constraint_slot);
+    use_range_end(builder, define_constraint);
+  }
   
   // var a, b;
   if (eat_string(&text, ",")) {
@@ -1185,6 +1207,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   }
   
   char **arg_list_ptr = NULL, arg_list_len = 0;
+  char **type_constraints_ptr = NULL;
   bool variadic_tail = false;
   while (!eat_string(&text, ")")) {
     if (arg_list_len && !eat_string(&text, ",")) {
@@ -1207,7 +1230,18 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
       free(fnframe_range);
       return PARSE_ERROR;
     }
+    char *constraint = NULL;
+    if (eat_string(&text, ":")) {
+      constraint = parse_identifier(&text);
+      if (!constraint) {
+        log_parser_error(text, "type constraint identifier expected");
+        free(fnframe_range);
+        return PARSE_ERROR;
+      }
+    }
     arg_list_ptr = realloc(arg_list_ptr, sizeof(char*) * ++arg_list_len);
+    type_constraints_ptr = realloc(type_constraints_ptr, sizeof(char*) * arg_list_len);
+    type_constraints_ptr[arg_list_len - 1] = constraint;
     arg_list_ptr[arg_list_len - 1] = arg;
   }
   record_end(text, fnframe_range);
@@ -1226,14 +1260,29 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   new_block(builder);
   use_range_start(builder, fnframe_range);
   int ctxslot = addinstr_get_context(builder);
+  
+  // look up constraints upfront (simplifies IR)
+  int *constraint_slots = malloc(sizeof(int) * arg_list_len);
+  for (int i = 0; i < arg_list_len; ++i) {
+    constraint_slots[i] = -1;
+    if (type_constraints_ptr[i]) {
+      int type_name = addinstr_alloc_string_object(builder, type_constraints_ptr[i]);
+      constraint_slots[i] = addinstr_access(builder, ctxslot, type_name);
+    }
+  }
+  
   builder->scope = addinstr_alloc_object(builder, ctxslot);
   addinstr_set_context(builder, builder->scope);
   for (int i = 0; i < arg_list_len; ++i) {
     int argname_slot = addinstr_alloc_string_object(builder, arg_list_ptr[i]);
     addinstr_assign(builder, builder->scope, argname_slot, 1 + i, ASSIGN_PLAIN);
+    if (type_constraints_ptr[i]) {
+      addinstr_set_constraint(builder, builder->scope, argname_slot, constraint_slots[i]);
+    }
   }
   addinstr_close_object(builder, builder->scope);
   use_range_end(builder, fnframe_range);
+  free(constraint_slots);
   
   ParseResult res = parse_block(textp, builder, true);
   if (res == PARSE_ERROR) {

@@ -135,6 +135,9 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
         if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was frozen.", key, (void*) current)) abort();
         return error;
       }
+      if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+        return "type constraint violated on assignment";
+      }
       entry->value = value;
       return NULL;
     }
@@ -146,33 +149,61 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
 }
 
 // change a property but only if it exists somewhere in the prototype chain
-bool object_set_shadowing(Object *obj, const char *key, Object *value) {
+// returns error or null on success
+char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *value_set) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
     TableEntry *entry = table_lookup(&current->tbl, key, strlen(key));
     if (entry) {
+      if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+        return "type constraint violated on shadowing assignment";
+      }
       // so create it in obj (not current!)
       object_set(obj, key, value);
-      return true;
+      *value_set = true;
+      return NULL;
     }
     current = current->parent;
   }
-  return false;
+  *value_set = false;
+  return NULL;
 }
 
-void object_set(Object *obj, const char *key, Object *value) {
+char *get_type_info(VMState*, Object*);
+// returns error or null
+char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint) {
+  assert(obj != NULL);
+  TableEntry *entry = table_lookup(&obj->tbl, key_ptr, key_len);
+  if (!entry) return "tried to set constraint on a key that was not yet defined!";
+  if (entry->value_aux) return "tried to set constraint, but key already had a constraint!";
+  Object *existing_value = entry->value;
+  if (!existing_value || existing_value->parent != constraint) {
+    return my_asprintf("value failed type constraint: constraint was %s, but value was %s",
+                       get_type_info(state, constraint), get_type_info(state, existing_value));
+  }
+  // There is no need to check flags here - constraints cannot be changed and don't modify existing data.
+  entry->value_aux = (void*) constraint;
+  return NULL;
+}
+
+// returns error or null
+char *object_set(Object *obj, const char *key, Object *value) {
   assert(obj != NULL);
   TableEntry *freeptr;
   // TODO check flags beforehand to avoid clobbering tables that are frozen
   TableEntry *entry = table_lookup_alloc(&obj->tbl, key, strlen(key), &freeptr);
   if (entry) {
     assert(!(obj->flags & OBJ_FROZEN));
+    if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+      return "type constraint violated on assignment";
+    }
     entry->value = (void*) value;
   } else {
     assert(!(obj->flags & OBJ_CLOSED));
     freeptr->value = (void*) value;
   }
+  return NULL;
 }
 
 void vm_record_profile(VMState *state);

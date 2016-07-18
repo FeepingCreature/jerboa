@@ -36,8 +36,10 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             slots[access_instr->obj_slot] = false;
           CASE(INSTR_ASSIGN, AssignInstr, assign_instr)
             slots[assign_instr->obj_slot] = slots[assign_instr->value_slot] = false;
+          // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr, key_in_obj_instr)
-            // TODO inline key?
+          CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr, scons_instr)
+            slots[scons_instr->obj_slot] = slots[scons_instr->constraint_slot] = false;
           CASE(INSTR_CALL, CallInstr, call_instr)
             slots[call_instr->function_slot] = slots[call_instr->this_slot] = false;
             for (int i = 0; i < call_instr->args_length; ++i) {
@@ -97,10 +99,16 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
             // can be safely skipped
             SetContextInstr *sci = (SetContextInstr*) instr;
             instr = (Instr*) (sci + 1);
+          } else if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
+            SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
+            for (int k = 0; k < names_len; ++k) {
+            }
+            instr = (Instr*) (scski + 1);
           } else if (instr->type == INSTR_CLOSE_OBJECT) {
             break;
           } else {
             failed = true;
+            // fprintf(stderr, "failed slot %i because %i\n", alobi->target_slot, instr->type);
             break;
           }
         }
@@ -320,6 +328,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
       AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
       AccessInstr *acci = (AccessInstr*) instr;
       AssignInstr *assi = (AssignInstr*) instr;
+      SetConstraintInstr *sci = (SetConstraintInstr*) instr;
       if (instr->type == INSTR_ALLOC_STRING_OBJECT
         && prim_slot[asoi->target_slot] == true)
       {
@@ -363,6 +372,22 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         addinstr(builder, sizeof(*aski), (Instr*) aski);
         use_range_end(builder, assi->base.belongs_to);
         instr = (Instr*)(assi + 1);
+        continue;
+      }
+      if (instr->type == INSTR_SET_CONSTRAINT
+        && sci->key_slot < slot_table_len && slot_table_ptr[sci->key_slot] != NULL)
+      {
+        SetConstraintStringKeyInstr scski;
+        scski.base.type = INSTR_SET_CONSTRAINT_STRING_KEY;
+        scski.base.belongs_to = NULL;
+        scski.obj_slot = sci->obj_slot;
+        scski.constraint_slot = sci->constraint_slot;
+        scski.key_ptr = slot_table_ptr[sci->key_slot];
+        scski.key_len = strlen(scski.key_ptr);
+        use_range_start(builder, sci->base.belongs_to);
+        addinstr(builder, sizeof(scski), (Instr*) &scski);
+        use_range_end(builder, sci->base.belongs_to);
+        instr = (Instr*)(sci + 1);
         continue;
       }
       use_range_start(builder, instr->belongs_to);

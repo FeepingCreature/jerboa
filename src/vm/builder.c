@@ -116,6 +116,16 @@ int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
   return instr->target_slot;
 }
 
+void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slot, int cons_slot) {
+  SetConstraintInstr instr;
+  instr.base.type = INSTR_SET_CONSTRAINT;
+  instr.base.belongs_to = NULL;
+  instr.obj_slot = obj_slot;
+  instr.key_slot = key_slot;
+  instr.constraint_slot = cons_slot;
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+}
+
 void addinstr_close_object(FunctionBuilder *builder, int obj) {
   CloseObjectInstr *instr = malloc(sizeof(CloseObjectInstr));
   instr->base.type = INSTR_CLOSE_OBJECT;

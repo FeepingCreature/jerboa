@@ -17,13 +17,16 @@ int instr_size(Instr *instr) {
     CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr);
     CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr);
     CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr);
-    CASE(INSTR_ACCESS, AccessInstr); CASE(INSTR_ASSIGN, AssignInstr);
+    CASE(INSTR_ACCESS, AccessInstr);
+    CASE(INSTR_ASSIGN, AssignInstr);
     CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr);
+    CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr);
     CASE(INSTR_CALL, CallInstr); CASE(INSTR_RETURN, ReturnInstr);
     CASE(INSTR_SAVE_RESULT, SaveResultInstr);
     CASE(INSTR_BR, BranchInstr); CASE(INSTR_TESTBR, TestBranchInstr);
     CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr);
     CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr);
+    CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr);
     CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
     CASE(INSTR_READ_REFSLOT, ReadRefslotInstr);
     CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr);

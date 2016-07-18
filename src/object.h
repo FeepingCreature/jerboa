@@ -129,9 +129,11 @@ Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len
 // returns NULL on success, error string otherwise
 char *object_set_existing(Object *obj, const char *key, Object *value);
 
-bool object_set_shadowing(Object *obj, const char *key, Object *value);
+char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *value_set);
 
-void object_set(Object *obj, const char *key, Object *value);
+char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint);
+
+char *object_set(Object *obj, const char *key, Object *value);
 
 void obj_mark(VMState *state, Object *obj);
 

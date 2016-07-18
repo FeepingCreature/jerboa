@@ -53,6 +53,8 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
 
 int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot);
 
+void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slot, int cons_slot);
+
 void addinstr_close_object(FunctionBuilder *builder, int obj);
 
 void addinstr_freeze_object(FunctionBuilder *builder, int obj);

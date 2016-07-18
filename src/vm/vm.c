@@ -482,10 +482,13 @@ static FnWrap vm_instr_assign(FastVMState *state) {
       break;
     }
     case ASSIGN_SHADOWING:
-      if (!object_set_shadowing(obj, key, value_obj)) {
-        VM_ASSERT2(false, "key '%s' not found in object", key);
-      }
+    {
+      bool key_set;
+      char *error = object_set_shadowing(obj, key, value_obj, &key_set);
+      VM_ASSERT2(error == NULL, "while assigning: %s", error);
+      VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
+    }
   }
   state->instr = (Instr*)(assign_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -514,6 +517,28 @@ static FnWrap vm_instr_key_in_obj(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_set_constraint(FastVMState *state) {
+  SetConstraintInstr *set_constraint_instr = (SetConstraintInstr*) state->instr;
+  int key_slot = set_constraint_instr->key_slot, obj_slot = set_constraint_instr->obj_slot;
+  int cons_slot = set_constraint_instr->constraint_slot;
+  VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(cons_slot < state->cf->slots_len, "slot numbering error");
+  Object *obj = state->cf->slots_ptr[obj_slot];
+  Object *constraint = state->cf->slots_ptr[cons_slot];
+  Object *string_base = state->reststate->shared->vcache.string_base;
+  Object *key_obj = state->cf->slots_ptr[key_slot];
+  StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+  VM_ASSERT2(skey, "constraint key must be string");
+  char *key = skey->value;
+  
+  char *error = object_set_constraint(state->reststate, obj, key, strlen(key), constraint);
+  VM_ASSERT2(!error, "error while setting constraint: %s", error);
+  
+  state->instr = (Instr*)(set_constraint_instr + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_instr_assign_string_key(FastVMState *state) {
   AssignStringKeyInstr *aski = (AssignStringKeyInstr*) state->instr;
   int obj_slot = aski->obj_slot, value_slot = aski->value_slot;
@@ -535,12 +560,30 @@ static FnWrap vm_instr_assign_string_key(FastVMState *state) {
       break;
     }
     case ASSIGN_SHADOWING:
-      if (!object_set_shadowing(obj, key, value_obj)) {
-        VM_ASSERT2(false, "key '%s' not found in object", key);
-      }
+    {
+      bool key_set;
+      char *error = object_set_shadowing(obj, key, value_obj, &key_set);
+      VM_ASSERT2(error == NULL, "while assigning '%s': %s", key, error);
+      VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
+    }
   }
   state->instr = (Instr*)(aski + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
+static FnWrap vm_instr_set_constraint_string_key(FastVMState *state) {
+  SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) state->instr;
+  int obj_slot = scski->obj_slot, cons_slot = scski->constraint_slot;
+  VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(cons_slot < state->cf->slots_len, "slot numbering error");
+  Object *obj = state->cf->slots_ptr[obj_slot];
+  Object *constraint = state->cf->slots_ptr[cons_slot];
+  
+  char *error = object_set_constraint(state->reststate, obj, scski->key_ptr, scski->key_len, constraint);
+  VM_ASSERT2(!error, error);
+  
+  state->instr = (Instr*)(scski + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -745,6 +788,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ACCESS] = vm_instr_access;
   instr_fns[INSTR_ASSIGN] = vm_instr_assign;
   instr_fns[INSTR_KEY_IN_OBJ] = vm_instr_key_in_obj;
+  instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
   instr_fns[INSTR_CALL] = vm_instr_call;
   instr_fns[INSTR_RETURN] = vm_instr_return;
   instr_fns[INSTR_SAVE_RESULT] = vm_instr_save_result;
@@ -752,6 +796,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_TESTBR] = vm_instr_testbr;
   instr_fns[INSTR_ACCESS_STRING_KEY] = vm_instr_access_string_key;
   instr_fns[INSTR_ASSIGN_STRING_KEY] = vm_instr_assign_string_key;
+  instr_fns[INSTR_SET_CONSTRAINT_STRING_KEY] = vm_instr_set_constraint_string_key;
   instr_fns[INSTR_SET_SLOT] = vm_instr_set_slot;
   instr_fns[INSTR_DEFINE_REFSLOT] = vm_instr_define_refslot;
   instr_fns[INSTR_READ_REFSLOT] = vm_instr_read_refslot;

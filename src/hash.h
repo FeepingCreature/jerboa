@@ -13,6 +13,7 @@ struct _TableEntry {
   const char *name_ptr;
   size_t name_len;
   void *value;
+  void *value_aux;
 };
 
 // TODO actually use

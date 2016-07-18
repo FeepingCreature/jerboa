@@ -904,6 +904,21 @@ static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args
   state->result_value = NULL;
 }
 
+char *get_type_info(VMState *state, Object *obj) {
+  if (obj == NULL) return "null";
+  if (obj == state->shared->vcache.int_base) return "int";
+  if (obj == state->shared->vcache.bool_base) return "bool";
+  if (obj == state->shared->vcache.float_base) return "float";
+  if (obj == state->shared->vcache.closure_base) return "closure";
+  if (obj == state->shared->vcache.function_base) return "function";
+  if (obj == state->shared->vcache.array_base) return "array";
+  if (obj == state->shared->vcache.string_base) return "string";
+  if (obj == state->shared->vcache.pointer_base) return "pointer";
+  
+  if (obj->parent) return get_type_info(state, obj->parent);
+  return "unknown";
+}
+
 Object *create_root(VMState *state) {
   Object *root = alloc_object(state, NULL);
   

@@ -76,6 +76,14 @@ void dump_instr(Instr **instr_p) {
               ((KeyInObjInstr*) instr)->target_slot, ((KeyInObjInstr*) instr)->key_slot, ((KeyInObjInstr*) instr)->obj_slot);
       *instr_p = (Instr*) ((KeyInObjInstr*) instr + 1);
       break;
+    case INSTR_SET_CONSTRAINT:
+    {
+      SetConstraintInstr *sci = (SetConstraintInstr*) instr;
+      fprintf(stderr, "    set_constraint: %%%i . %%%i : %%%i\n",
+              sci->obj_slot, sci->key_slot, sci->constraint_slot);
+      *instr_p = (Instr*) (sci + 1);
+      break;
+    }
     case INSTR_CALL:
       fprintf(stderr, "    call: %%%i . %%%i ( ",
               ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);
@@ -118,6 +126,14 @@ void dump_instr(Instr **instr_p) {
       fprintf(stderr, "    assign%s: %%%i . '%s' = %%%i \t\t(opt: string key)\n",
               mode, ((AssignStringKeyInstr*) instr)->obj_slot, ((AssignStringKeyInstr*) instr)->key, ((AssignStringKeyInstr*) instr)->value_slot);
       *instr_p = (Instr*) ((AssignStringKeyInstr*) instr + 1);
+      break;
+    }
+    case INSTR_SET_CONSTRAINT_STRING_KEY:
+    {
+      SetConstraintStringKeyInstr *sci = (SetConstraintStringKeyInstr*) instr;
+      fprintf(stderr, "    set_constraint: %%%i . '%.*s' : %%%i \t\t(opt: string key)\n",
+              sci->obj_slot, sci->key_len, sci->key_ptr, sci->constraint_slot);
+      *instr_p = (Instr*) (sci + 1);
       break;
     }
     case INSTR_SET_SLOT:
