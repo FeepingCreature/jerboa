@@ -235,6 +235,25 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
         continue;
       }
       
+      if (instr->type == INSTR_ASSIGN_STRING_KEY) {
+        AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
+        if (aski->type == ASSIGN_EXISTING) {
+          // TODO remove all the instr mallocs
+          AssignStringKeyInstr *aski_new = malloc(sizeof(AssignStringKeyInstr));
+          *aski_new = *aski;
+          while (true) {
+            int obj_slot = aski_new->obj_slot;
+            if (!info[obj_slot].static_object) break;
+            int field = static_info_find_field(&info[obj_slot], strlen(aski->key), aski->key);
+            if (field != -1) break; // key was found, we're at the right object
+            aski_new->obj_slot = info[obj_slot].parent_slot;
+          }
+          addinstr_like(builder, instr, sizeof(*aski_new), (Instr*) aski_new);
+          instr = (Instr*) (aski + 1);
+          continue;
+        }
+      }
+      
       addinstr_like(builder, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
