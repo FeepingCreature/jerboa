@@ -4,3 +4,12 @@ var test = function(...) {
 };
 test(2, 3, 4);
 test.apply([2, 3, 4]);
+
+var i = 5;
+function foo(a: int) {
+  var k: int = 5;
+}
+foo(5);
+// foo("Hello"); // errors
+var i: int = 5;
+// i = "hello"; // errors
