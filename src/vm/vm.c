@@ -731,6 +731,41 @@ static FnWrap vm_instr_write_refslot(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
+  AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) state->instr;
+  
+  int target_slot = asoi->target_slot, parent_slot = asoi->parent_slot;
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(parent_slot < state->cf->slots_len, "slot numbering error");
+  Object *parent_obj = state->cf->slots_ptr[parent_slot];
+  VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
+  Object *obj = alloc_object(state->reststate, state->cf->slots_ptr[parent_slot]);
+  
+  // TODO table_clone
+  obj->tbl = asoi->obj_sample->tbl;
+  int tbl_len = sizeof(TableEntry) * obj->tbl.entries_num;
+  obj->tbl.entries_ptr = malloc(tbl_len);
+  memcpy(obj->tbl.entries_ptr, asoi->obj_sample->tbl.entries_ptr, tbl_len);
+  
+  for (int i = 0; i < asoi->info_len; ++i) {
+    StaticFieldInfo *info = &asoi->info_ptr[i];
+    VM_ASSERT2_SLOT(info->slot < state->cf->slots_len, "slot numbering error");
+    TableEntry *freeptr;
+    TableEntry *entry = table_lookup_alloc_with_hash(&obj->tbl, info->name_ptr, info->name_len, info->name_hash, &freeptr);
+    // copied from sample, should be no need to allocate
+    assert(entry && !freeptr);
+    entry->value = state->cf->slots_ptr[info->slot];
+    state->cf->refslots_ptr[info->refslot] = (Object**) &entry->value;
+  }
+  
+  obj->flags = OBJ_CLOSED;
+  
+  state->cf->slots_ptr[target_slot] = obj;
+  
+  state->instr = (Instr*)(asoi + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static void vm_step(VMState *state) {
   FastVMState fast_state;
   fast_state.reststate = state;
@@ -784,6 +819,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_DEFINE_REFSLOT] = vm_instr_define_refslot;
   instr_fns[INSTR_READ_REFSLOT] = vm_instr_read_refslot;
   instr_fns[INSTR_WRITE_REFSLOT] = vm_instr_write_refslot;
+  instr_fns[INSTR_ALLOC_STATIC_OBJECT] = vm_instr_alloc_static_object;
 }
 
 void vm_run(VMState *state) {

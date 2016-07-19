@@ -32,6 +32,9 @@ typedef enum {
   INSTR_DEFINE_REFSLOT,
   INSTR_READ_REFSLOT,
   INSTR_WRITE_REFSLOT,
+  // object is allocated, some fields are defined, object is closed, and refslots are created for its fields
+  // this is a very common pattern due to scopes
+  INSTR_ALLOC_STATIC_OBJECT,
   
   INSTR_LAST
 } InstrType;
@@ -228,5 +231,24 @@ typedef struct {
   int source_slot, target_refslot;
   char *opt_info;
 } WriteRefslotInstr;
+
+typedef struct {
+  char *name_ptr;
+  int name_len;
+  size_t name_hash;
+  
+  int slot;
+  int refslot;
+} StaticFieldInfo;
+
+// object is allocated, some fields are defined, object is closed, and refslots are created for its fields
+typedef struct {
+  Instr base;
+  int target_slot, parent_slot;
+  
+  int info_len;
+  StaticFieldInfo *info_ptr;
+  Object *obj_sample;
+} AllocStaticObjectInstr;
 
 #endif

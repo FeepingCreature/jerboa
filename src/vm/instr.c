@@ -29,6 +29,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
     CASE(INSTR_READ_REFSLOT, ReadRefslotInstr);
     CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr);
+    CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr);
 #undef CASE
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();
   }

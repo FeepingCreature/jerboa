@@ -121,9 +121,6 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
     Instr *instr = block->instrs_ptr;
     Instr *instr_end = block->instrs_ptr_end;
     while (instr != instr_end) {
-      // Instr *instr2 = instr;
-      // dump_instr(&instr2);
-      
       if (instr->type == INSTR_ALLOC_OBJECT) {
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
         instr = (Instr*) (alobi + 1);
@@ -133,6 +130,8 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
           if (instr->type == INSTR_ASSIGN_STRING_KEY) {
             AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
             if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
+            if (aski->obj_slot != alobi->target_slot) { failed = true; break; }
+            
             instr = (Instr*) (aski + 1);
             names_ptr = realloc(names_ptr, sizeof(char*) * ++fields_len);
             names_ptr[fields_len - 1] = aski->key;
@@ -804,6 +803,98 @@ bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_p
   return current == blk_earlier;
 }
 
+UserFunction *fuse_static_object_alloc(UserFunction *uf) {
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->block_terminated = true;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    new_block(builder);
+    
+    Instr *instr = block->instrs_ptr;
+    Instr *instr_end = block->instrs_ptr_end;
+    while (instr != instr_end) {
+      if (instr->type == INSTR_ALLOC_OBJECT) {
+        AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
+        instr = (Instr*) (alobi + 1);
+        bool failed = false;
+        StaticFieldInfo *info_ptr = NULL; int info_len = 0;
+        int refslots_set = 0;
+        bool closed = false;
+        
+        Instr *instr_reading = instr;
+        while (instr_reading != instr_end) {
+          if (instr_reading->type == INSTR_ASSIGN_STRING_KEY) {
+            if (closed) { failed = true; break; }
+            AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr_reading;
+            if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
+            if (aski->obj_slot != alobi->target_slot) { failed = true; break; }
+            
+            info_ptr = realloc(info_ptr, sizeof(StaticFieldInfo) * ++info_len);
+            info_ptr[info_len - 1] = (StaticFieldInfo) {0};
+            StaticFieldInfo *info = &info_ptr[info_len - 1];
+            info->name_ptr = aski->key;
+            info->name_len = strlen(aski->key);
+            info->name_hash = hash(info->name_ptr, info->name_len);
+            info->slot = aski->value_slot;
+            info->refslot = -1;
+            
+            instr_reading = (Instr*) (aski + 1);
+          } else if (instr_reading->type == INSTR_CLOSE_OBJECT) {
+            CloseObjectInstr *coi = (CloseObjectInstr*) instr_reading;
+            closed = true;
+            instr_reading = (Instr*) (coi + 1);
+            if (refslots_set == info_len) break; // all refslots already assigned
+          } else if (instr_reading->type == INSTR_DEFINE_REFSLOT) {
+            DefineRefslotInstr *dri = (DefineRefslotInstr*) instr_reading;
+            for (int k = 0; k < info_len; ++k) {
+              StaticFieldInfo *info = &info_ptr[k];
+              if (info->name_len == dri->key_len && strncmp(info->name_ptr, dri->key_ptr, info->name_len) == 0) {
+                if (info->refslot != -1) {
+                  failed = true;
+                  break; // wat wat wat
+                }
+                info->refslot = dri->target_refslot;
+                refslots_set ++;
+              }
+            }
+            instr_reading = (Instr*) (dri + 1);
+            if (closed && refslots_set == info_len) break; // all refslots assigned
+          } else {
+            failed = true;
+            // fprintf(stderr, "failed slot %i because %i\n", alobi->target_slot, instr->type);
+            break;
+          }
+        }
+        if (!failed) {
+          Object *sample_obj = (Object*) cache_alloc(sizeof(Object));
+          for (int k = 0; k < info_len; ++k) {
+            StaticFieldInfo *info = &info_ptr[k];
+            char *error = object_set(sample_obj, info->name_ptr, NULL);
+            if (error) { fprintf(stderr, "INTERNAL LOGIC ERROR: %s\n", error); abort(); }
+          }
+          
+          AllocStaticObjectInstr *asoi = malloc(sizeof(AllocStaticObjectInstr));
+          asoi->base.type = INSTR_ALLOC_STATIC_OBJECT;
+          asoi->info_len = info_len;
+          asoi->info_ptr = info_ptr;
+          asoi->parent_slot = alobi->parent_slot;
+          asoi->target_slot = alobi->target_slot;
+          asoi->obj_sample = sample_obj;
+          addinstr_like(builder, instr, sizeof(*asoi), (Instr*) asoi);
+          instr = instr_reading;
+        }
+      }
+      
+      addinstr_like(builder, instr, instr_size(instr), instr);
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
   /*
   printf("runtime optimize %s with %p\n", uf->name, (void*) context);
@@ -850,6 +941,9 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     }
     cfg_destroy(&cfg);
   }
+  
+  // must be last!
+  uf = fuse_static_object_alloc(uf);
   
   if (uf->name) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);

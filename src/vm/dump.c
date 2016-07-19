@@ -162,6 +162,19 @@ void dump_instr(Instr **instr_p) {
       *instr_p = (Instr*) (wri + 1);
       break;
     }
+    case INSTR_ALLOC_STATIC_OBJECT:
+    {
+      AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) instr;
+      fprintf(stderr, "%%%i = new frame %%%i { ", asoi->target_slot, asoi->parent_slot);
+      for (int i = 0; i < asoi->info_len; ++i) {
+        StaticFieldInfo *info = &asoi->info_ptr[i];
+        fprintf(stderr, "%.*s = %%%i (&%i); ",
+                info->name_len, info->name_ptr, info->slot, info->refslot);
+      }
+      fprintf(stderr, "}\n");
+      *instr_p = (Instr*) (asoi + 1);
+      break;
+    }
     default:
       fprintf(stderr, "    unknown instruction: %i\n", instr->type);
       abort();
