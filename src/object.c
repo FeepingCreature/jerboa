@@ -170,7 +170,6 @@ char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *va
   return NULL;
 }
 
-char *get_type_info(VMState*, Object*);
 // returns error or null
 char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint) {
   assert(obj != NULL);

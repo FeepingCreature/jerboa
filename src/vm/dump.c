@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-void dump_instr(Instr **instr_p) {
+void dump_instr(VMState *state, Instr **instr_p) {
   Instr *instr = *instr_p;
   // fprintf(stderr, "%p", (void*) instr);
   fprintf(stderr, "    ");
@@ -168,8 +168,10 @@ void dump_instr(Instr **instr_p) {
       fprintf(stderr, "%%%i = new frame %%%i { ", asoi->target_slot, asoi->parent_slot);
       for (int i = 0; i < asoi->info_len; ++i) {
         StaticFieldInfo *info = &asoi->info_ptr[i];
-        fprintf(stderr, "%.*s = %%%i (&%i); ",
-                info->name_len, info->name_ptr, info->slot, info->refslot);
+        char *infostr = "";
+        if (info->constraint) infostr = get_type_info(state, info->constraint);
+        fprintf(stderr, "%.*s %s%s = %%%i (&%i); ",
+                info->name_len, info->name_ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
       fprintf(stderr, "}\n");
       *instr_p = (Instr*) (asoi + 1);
@@ -182,7 +184,7 @@ void dump_instr(Instr **instr_p) {
   }
 }
 
-void dump_fn(UserFunction *fn) {
+void dump_fn(VMState *state, UserFunction *fn) {
   UserFunction **other_fns_ptr = NULL; int other_fns_len = 0;
   
   FunctionBody *body = &fn->body;
@@ -196,7 +198,7 @@ void dump_fn(UserFunction *fn) {
         other_fns_ptr = realloc(other_fns_ptr, sizeof(UserFunction*) * ++other_fns_len);
         other_fns_ptr[other_fns_len - 1] = ((AllocClosureObjectInstr*) instr)->fn;
       }
-      dump_instr(&instr);
+      dump_instr(state, &instr);
     }
     fprintf(stderr, "  ]\n");
   }
@@ -204,7 +206,7 @@ void dump_fn(UserFunction *fn) {
   
   for (int i = 0; i < other_fns_len; ++i) {
     fprintf(stderr, " ---\n");
-    dump_fn(other_fns_ptr[i]);
+    dump_fn(state, other_fns_ptr[i]);
   }
   free(other_fns_ptr);
 }

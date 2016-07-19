@@ -143,6 +143,8 @@ Object *obj_instance_of(Object *obj, Object *proto);
 
 Object *obj_instance_of_or_equal(Object *obj, Object *proto);
 
+char *get_type_info(VMState*, Object*);
+
 typedef void (*VMFunctionPointer)(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
 
 typedef struct {

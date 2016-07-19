@@ -3,8 +3,8 @@
 
 #include "object.h"
 
-void dump_instr(Instr **instr);
+void dump_instr(VMState *, Instr **instr);
 
-void dump_fn(UserFunction *fn);
+void dump_fn(VMState *, UserFunction *fn);
 
 #endif

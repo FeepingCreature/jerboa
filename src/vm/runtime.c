@@ -907,6 +907,7 @@ static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args
 
 char *get_type_info(VMState *state, Object *obj) {
   if (obj == NULL) return "null";
+  if (!state) return my_asprintf("%p", (void*) obj);
   if (obj == state->shared->vcache.int_base) return "int";
   if (obj == state->shared->vcache.bool_base) return "bool";
   if (obj == state->shared->vcache.float_base) return "float";

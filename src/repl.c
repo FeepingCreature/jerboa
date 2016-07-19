@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     ParseResult res = parse_module(&line, &line_fn);
     if (res == PARSE_ERROR) continue;
     assert(res == PARSE_OK);
-    dump_fn(line_fn);
+    dump_fn(&vmstate, line_fn);
     call_function(&vmstate, root, line_fn, NULL, 0);
     vm_run(&vmstate);
     if (vmstate.runstate == VM_ERRORED) {

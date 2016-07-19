@@ -60,19 +60,20 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   }
 }
 
-static void find_constant_slots(UserFunction *uf, Object ***slots_p) {
-  *slots_p = calloc(sizeof(Object*), uf->slots);
+static Object **find_constant_slots(UserFunction *uf) {
+  Object **slots = calloc(sizeof(Object*), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
     Instr *instr = block->instrs_ptr;
     while (instr != block->instrs_ptr_end) {
       if (instr->type == INSTR_SET_SLOT) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
-        (*slots_p)[ssi->target_slot] = ssi->value;
+        slots[ssi->target_slot] = ssi->value;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
   }
+  return slots;
 }
 
 typedef struct {
@@ -113,8 +114,7 @@ int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_pt
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
   
-  Object **constant_slots;
-  find_constant_slots(uf, &constant_slots);
+  Object **constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
@@ -528,8 +528,8 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             slot_live[scons_instr->obj_slot] = slot_live[scons_instr->constraint_slot] = true;
           CASE(INSTR_CALL, CallInstr, call_instr)
             slot_live[call_instr->function_slot] = slot_live[call_instr->this_slot] = true;
-            for (int i = 0; i < call_instr->args_length; ++i) {
-              slot_live[call_instr->args_ptr[i]] = true;
+            for (int k = 0; k < call_instr->args_length; ++k) {
+              slot_live[call_instr->args_ptr[k]] = true;
             }
           CASE(INSTR_RETURN, ReturnInstr, return_instr)
             slot_live[return_instr->ret_slot] = true;
@@ -550,6 +550,9 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             slot_live[rri->target_slot] = true;
           CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr, wri)
             slot_live[wri->source_slot] = true;
+          CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr, asoi)
+            for (int k = 0; k < asoi->info_len; ++k)
+              slot_live[asoi->info_ptr[k].slot] = true;
           CASE(INSTR_LAST, Instr, _instr) (void) _stepsize; abort();
         } break;
         default: assert("Unhandled Instruction Type!" && false);
@@ -807,6 +810,8 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
   
+  Object **constant_slots = find_constant_slots(uf);
+  
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
@@ -867,6 +872,23 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
           }
         }
         if (!failed) {
+          while (instr_reading != instr_end && instr_reading->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
+            SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr_reading;
+            
+            if (scski->obj_slot != alobi->target_slot) break;
+            if (!constant_slots[scski->constraint_slot]) break; // TODO emit, then keep looking for a bit
+            
+            for (int k = 0; k < info_len; ++k) {
+              StaticFieldInfo *info = &info_ptr[k];
+              if (info->name_len == scski->key_len && strncmp(info->name_ptr, scski->key_ptr, info->name_len) == 0) {
+                if (info->constraint) abort(); // wat wat wat
+                info->constraint = constant_slots[scski->constraint_slot];
+                refslots_set ++;
+              }
+            }
+            
+            instr_reading = (Instr*) (scski + 1);
+          }
           Object *sample_obj = (Object*) cache_alloc(sizeof(Object));
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
@@ -908,7 +930,6 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   uf = inline_static_lookups_to_constants(state, uf, context);
   
   uf = access_vars_via_refslots(uf);
-  uf = remove_dead_slot_writes(uf);
   
   {
     CFG cfg;
@@ -942,8 +963,9 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     cfg_destroy(&cfg);
   }
   
-  // must be last!
+  // must be late!
   uf = fuse_static_object_alloc(uf);
+  uf = remove_dead_slot_writes(uf);
   
   if (uf->name) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);

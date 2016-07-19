@@ -237,6 +237,8 @@ typedef struct {
   int name_len;
   size_t name_hash;
   
+  Object *constraint;
+  
   int slot;
   int refslot;
 } StaticFieldInfo;

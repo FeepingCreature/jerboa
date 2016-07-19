@@ -197,7 +197,8 @@ void log_parser_error(char *location, char *format, ...) {
     va_end(ap);
     
     fprintf(stderr, "\n");
-    fprintf(stderr, "%.*s", (int) (line.end - line.start), line.start);
+    if (*(line.end - 1) == '\n') line.end --;
+    fprintf(stderr, "%.*s\n", (int) (line.end - line.start), line.start);
     int utf8_col = utf8_strnlen(line.start, col);
     int utf8_line_len = utf8_strnlen(line.start, line.end - line.start);
     for (int i = 0; i < utf8_line_len; ++i) {

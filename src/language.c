@@ -883,7 +883,6 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   
   use_range_start(builder, assign_value);
   addinstr_assign(builder, var_scope, varname_slot, value, ASSIGN_EXISTING);
-  if (isconst) addinstr_freeze_object(builder, var_scope);
   use_range_end(builder, assign_value);
   
   if (constraint_slot != -1) {
@@ -891,6 +890,10 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     addinstr_set_constraint(builder, var_scope, varname_slot, constraint_slot);
     use_range_end(builder, define_constraint);
   }
+  
+  use_range_start(builder, assign_value);
+  if (isconst) addinstr_freeze_object(builder, var_scope);
+  use_range_end(builder, assign_value);
   
   // var a, b;
   if (eat_string(&text, ",")) {
