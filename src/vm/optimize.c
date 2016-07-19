@@ -1,5 +1,7 @@
 #include "vm/optimize.h"
 
+#include <stdio.h>
+
 #include "vm/builder.h"
 #include "gc.h"
 
@@ -60,12 +62,17 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
 typedef struct {
   bool static_object;
   int parent_slot;
-  char **names_ptr; int names_len;
+  
+  int fields_len;
+  char **names_ptr;
+  Object **constraints_ptr;
+  Instr **constraint_imposed_here_ptr;
+  
   FileRange *belongs_to;
+  int context_slot;
   Instr *after_object_decl;
 } SlotIsStaticObjInfo;
 
-#include <stdio.h>
 #include "vm/dump.h"
 
 // static object: allocated, assigned a few keys, and closed.
@@ -84,19 +91,14 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
         instr = (Instr*) (alobi + 1);
         bool failed = false;
-        char **names_ptr = 0; int names_len = 0;
+        char **names_ptr = 0; int fields_len = 0;
         while (instr != instr_end) {
           if (instr->type == INSTR_ASSIGN_STRING_KEY) {
             AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
             if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
             instr = (Instr*) (aski + 1);
-            names_ptr = realloc(names_ptr, sizeof(char*) * ++names_len);
-            names_ptr[names_len - 1] = aski->key;
-          } else if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
-            SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
-            for (int k = 0; k < names_len; ++k) {
-            }
-            instr = (Instr*) (scski + 1);
+            names_ptr = realloc(names_ptr, sizeof(char*) * ++fields_len);
+            names_ptr[fields_len - 1] = aski->key;
           } else if (instr->type == INSTR_CLOSE_OBJECT) {
             break;
           } else {
@@ -112,8 +114,10 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         int target_slot = alobi->target_slot;
         (*slots_p)[target_slot].static_object = true;
         (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
+        (*slots_p)[target_slot].fields_len = fields_len;
         (*slots_p)[target_slot].names_ptr = names_ptr;
-        (*slots_p)[target_slot].names_len = names_len;
+        (*slots_p)[target_slot].constraints_ptr = calloc(sizeof(Object*), fields_len);
+        (*slots_p)[target_slot].constraint_imposed_here_ptr = calloc(sizeof(Instr*), fields_len);
         (*slots_p)[target_slot].belongs_to = instr->belongs_to;
         (*slots_p)[target_slot].context_slot = instr->context_slot;
         
@@ -158,7 +162,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           int obj_slot = aski_new->obj_slot;
           if (!info[obj_slot].static_object) break;
           bool key_in_obj = false;
-          for (int k = 0; k < info[obj_slot].names_len; ++k) {
+          for (int k = 0; k < info[obj_slot].fields_len; ++k) {
             char *objkey = info[obj_slot].names_ptr[k];
             if (strcmp(objkey, aski_new->key_ptr) == 0) {
               key_in_obj = true;
@@ -200,7 +204,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
     int k = 0;
     for (int i = 0; i < uf->slots; ++i) if (info[i].static_object) {
       info_slots_ptr[k++] = i;
-      ref_slots_ptr[i] = malloc(sizeof(int) * info[i].names_len);
+      ref_slots_ptr[i] = malloc(sizeof(int) * info[i].fields_len);
     }
   }
   
@@ -226,7 +230,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         if (instr == info[slot].after_object_decl) {
           use_range_start(builder, info[slot].belongs_to);
           builder->scope = info[slot].context_slot;
-          for (int l = 0; l < info[slot].names_len; ++l) {
+          for (int l = 0; l < info[slot].fields_len; ++l) {
             ref_slots_ptr[slot][l] = addinstr_def_refslot(builder, slot, info[slot].names_ptr[l]);
           }
           use_range_end(builder, info[slot].belongs_to);
@@ -240,7 +244,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         char *key = aski->key_ptr;
         if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
           bool continue_outer = false;
-          for (int k = 0; k < info[obj_slot].names_len; ++k) {
+          for (int k = 0; k < info[obj_slot].fields_len; ++k) {
             char *name = info[obj_slot].names_ptr[k];
             if (strcmp(key, name) == 0) {
               int refslot = ref_slots_ptr[obj_slot][k];
@@ -263,7 +267,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         char *key = aski->key;
         if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
           bool continue_outer = false;
-          for (int k = 0; k < info[obj_slot].names_len; ++k) {
+          for (int k = 0; k < info[obj_slot].fields_len; ++k) {
             char *name = info[obj_slot].names_ptr[k];
             if (strcmp(key, name) == 0) {
               int refslot = ref_slots_ptr[obj_slot][k];

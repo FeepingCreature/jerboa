@@ -1269,17 +1269,21 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
     }
   }
   
+  int *argname_slots = malloc(sizeof(int) * arg_list_len);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
   for (int i = 0; i < arg_list_len; ++i) {
-    int argname_slot = addinstr_alloc_string_object(builder, arg_list_ptr[i]);
-    addinstr_assign(builder, builder->scope, argname_slot, 2 + i, ASSIGN_PLAIN);
-    if (type_constraints_ptr[i]) {
-      addinstr_set_constraint(builder, builder->scope, argname_slot, constraint_slots[i]);
-    }
+    argname_slots[i] = addinstr_alloc_string_object(builder, arg_list_ptr[i]);
+    addinstr_assign(builder, builder->scope, argname_slots[i], 2 + i, ASSIGN_PLAIN);
   }
   addinstr_close_object(builder, builder->scope);
+  for (int i = 0; i < arg_list_len; ++i) {
+    if (type_constraints_ptr[i]) {
+      addinstr_set_constraint(builder, builder->scope, argname_slots[i], constraint_slots[i]);
+    }
+  }
   use_range_end(builder, fnframe_range);
   free(constraint_slots);
+  free(argname_slots);
   
   ParseResult res = parse_block(textp, builder, true);
   if (res == PARSE_ERROR) {

@@ -50,7 +50,7 @@ int new_block(FunctionBuilder *builder) {
 
 void terminate(FunctionBuilder *builder) {
   // terminate with "return null"
-  addinstr_return(builder, builder->slot_base++);
+  addinstr_return(builder, 0);
 }
 
 void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
