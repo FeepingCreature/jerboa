@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "vm/builder.h"
+#include "vm/cfg.h"
 #include "gc.h"
 
 // mark slots whose value is only
@@ -544,6 +545,38 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   // moved here because it can be kind of expensive due to lazy coding, and I'm too lazy to fix it
   uf = access_vars_via_refslots(uf);
   uf = inline_static_lookups_to_constants(state, uf, context);
+  {
+    CFG cfg;
+    cfg_build(&cfg, uf);
+    
+    RPost2Node rpost2node = cfg_get_reverse_postorder(&cfg);
+    Node2RPost node2rpost = cfg_invert_rpost(&cfg, rpost2node);
+    if (cfg.nodes_len > 1) {
+      fprintf(stderr, "cfg reverse postorder: ");
+      for (int i = 0; i < cfg.nodes_len; ++i) {
+        fprintf(stderr, "%i ", node2rpost.ptr[i]);
+      }
+      fprintf(stderr, "\n");
+    }
+    int *sfidoms_ptr;
+    cfg_build_sfidom_list(&cfg, rpost2node, node2rpost, &sfidoms_ptr);
+    free(rpost2node.ptr);
+    free(node2rpost.ptr);
+    
+    if (cfg.nodes_len > 1) {
+      fprintf(stderr, "cfg dominance field: ");
+      for (int i = 0; i < cfg.nodes_len; ++i) {
+        fprintf(stderr, "%i ", sfidoms_ptr[i]);
+      }
+      fprintf(stderr, "\n");
+    }
+    free(sfidoms_ptr);
+    if (cfg.nodes_len > 2) {
+      cfg_dump("cfg.dot", &cfg);
+      // abort();
+    }
+    cfg_destroy(&cfg);
+  }
   
   if (uf->name) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);
