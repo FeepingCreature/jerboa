@@ -467,6 +467,113 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
   return NULL; // no hits.
 }
 
+static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
+  bool *slot_live = calloc(sizeof(bool), uf->slots);
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+#define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
+        case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
+      switch (instr->type) {
+        // mark all slots that are accessed in an instr other than INSTR_WRITE_SLOT
+        case INSTR_INVALID: { abort(); int _stepsize = -1;
+          CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
+            slot_live[get_root_instr->slot] = true;
+          CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr, alloc_obj_instr)
+            slot_live[alloc_obj_instr->parent_slot] = true;
+          CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr, alloc_int_obj_instr)
+            slot_live[alloc_int_obj_instr->target_slot] = true;
+          CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr, alloc_float_obj_instr)
+            slot_live[alloc_float_obj_instr->target_slot] = true;
+          CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr, alloc_array_obj_instr)
+            slot_live[alloc_array_obj_instr->target_slot] = true;
+          CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr, alloc_string_obj_instr)
+            slot_live[alloc_string_obj_instr->target_slot] = true;
+          CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr, alloc_closure_obj_instr)
+            slot_live[alloc_closure_obj_instr->target_slot] = slot_live[alloc_closure_obj_instr->base.context_slot] = true;
+          CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr, close_obj_instr)
+            slot_live[close_obj_instr->slot] = true;
+          CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr, freeze_obj_instr)
+            slot_live[freeze_obj_instr->slot] = true;
+          CASE(INSTR_ACCESS, AccessInstr, access_instr)
+            slot_live[access_instr->obj_slot] = slot_live[access_instr->key_slot]
+              = slot_live[access_instr->target_slot] = true;
+          CASE(INSTR_ASSIGN, AssignInstr, assign_instr)
+            slot_live[assign_instr->obj_slot] = slot_live[assign_instr->key_slot]
+              = slot_live[assign_instr->value_slot] = true;
+          // TODO inline key?
+          CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr, kio)
+            slot_live[kio->key_slot] = slot_live[kio->obj_slot]
+              = slot_live[kio->target_slot] = true;
+          CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr, scons_instr)
+            slot_live[scons_instr->obj_slot] = slot_live[scons_instr->constraint_slot] = true;
+          CASE(INSTR_CALL, CallInstr, call_instr)
+            slot_live[call_instr->function_slot] = slot_live[call_instr->this_slot] = true;
+            for (int i = 0; i < call_instr->args_length; ++i) {
+              slot_live[call_instr->args_ptr[i]] = true;
+            }
+          CASE(INSTR_RETURN, ReturnInstr, return_instr)
+            slot_live[return_instr->ret_slot] = true;
+          CASE(INSTR_SAVE_RESULT, SaveResultInstr, save_result_instr)
+          CASE(INSTR_BR, BranchInstr, branch_instr)
+          CASE(INSTR_TESTBR, TestBranchInstr, test_branch_instr)
+            slot_live[test_branch_instr->test_slot] = true;
+          CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr, aski)
+            slot_live[aski->obj_slot] = slot_live[aski->target_slot] = true;
+          CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr, aski)
+            slot_live[aski->obj_slot] = slot_live[aski->value_slot] = true;
+          CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr, scski)
+            slot_live[scski->constraint_slot] = slot_live[scski->obj_slot] = true;
+          CASE(INSTR_SET_SLOT, SetSlotInstr, ssi)
+          CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr, dri)
+            slot_live[dri->obj_slot] = true;
+          CASE(INSTR_READ_REFSLOT, ReadRefslotInstr, rri)
+            slot_live[rri->target_slot] = true;
+          CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr, wri)
+            slot_live[wri->source_slot] = true;
+          CASE(INSTR_LAST, Instr, _instr) (void) _stepsize; abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+      }
+#undef CASE
+    }
+  }
+  
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->block_terminated = true;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    new_block(builder);
+    
+    Instr *instr = block->instrs_ptr;
+    Instr *instr_end = block->instrs_ptr_end;
+    while (instr != instr_end) {
+      bool add = true;
+      if (instr->type == INSTR_SET_SLOT) {
+        SetSlotInstr *ssi = (SetSlotInstr*) instr;
+        if (!slot_live[ssi->target_slot]) {
+          add = false;
+          // fprintf(stderr, "skip set %s\n", ssi->opt_info);
+        }
+      }
+      if (instr->type == INSTR_SAVE_RESULT) {
+        SaveResultInstr *sri = (SaveResultInstr*) instr;
+        if (!slot_live[sri->target_slot]) {
+          add = false;
+        }
+      }
+      if (add) addinstr_like(builder, instr, instr_size(instr), instr);
+      
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
 bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later);
 
 UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context) {
@@ -691,6 +798,8 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   uf = inline_static_lookups_to_constants(state, uf, context);
   
   uf = access_vars_via_refslots(uf);
+  uf = remove_dead_slot_writes(uf);
+  
   {
     CFG cfg;
     cfg_build(&cfg, uf);
