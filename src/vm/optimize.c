@@ -51,7 +51,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_BR, BranchInstr, branch_instr)
           CASE(INSTR_TESTBR, TestBranchInstr, test_branch_instr)
             slots[test_branch_instr->test_slot] = false;
-          instr = (Instr*) ((char*) instr + _stepsize);
+          CASE(INSTR_LAST, Instr, _instr) (void) _stepsize; abort();
         } break;
         default: assert("Unhandled Instruction Type!" && false);
       }
@@ -60,25 +60,61 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   }
 }
 
+static void find_constant_slots(UserFunction *uf, Object ***slots_p) {
+  *slots_p = calloc(sizeof(Object*), uf->slots);
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+      if (instr->type == INSTR_SET_SLOT) {
+        SetSlotInstr *ssi = (SetSlotInstr*) instr;
+        (*slots_p)[ssi->target_slot] = ssi->value;
+      }
+      instr = (Instr*)((char*) instr + instr_size(instr));
+    }
+  }
+}
+
+typedef struct {
+  int constraint_len;
+  Object **constraint_ptr;
+  Instr **constraint_imposed_here_ptr;
+} ConstraintInfo;
+
 typedef struct {
   bool static_object;
   int parent_slot;
   
   int fields_len;
   char **names_ptr;
-  Object **constraints_ptr;
-  Instr **constraint_imposed_here_ptr;
+  ConstraintInfo *constraints_ptr;
   
   FileRange *belongs_to;
   int context_slot;
   Instr *after_object_decl;
 } SlotIsStaticObjInfo;
 
+int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_ptr) {
+  assert(rec->static_object);
+  int field = -1;
+  for (int k = 0; k < rec->fields_len; ++k) {
+    int field_len = strlen(rec->names_ptr[k]);
+    if (field_len == name_len && strncmp(rec->names_ptr[k], name_ptr, name_len) == 0) {
+      field = k;
+      break;
+    }
+  }
+  return field;
+}
+
 #include "vm/dump.h"
 
 // static object: allocated, assigned a few keys, and closed.
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
+  
+  Object **constant_slots;
+  find_constant_slots(uf, &constant_slots);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
@@ -117,13 +153,38 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
         (*slots_p)[target_slot].fields_len = fields_len;
         (*slots_p)[target_slot].names_ptr = names_ptr;
-        (*slots_p)[target_slot].constraints_ptr = calloc(sizeof(Object*), fields_len);
-        (*slots_p)[target_slot].constraint_imposed_here_ptr = calloc(sizeof(Instr*), fields_len);
+        (*slots_p)[target_slot].constraints_ptr = calloc(sizeof(ConstraintInfo), fields_len);
         (*slots_p)[target_slot].belongs_to = instr->belongs_to;
         (*slots_p)[target_slot].context_slot = instr->context_slot;
         
         instr = (Instr*)((CloseObjectInstr*) instr + 1);
         (*slots_p)[target_slot].after_object_decl = instr;
+        continue;
+      }
+      instr = (Instr*)((char*) instr + instr_size(instr));
+    }
+  }
+  
+  // gather all constraints
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *block = &uf->body.blocks_ptr[i];
+    Instr *instr = block->instrs_ptr;
+    while (instr != block->instrs_ptr_end) {
+      if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
+        SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
+        Object *constraint = constant_slots[scski->constraint_slot];
+        SlotIsStaticObjInfo *rec = &(*slots_p)[scski->obj_slot];
+        
+        if (constraint && rec->static_object) {
+          int field = static_info_find_field(rec, scski->key_len, scski->key_ptr);
+          assert(field != -1); // wat, object was closed and we set a constraint on a field that doesn't exist??
+          ConstraintInfo *info = &rec->constraints_ptr[field];
+          info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
+          info->constraint_ptr[info->constraint_len - 1] = constraint;
+          info->constraint_imposed_here_ptr = realloc(info->constraint_imposed_here_ptr, sizeof(Instr*) * info->constraint_len);
+          info->constraint_imposed_here_ptr[info->constraint_len - 1] = instr;
+        }
+        instr = (Instr*) (scski + 1);
         continue;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
@@ -145,8 +206,6 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   slot_is_static_object(uf, &info);
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 1;
-  builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
@@ -155,22 +214,15 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
     
     Instr *instr = block->instrs_ptr;
     while (instr != block->instrs_ptr_end) {
-      AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         AccessStringKeyInstr *aski_new = malloc(sizeof(AccessStringKeyInstr));
         *aski_new = *aski;
         while (true) {
           int obj_slot = aski_new->obj_slot;
           if (!info[obj_slot].static_object) break;
-          bool key_in_obj = false;
-          for (int k = 0; k < info[obj_slot].fields_len; ++k) {
-            char *objkey = info[obj_slot].names_ptr[k];
-            if (strcmp(objkey, aski_new->key_ptr) == 0) {
-              key_in_obj = true;
-              break;
-            }
-          }
-          if (key_in_obj) break;
+          int field = static_info_find_field(&info[obj_slot], aski->key_len, aski->key_ptr);
+          if (field != -1) break;
           // since the key was not found in obj
           // we can know statically that the lookup will
           // not succeed at runtime either
@@ -210,7 +262,6 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
   }
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 1;
   builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
@@ -306,8 +357,6 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
 
 static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 1;
-  builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
   char **slot_table_ptr = NULL;
@@ -418,16 +467,39 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
   return NULL; // no hits.
 }
 
+bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later);
+
 UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context) {
+  SlotIsStaticObjInfo *static_info;
+  slot_is_static_object(uf, &static_info);
+  CFG cfg;
+  cfg_build(&cfg, uf);
+  
+  RPost2Node rpost2node = cfg_get_reverse_postorder(&cfg);
+  Node2RPost node2rpost = cfg_invert_rpost(&cfg, rpost2node);
+  int *sfidoms_ptr = cfg_build_sfidom_list(&cfg, rpost2node, node2rpost);
+  
+  Object *int_base = state->shared->vcache.int_base;
+  Object *float_base = state->shared->vcache.float_base;
+  
   bool *object_known = calloc(sizeof(bool), uf->slots);
   Object **known_objects_table = calloc(sizeof(Object*), uf->slots);
   object_known[1] = true;
   known_objects_table[1] = context;
+  
+  ConstraintInfo **slot_constraints = calloc(sizeof(ConstraintInfo*), uf->slots);
+  
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     InstrBlock *block = &uf->body.blocks_ptr[i];
     Instr *instr = block->instrs_ptr;
     Instr *instr_end = block->instrs_ptr_end;
     while (instr != instr_end) {
+      if (instr->type == INSTR_SET_SLOT) {
+        SetSlotInstr *ssi = (SetSlotInstr*) instr;
+        object_known[ssi->target_slot] = true;
+        known_objects_table[ssi->target_slot] = ssi->value;
+      }
+      
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         if (object_known[aski->obj_slot]) {
@@ -441,14 +513,46 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
             known_objects_table[aski->target_slot] = static_lookup;
           }
         }
+        
+        SlotIsStaticObjInfo *rec = &static_info[aski->obj_slot];
+        if (rec->static_object) {
+          int field = static_info_find_field(rec, aski->key_len, aski->key_ptr);
+          assert(field != -1);
+          slot_constraints[aski->target_slot] = &rec->constraints_ptr[field];
+        }
+        
+        if (slot_constraints[aski->obj_slot]) {
+          ConstraintInfo *constraints = slot_constraints[aski->obj_slot];
+          int num_dominant = 0;
+          // fprintf(stderr, "typed object go! %i constraints\n", constraints->constraint_len);
+          for (int k = 0; k < constraints->constraint_len; ++k) {
+            Object *constraint = constraints->constraint_ptr[k];
+            Instr *location = constraints->constraint_imposed_here_ptr[k];
+            if (constraint == int_base || constraint == float_base) { // primitives, always closed
+              if (dominates(uf, &cfg, node2rpost, sfidoms_ptr, location, instr)) {
+                object_known[aski->target_slot] = true;
+                bool key_found = false;
+                known_objects_table[aski->target_slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
+                if (!key_found) {
+                  fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", aski->key_len, aski->key_ptr);
+                  abort();
+                }
+                num_dominant ++;
+              }
+            }
+          }
+          assert(num_dominant <= 1);
+        }
       }
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
+  cfg_destroy(&cfg);
+  free(rpost2node.ptr);
+  free(node2rpost.ptr);
+  free(sfidoms_ptr);
   
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->slot_base = 1;
-  builder->refslot_base = uf->refslots;
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
@@ -486,7 +590,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         replace_with_ssi = true;
         obj = alloc_float(state, afoi->value);
         gc_add_perm(state, obj);
-        opt_info = my_asprintf("inlined alloc_float %i", afoi->value);
+        opt_info = my_asprintf("inlined alloc_float %f", afoi->value);
         target_slot = afoi->target_slot;
       }
       
@@ -535,6 +639,45 @@ UserFunction *optimize(UserFunction *uf) {
   return uf;
 }
 
+// does earlier dominate later?
+// note: if this is too slow, make a struct InstrLocation { int block; Instr *instr; }
+bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later) {
+  int blk_earlier = -1, blk_later = -1;
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    InstrBlock *blk = &uf->body.blocks_ptr[i];
+    if (earlier >= blk->instrs_ptr && earlier < blk->instrs_ptr_end) {
+      blk_earlier = i;
+    }
+    if (later >= blk->instrs_ptr && later < blk->instrs_ptr_end) {
+      blk_later = i;
+    }
+    if (blk_earlier != -1 && blk_later != -1) break;
+  }
+  if (blk_earlier == -1) {
+    fprintf(stderr, "start instr not in function\n");
+    abort();
+  }
+  if (blk_later == -1) {
+    fprintf(stderr, "end instr not in function\n");
+    abort();
+  }
+  if (blk_earlier == blk_later) {
+    return earlier <= later;
+  }
+  // is blk_earlier in blk_later's dominance set?
+  
+  if (node2rpost.ptr[blk_earlier] == -1 || node2rpost.ptr[blk_later] == -1) {
+    return false;
+  }
+  // run the intersect algo from sfidom partially
+  int current = blk_later;
+  while (node2rpost.ptr[current] > node2rpost.ptr[blk_earlier]) {
+    current = sfidoms_ptr[current];
+  }
+  // otherwise blk_earlier's dom set is not a prefix of ours - ie. it doesn't dominate us
+  return current == blk_earlier;
+}
+
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
   /*
   printf("runtime optimize %s with %p\n", uf->name, (void*) context);
@@ -543,8 +686,11 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   */
   
   // moved here because it can be kind of expensive due to lazy coding, and I'm too lazy to fix it
-  uf = access_vars_via_refslots(uf);
   uf = inline_static_lookups_to_constants(state, uf, context);
+  // run a second time, to pick up accesses on objects that just now became statically known
+  uf = inline_static_lookups_to_constants(state, uf, context);
+  
+  uf = access_vars_via_refslots(uf);
   {
     CFG cfg;
     cfg_build(&cfg, uf);
@@ -558,8 +704,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
       }
       fprintf(stderr, "\n");
     }
-    int *sfidoms_ptr;
-    cfg_build_sfidom_list(&cfg, rpost2node, node2rpost, &sfidoms_ptr);
+    int *sfidoms_ptr = cfg_build_sfidom_list(&cfg, rpost2node, node2rpost);
     free(rpost2node.ptr);
     free(node2rpost.ptr);
     

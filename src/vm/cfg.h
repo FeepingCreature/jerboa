@@ -34,6 +34,6 @@ RPost2Node cfg_get_reverse_postorder(CFG *cfg);
 
 Node2RPost cfg_invert_rpost(CFG *cfg, RPost2Node rpost2node);
 
-void cfg_build_sfidom_list(CFG *cfg, RPost2Node rpost2node, Node2RPost node2rpost, int **sfidoms_ptr_p);
+int *cfg_build_sfidom_list(CFG *cfg, RPost2Node rpost2node, Node2RPost node2rpost);
 
 #endif

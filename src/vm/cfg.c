@@ -72,7 +72,7 @@ Node2RPost cfg_invert_rpost(CFG *cfg, RPost2Node rpost2node) {
 }
 
 // Thank you https://www.cs.rice.edu/~keith/EMBED/dom.pdf !
-void cfg_build_sfidom_list(CFG *cfg, RPost2Node rpost2node, Node2RPost node2rpost, int **sfidoms_ptr_p) {
+int *cfg_build_sfidom_list(CFG *cfg, RPost2Node rpost2node, Node2RPost node2rpost) {
   // indexed in block order, not reverse post order!
   RPostId *sfidoms = malloc(sizeof(int) * rpost2node.len);
   for (int i = 0; i < rpost2node.len; ++i) {
@@ -112,9 +112,9 @@ void cfg_build_sfidom_list(CFG *cfg, RPost2Node rpost2node, Node2RPost node2rpos
   for (int i = 0; i < rpost2node.len; ++i) {
     sfidoms_nodes[rpost2node.ptr[i]] = rpost2node.ptr[sfidoms[i]];
   }
-  *sfidoms_ptr_p = sfidoms_nodes;
   
   free(sfidoms);
+  return sfidoms_nodes;
 }
 
 #undef NodeId
@@ -131,10 +131,9 @@ void cfg_dump(char *file, CFG *cfg) {
       fprintf(fd, "  Node%i -> Node%i;\n", i, cfg->nodes_ptr[i].succ_ptr[k]);
     }
   }
-  int *sfidoms_ptr;
   RPost2Node rpost2node = cfg_get_reverse_postorder(cfg);
   Node2RPost node2rpost = cfg_invert_rpost(cfg, rpost2node);
-  cfg_build_sfidom_list(cfg, rpost2node, node2rpost, &sfidoms_ptr);
+  int *sfidoms_ptr = cfg_build_sfidom_list(cfg, rpost2node, node2rpost);
   free(rpost2node.ptr);
   free(node2rpost.ptr);
   
