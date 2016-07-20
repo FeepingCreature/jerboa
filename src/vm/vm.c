@@ -9,7 +9,7 @@
 
 const long long sample_stepsize = 200000LL; // 0.2ms
 
-void *vm_stack_alloc(VMState *state, int size) {
+static void *vm_stack_alloc_internal(VMState *state, int size) {
   VMSharedState *shared = state->shared;
   if (UNLIKELY(shared->stack_data_len == 0)) {
     shared->stack_data_len = 16*1024*1024;
@@ -22,8 +22,17 @@ void *vm_stack_alloc(VMState *state, int size) {
   }
   void *ptr = (char*) shared->stack_data_ptr + shared->stack_data_offset;
   shared->stack_data_offset = new_offset;
-  bzero(ptr, size);
   return ptr;
+}
+
+void *vm_stack_alloc(VMState *state, int size) {
+  void *res = vm_stack_alloc_internal(state, size);
+  bzero(res, size);
+  return res;
+}
+
+void *vm_stack_alloc_uninitialized(VMState *state, int size) {
+  return vm_stack_alloc_internal(state, size);
 }
 
 void vm_stack_free(VMState *state, void *ptr, int size) {
@@ -45,12 +54,14 @@ void vm_alloc_frame(VMState *state, int slots, int refslots) {
   }
   
   cf->refslots_len = refslots;
-  cf->refslots_ptr = vm_stack_alloc(state, sizeof(Object**) * refslots);
+  cf->refslots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Object**) * refslots);
   if (!cf->refslots_ptr) { // stack overflow
     vm_stack_free(state, cf->slots_ptr, sizeof(Object*) * slots);
     vm_stack_free(state, cf, sizeof(Callframe));
     return;
   }
+  // no need to zero refslots, as they're not gc'd
+  
   state->frame = cf;
 }
 
@@ -662,14 +673,11 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   VM_ASSERT2_SLOT(test_slot < state->cf->slots_len, "slot numbering error");
   Object *test_value = state->cf->slots_ptr[test_slot];
   
-  Object *b_test_value = obj_instance_of(test_value, state->reststate->shared->vcache.bool_base);
-  Object *i_test_value = obj_instance_of(test_value, state->reststate->shared->vcache.int_base);
-  
   bool test = false;
-  if (b_test_value) {
-    if (((BoolObject*) b_test_value)->value == true) test = true;
-  } else if (i_test_value) {
-    if (((IntObject*) i_test_value)->value != 0) test = true;
+  if (test_value->parent == state->reststate->shared->vcache.bool_base) {
+    if (((BoolObject*) test_value)->value == true) test = true;
+  } else if (test_value->parent ==  state->reststate->shared->vcache.int_base) {
+    if (((IntObject*) test_value)->value != 0) test = true;
   } else {
     test = test_value != NULL;
   }

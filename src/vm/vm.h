@@ -7,6 +7,8 @@
 
 void *vm_stack_alloc(VMState *state, int size);
 
+void *vm_stack_alloc_uninitialized(VMState *state, int size);
+
 void vm_stack_free(VMState *state, void *ptr, int size);
 
 void vm_alloc_frame(VMState *state, int slots, int refslots);
