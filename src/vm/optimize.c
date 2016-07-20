@@ -233,16 +233,15 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
         AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
         if (aski->type == ASSIGN_EXISTING) {
           // TODO remove all the instr mallocs
-          AssignStringKeyInstr *aski_new = malloc(sizeof(AssignStringKeyInstr));
-          *aski_new = *aski;
+          AssignStringKeyInstr aski_new = *aski;
           while (true) {
-            int obj_slot = aski_new->obj_slot;
+            int obj_slot = aski_new.obj_slot;
             if (!info[obj_slot].static_object) break;
             int field = static_info_find_field(&info[obj_slot], strlen(aski->key), aski->key);
             if (field != -1) break; // key was found, we're at the right object
-            aski_new->obj_slot = info[obj_slot].parent_slot;
+            aski_new.obj_slot = info[obj_slot].parent_slot;
           }
-          addinstr_like(builder, instr, sizeof(*aski_new), (Instr*) aski_new);
+          addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
           instr = (Instr*) (aski + 1);
           continue;
         }
@@ -400,40 +399,45 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
       if (instr->type == INSTR_ACCESS
         && acci->key_slot < slot_table_len && slot_table_ptr[acci->key_slot] != NULL)
       {
-        AccessStringKeyInstr *aski = malloc(sizeof(AccessStringKeyInstr));
-        aski->base.type = INSTR_ACCESS_STRING_KEY;
-        aski->obj_slot = acci->obj_slot;
-        aski->target_slot = acci->target_slot;
-        aski->key_ptr = slot_table_ptr[acci->key_slot];
-        aski->key_len = strlen(aski->key_ptr);
-        aski->key_hash = hash(aski->key_ptr, aski->key_len);
-        addinstr_like(builder, instr, sizeof(*aski), (Instr*) aski);
+        char *key_ptr = slot_table_ptr[acci->key_slot];
+        int key_len = strlen(key_ptr);
+        AccessStringKeyInstr aski = {
+          .base = { .type = INSTR_ACCESS_STRING_KEY },
+          .obj_slot = acci->obj_slot,
+          .target_slot = acci->target_slot,
+          .key_ptr = key_ptr,
+          .key_len = key_len,
+          .key_hash = hash(key_ptr, key_len)
+        };
+        addinstr_like(builder, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(acci + 1);
         continue;
       }
       if (instr->type == INSTR_ASSIGN
         && assi->key_slot < slot_table_len && slot_table_ptr[assi->key_slot] != NULL)
       {
-        AssignStringKeyInstr *aski = malloc(sizeof(AssignStringKeyInstr));
-        aski->base.type = INSTR_ASSIGN_STRING_KEY;
-        aski->obj_slot = assi->obj_slot;
-        aski->value_slot = assi->value_slot;
-        aski->key = slot_table_ptr[assi->key_slot];
-        aski->type = assi->type;
-        addinstr_like(builder, instr, sizeof(*aski), (Instr*) aski);
+        AssignStringKeyInstr aski = {
+          .base = { .type = INSTR_ASSIGN_STRING_KEY },
+          .obj_slot = assi->obj_slot,
+          .value_slot = assi->value_slot,
+          .key = slot_table_ptr[assi->key_slot],
+          .type = assi->type
+        };
+        addinstr_like(builder, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(assi + 1);
         continue;
       }
       if (instr->type == INSTR_SET_CONSTRAINT
         && sci->key_slot < slot_table_len && slot_table_ptr[sci->key_slot] != NULL)
       {
-        SetConstraintStringKeyInstr scski;
-        scski.base.type = INSTR_SET_CONSTRAINT_STRING_KEY;
-        scski.base.belongs_to = NULL;
-        scski.obj_slot = sci->obj_slot;
-        scski.constraint_slot = sci->constraint_slot;
-        scski.key_ptr = slot_table_ptr[sci->key_slot];
-        scski.key_len = strlen(scski.key_ptr);
+        char *key_ptr = slot_table_ptr[sci->key_slot];
+        SetConstraintStringKeyInstr scski = {
+          .base = { .type = INSTR_SET_CONSTRAINT_STRING_KEY },
+          .obj_slot = sci->obj_slot,
+          .constraint_slot = sci->constraint_slot,
+          .key_ptr = key_ptr,
+          .key_len = strlen(key_ptr)
+        };
         addinstr_like(builder, instr, sizeof(scski), (Instr*) &scski);
         instr = (Instr*)(sci + 1);
         continue;
@@ -721,12 +725,13 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       }
       
       if (replace_with_ssi) {
-        SetSlotInstr *ssi = malloc(sizeof(SetSlotInstr));
-        ssi->base.type = INSTR_SET_SLOT;
-        ssi->target_slot = target_slot;
-        ssi->value = obj;
-        ssi->opt_info = opt_info;
-        addinstr_like(builder, instr, sizeof(*ssi), (Instr*) ssi);
+        SetSlotInstr ssi = {
+          .base = { .type = INSTR_SET_SLOT },
+          .target_slot = target_slot,
+          .value = obj,
+          .opt_info = opt_info
+        };
+        addinstr_like(builder, instr, sizeof(ssi), (Instr*) &ssi);
       } else {
         addinstr_like(builder, instr, instr_size(instr), instr);
       }
@@ -881,14 +886,15 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
             if (error) { fprintf(stderr, "INTERNAL LOGIC ERROR: %s\n", error); abort(); }
           }
           
-          AllocStaticObjectInstr *asoi = malloc(sizeof(AllocStaticObjectInstr));
-          asoi->base.type = INSTR_ALLOC_STATIC_OBJECT;
-          asoi->info_len = info_len;
-          asoi->info_ptr = info_ptr;
-          asoi->parent_slot = alobi->parent_slot;
-          asoi->target_slot = alobi->target_slot;
-          asoi->obj_sample = sample_obj;
-          addinstr_like(builder, instr, sizeof(*asoi), (Instr*) asoi);
+          AllocStaticObjectInstr asoi = {
+            .base = { .type = INSTR_ALLOC_STATIC_OBJECT },
+            .info_len = info_len,
+            .info_ptr = info_ptr,
+            .parent_slot = alobi->parent_slot,
+            .target_slot = alobi->target_slot,
+            .obj_sample = sample_obj
+          };
+          addinstr_like(builder, instr, sizeof(asoi), (Instr*) &asoi);
           instr = instr_reading;
         }
       }
