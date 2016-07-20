@@ -188,6 +188,8 @@ void vm_record_profile(VMState *state) {
   }
 }
 
+int num_msg_printed = 0;
+
 static void vm_maybe_record_profile(VMState *state) {
   struct timespec prof_time;
   long long ns_diff = get_clock_and_difference(&prof_time, &state->shared->profstate.last_prof_time);
@@ -195,8 +197,12 @@ static void vm_maybe_record_profile(VMState *state) {
     state->shared->profstate.last_prof_time = prof_time;
     vm_record_profile(state);
     long long ns_taken = get_clock_and_difference(NULL, &prof_time);
-    if (ns_taken > sample_stepsize / 10) {
+    if (num_msg_printed <= 10 && ns_taken > sample_stepsize / 3) {
       fprintf(stderr, "warning: collecting profiling info took %lli%% of the last step.\n", ns_taken * 100LL / sample_stepsize);
+      num_msg_printed++;
+      if (num_msg_printed > 10) {
+        fprintf(stderr, "warning will not be shown again.\n");
+      }
     }
   }
 }
