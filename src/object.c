@@ -8,28 +8,46 @@
 
 #define DEBUG_MEM 0
 
-void *freelist[128] = {0};
+#define FREELIST_LIMIT 32
+
+void *freelist[FREELIST_LIMIT] = {0};
 
 void *cache_alloc(int size) {
-  void *res = NULL;
-  if (size >= sizeof(void*) && size < 128) {
-    if (freelist[size]) {
-      res = freelist[size];
-      freelist[size] = *(void**) freelist[size];
+  if (UNLIKELY(size == 0)) return NULL;
+  size = (size + 15) & ~15; // align to 16
+  int slot = size >> 4;
+  void *res;
+  if (UNLIKELY(size == 64 && !freelist[slot])) {
+    // feed the freelist with a single big alloc
+    void *bigalloc = malloc(64 * 1024);
+    // stitch backwards
+    void *cursor = (char*) bigalloc + 64 * (1024 - 1);
+    void *needle = freelist[slot];
+    for (int i = 0; i < 1024; ++i) {
+      *(void**) cursor = needle;
+      needle = cursor;
+      cursor = (char*) cursor - 64;
     }
+    freelist[slot] = needle;
   }
-  if (!res) {
-    // printf("::alloc %i\n", size);
-    return calloc(size, 1);
+  if (slot < FREELIST_LIMIT && freelist[slot]) {
+    res = freelist[slot];
+    freelist[slot] = *(void**) freelist[slot];
+  } else {
+    // printf(": alloc %i\n", size);
+    res = malloc(size);
   }
   bzero(res, size);
   return res;
 }
 
 void cache_free(int size, void *ptr) {
-  if (size >= sizeof(void*) && size < 128) {
-    *(void**) ptr = freelist[size];
-    freelist[size] = ptr;
+  if (UNLIKELY(size == 0)) return;
+  size = (size + 15) & ~15; // align to 16
+  int slot = size >> 4;
+  if (slot < FREELIST_LIMIT) {
+    *(void**) ptr = freelist[slot];
+    freelist[slot] = ptr;
     return;
   }
   free(ptr);
