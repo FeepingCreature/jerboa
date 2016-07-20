@@ -39,7 +39,18 @@ TableEntry *table_lookup_alloc_with_hash(HashTable *tbl, const char *key_ptr, in
 // thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
 static inline size_t hash(const char *ptr, int len) {
   size_t hash = 5381;
-  for (int i = 0; i < len; ++i) {
+  int i = 0;
+  for (; i < (len &~7); i+=8) {
+    hash = hash * 33 + ptr[i+0];
+    hash = hash * 33 + ptr[i+1];
+    hash = hash * 33 + ptr[i+2];
+    hash = hash * 33 + ptr[i+3];
+    hash = hash * 33 + ptr[i+4];
+    hash = hash * 33 + ptr[i+5];
+    hash = hash * 33 + ptr[i+6];
+    hash = hash * 33 + ptr[i+7];
+  }
+  for (; i < len; i++) {
     hash = hash * 33 + ptr[i];
   }
   return hash;
