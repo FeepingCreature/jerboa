@@ -855,7 +855,7 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   
   // frames are only allocated for user functions
   // so we're still in the calling frame
-  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
+  Callframe *cf = state->frame;
   int context_slot = cf->instr_ptr->context_slot;
   Object *context = cf->slots_ptr[context_slot];
   

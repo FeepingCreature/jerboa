@@ -33,56 +33,25 @@ void vm_stack_free(VMState *state, void *ptr, int size) {
   shared->stack_data_offset = new_offset;
 }
 
-Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
-  void *slots_ptr = vm_stack_alloc(state, sizeof(Object*) * slots);
-  if (!slots_ptr) return NULL; // stack overflow
-  void *refslots_ptr = vm_stack_alloc(state, sizeof(Object**) * refslots);
-  if (!refslots_ptr) { // stack overflow
-    vm_stack_free(state, slots_ptr, sizeof(Object*) * slots);
-    return NULL;
-  }
-  
-  // okay. this might get a bit complicated.
-  void *ptr = state->stack_ptr;
-  if (!ptr) {
-    VM_ASSERT(state->stack_len == 0, "internal error") NULL;
-    int initial_capacity = sizeof(Callframe);
-    ptr = malloc(initial_capacity + sizeof(Callframe));
-    ptr = (Callframe*)ptr + 1;
-    *((int*)ptr - 1) = initial_capacity;
-    state->stack_ptr = ptr;
-  } else {
-    int capacity = *((int*)ptr - 1);
-    int new_size = sizeof(Callframe) * (state->stack_len + 1);
-    if (new_size > capacity) {
-      int new_capacity = capacity * 2;
-      if (new_size > new_capacity) new_capacity = new_size;
-      void *old_ptr = ptr, *old_ptr_base = (Callframe*)ptr - 1;
-      ptr = malloc(new_capacity + sizeof(Callframe));
-      ptr = (Callframe*)ptr + 1;
-      *((int*)ptr - 1) = new_capacity;
-      // tear down old gc roots
-      for (int i = 0; i < state->stack_len; ++i) {
-        gc_remove_roots(state, &state->stack_ptr[i].frameroot_slots);
-      }
-      memcpy(ptr, old_ptr, capacity);
-      state->stack_ptr = ptr;
-      // add new gc roots
-      for (int i = 0; i < state->stack_len; ++i) {
-        Callframe *cf = &state->stack_ptr[i];
-        gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
-      }
-      free(old_ptr_base);
-    }
-  }
-  
-  state->stack_len = state->stack_len + 1;
-  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
+void vm_alloc_frame(VMState *state, int slots, int refslots) {
+  Callframe *cf = (Callframe*) vm_stack_alloc(state, sizeof(Callframe));
+  if (!cf) return; // stack overflow
+  cf->above = state->frame;
   cf->slots_len = slots;
-  cf->slots_ptr = slots_ptr;
+  cf->slots_ptr = vm_stack_alloc(state, sizeof(Object*) * slots);
+  if (!cf->slots_ptr) { // stack overflow
+    vm_stack_free(state, cf, sizeof(Callframe));
+    return;
+  }
+  
   cf->refslots_len = refslots;
-  cf->refslots_ptr = refslots_ptr;
-  return cf;
+  cf->refslots_ptr = vm_stack_alloc(state, sizeof(Object**) * refslots);
+  if (!cf->refslots_ptr) { // stack overflow
+    vm_stack_free(state, cf->slots_ptr, sizeof(Object*) * slots);
+    vm_stack_free(state, cf, sizeof(Callframe));
+    return;
+  }
+  state->frame = cf;
 }
 
 void vm_error(VMState *state, char *fmt, ...) {
@@ -98,17 +67,17 @@ void vm_error(VMState *state, char *fmt, ...) {
 }
 
 void vm_remove_frame(VMState *state) {
-  Callframe *cf = &state->stack_ptr[state->stack_len - 1];
-  cache_free(sizeof(Object*)*cf->slots_len, cf->slots_ptr);
-  // TODO shrink memory?
-  state->stack_len = state->stack_len - 1;
+  Callframe *cf = state->frame;
+  vm_stack_free(state, cf->refslots_ptr, sizeof(Object**)*cf->refslots_len);
+  vm_stack_free(state, cf->slots_ptr, sizeof(Object*)*cf->slots_len);
+  state->frame = cf->above;
+  vm_stack_free(state, cf, sizeof(Callframe));
 }
 
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
   if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
-  for (int i = state->stack_len - 1; i >= 0; --i, ++k) {
-    Callframe *curf = &state->stack_ptr[i];
+  for (Callframe *curf = state->frame; curf; curf = curf->above) {
     Instr *instr = curf->instr_ptr;
     
     const char *file;
@@ -128,8 +97,7 @@ char *vm_record_backtrace(VMState *state, int *depth) {
     res_ptr = malloc(res_len + 1);
     strncpy(res_ptr, state->backtrace, res_len + 1);
   } else res_ptr = malloc(1);
-  for (int i = state->stack_len - 1; i >= 0; --i, ++k) {
-    Callframe *curf = &state->stack_ptr[i];
+  for (Callframe *curf = state->frame; curf; curf = curf->above) {
     Instr *instr = curf->instr_ptr;
     
     const char *file;
@@ -156,8 +124,7 @@ void vm_record_profile(VMState *state) {
   // fprintf(stderr, "generate backtrace\n");
   int k = 0;
   while (curstate) {
-    for (int i = curstate->stack_len - 1; i >= 0; --i, ++k) {
-      Callframe *curf = &curstate->stack_ptr[i];
+    for (Callframe *curf = curstate->frame; curf; curf = curf->above) {
       Instr *instr = curf->instr_ptr;
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
@@ -628,7 +595,7 @@ static FnWrap vm_instr_call(FastVMState *state) {
     args[i] = state->cf->slots_ptr[argslot];
   }
   
-  int prev_stacklen = state->reststate->stack_len;
+  Callframe *old_cf = state->reststate->frame;
   
   // update, because mark_const which is called sometimes needs cf->instr
   state->cf->instr_ptr = state->instr;
@@ -638,15 +605,13 @@ static FnWrap vm_instr_call(FastVMState *state) {
   // intrinsic may have errored.
   if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };
   
-  // recalculate pointer, because the function may have reallocated our stack
-  Callframe *old_cf = &state->reststate->stack_ptr[prev_stacklen - 1];
   old_cf->instr_ptr = (Instr*)(call_instr + 1); // step past call in the old stackframe
   
   if (args_length < 10) { }
   else { free(args); }
   
   // note: if fn_ptr was an intrinsic, old_cf = state->cf so this is okay.
-  state->cf = &state->reststate->stack_ptr[state->reststate->stack_len - 1];
+  state->cf = state->reststate->frame;
   state->instr = state->cf->instr_ptr; // assign first instr of call.
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -676,8 +641,8 @@ static FnWrap vm_instr_return(FastVMState *state) {
   vm_remove_frame(state->reststate);
   state->reststate->result_value = res;
   
-  if (state->reststate->stack_len == 0) return (FnWrap) { vm_halt };
-  state->cf = &state->reststate->stack_ptr[state->reststate->stack_len - 1];
+  if (!state->reststate->frame) return (FnWrap) { vm_halt };
+  state->cf = state->reststate->frame;
   state->instr = state->cf->instr_ptr;
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -808,7 +773,7 @@ static void vm_step(VMState *state) {
   FastVMState fast_state;
   fast_state.reststate = state;
   fast_state.root = state->root;
-  fast_state.cf = &state->stack_ptr[state->stack_len - 1];
+  fast_state.cf = state->frame;
   fast_state.instr = fast_state.cf->instr_ptr;
   VMInstrFn fn = (VMInstrFn) instr_fns[fast_state.instr->type];
   int i;
@@ -825,10 +790,8 @@ static void vm_step(VMState *state) {
     fn = fn(&fast_state).self;
   }
   state->shared->cyclecount += i * 9;
-  state->stack_ptr[state->stack_len - 1].instr_ptr = fast_state.instr;
+  if (state->frame) state->frame->instr_ptr = fast_state.instr;
   vm_maybe_record_profile(state);
-  // (void) vm_maybe_record_profile;
-  fast_state.cf->instr_ptr = fast_state.instr;
 }
 
 void init_instr_fn_table() {
@@ -865,8 +828,7 @@ void vm_run(VMState *state) {
   // no call queued, no need to run
   // (this can happen when we executed a native function,
   //  expecting to set up a vm call)
-  if (state->stack_len == 0) return;
-  assert(state->stack_len > 0);
+  if (!state->frame) return;
   state->runstate = VM_RUNNING;
   state->error = NULL;
   // TODO move to state init
@@ -880,7 +842,7 @@ void vm_run(VMState *state) {
   gc_add_roots(state, &state->result_value, 1, &result_set);
   while (state->runstate == VM_RUNNING) {
     vm_step(state);
-    if (state->stack_len == 0) {
+    if (!state->frame) {
       state->runstate = VM_TERMINATED;
       break;
     }

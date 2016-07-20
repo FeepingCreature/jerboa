@@ -5,12 +5,8 @@
 #include "gc.h"
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
-  Callframe *cf = vm_alloc_frame(state, fn->slots, fn->refslots);
-  if (!cf) {
-    assert(state->runstate == VM_ERRORED);
-    return;
-  }
-  
+  vm_alloc_frame(state, fn->slots, fn->refslots);
+  Callframe *cf = state->frame;
   cf->uf = fn;
   cf->slots_ptr[1] = context;
   gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);

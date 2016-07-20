@@ -60,13 +60,15 @@ typedef struct {
   bool missed_gc; // tried to run gc when it was disabled
 } GCState;
 
-typedef struct {
+typedef struct _Callframe Callframe;
+struct _Callframe {
   UserFunction *uf;
   Object **slots_ptr; int slots_len;
   Object ***refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots; // gc entries
   Instr *instr_ptr;
-} Callframe;
+  Callframe *above;
+};
 
 typedef enum {
   VM_TERMINATED,
@@ -112,7 +114,8 @@ struct _VMState {
   
   VMSharedState *shared;
   
-  Callframe *stack_ptr; int stack_len;
+  Callframe *frame;
+  
   Object *root;
   Object *result_value;
   
