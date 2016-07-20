@@ -9,7 +9,39 @@
 
 const long long sample_stepsize = 200000LL; // 0.2ms
 
+void *vm_stack_alloc(VMState *state, int size) {
+  VMSharedState *shared = state->shared;
+  if (UNLIKELY(shared->stack_data_len == 0)) {
+    shared->stack_data_len = 16*1024*1024;
+    shared->stack_data_ptr = malloc(shared->stack_data_len);
+  }
+  int new_offset = shared->stack_data_offset + size;
+  if (UNLIKELY(new_offset > shared->stack_data_len)) {
+    vm_error(state, "VM stack overflow!");
+    return NULL;
+  }
+  void *ptr = (char*) shared->stack_data_ptr + shared->stack_data_offset;
+  shared->stack_data_offset = new_offset;
+  bzero(ptr, size);
+  return ptr;
+}
+
+void vm_stack_free(VMState *state, void *ptr, int size) {
+  VMSharedState *shared = state->shared;
+  int new_offset = shared->stack_data_offset - size;
+  assert(ptr == (char*) shared->stack_data_ptr + new_offset); // must free in reverse order!
+  shared->stack_data_offset = new_offset;
+}
+
 Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
+  void *slots_ptr = vm_stack_alloc(state, sizeof(Object*) * slots);
+  if (!slots_ptr) return NULL; // stack overflow
+  void *refslots_ptr = vm_stack_alloc(state, sizeof(Object**) * refslots);
+  if (!refslots_ptr) { // stack overflow
+    vm_stack_free(state, slots_ptr, sizeof(Object*) * slots);
+    return NULL;
+  }
+  
   // okay. this might get a bit complicated.
   void *ptr = state->stack_ptr;
   if (!ptr) {
@@ -47,9 +79,9 @@ Callframe *vm_alloc_frame(VMState *state, int slots, int refslots) {
   state->stack_len = state->stack_len + 1;
   Callframe *cf = &state->stack_ptr[state->stack_len - 1];
   cf->slots_len = slots;
-  cf->slots_ptr = cache_alloc(sizeof(Object*)*slots);
+  cf->slots_ptr = slots_ptr;
   cf->refslots_len = refslots;
-  cf->refslots_ptr = cache_alloc(sizeof(Object**)*refslots);
+  cf->refslots_ptr = refslots_ptr;
   return cf;
 }
 

@@ -6,6 +6,10 @@
 
 void call_function(VMState *state, Object *context, UserFunction *fn, Object **args_ptr, int args_len) {
   Callframe *cf = vm_alloc_frame(state, fn->slots, fn->refslots);
+  if (!cf) {
+    assert(state->runstate == VM_ERRORED);
+    return;
+  }
   
   cf->uf = fn;
   cf->slots_ptr[1] = context;

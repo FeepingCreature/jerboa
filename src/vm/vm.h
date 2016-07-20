@@ -5,6 +5,10 @@
 
 #define VM_ASSERT(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return
 
+void *vm_stack_alloc(VMState *state, int size);
+
+void vm_stack_free(VMState *state, void *ptr, int size);
+
 Callframe *vm_alloc_frame(VMState *state, int slots, int refslots);
 
 void vm_remove_frame(VMState *state);

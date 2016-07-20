@@ -99,6 +99,12 @@ typedef struct {
   VMProfileState profstate;
   ValueCache vcache;
   int cyclecount;
+  
+  // backing storage for stack allocations
+  // cannot be moved after the fact!
+  // stored in shared_state because sub-vms stick to callstack order
+  void *stack_data_ptr; int stack_data_len;
+  int stack_data_offset;
 } VMSharedState;
 
 struct _VMState {
