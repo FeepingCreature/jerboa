@@ -755,7 +755,7 @@ static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
   // TODO table_clone
   obj->tbl = asoi->obj_sample->tbl;
   int tbl_len = sizeof(TableEntry) * obj->tbl.entries_num;
-  obj->tbl.entries_ptr = malloc(tbl_len);
+  obj->tbl.entries_ptr = cache_alloc(tbl_len);
   memcpy(obj->tbl.entries_ptr, asoi->obj_sample->tbl.entries_ptr, tbl_len);
   
   for (int i = 0; i < asoi->info_len; ++i) {
