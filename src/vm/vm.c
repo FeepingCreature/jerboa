@@ -596,9 +596,7 @@ static FnWrap vm_instr_call(FastVMState *state) {
   Object *fn_obj = state->cf->slots_ptr[function_slot];
   // form args array from slots
   
-  Object **args;
-  if (args_length < 10) { args = state->reststate->shared->vcache.args_prealloc[args_length]; }
-  else { args = malloc(sizeof(Object*) * args_length); }
+  Object **args = alloca(sizeof(Object*) * args_length);
   
   for (int i = 0; i < args_length; ++i) {
     int argslot = ((int*)(call_instr + 1))[i];
@@ -614,9 +612,6 @@ static FnWrap vm_instr_call(FastVMState *state) {
   
   // intrinsic may have errored.
   if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };
-  
-  if (args_length < 10) { }
-  else { free(args); }
   
   // update fastvm state because call modified vmstate
   state->cf = state->reststate->frame;
@@ -836,11 +831,6 @@ void vm_run(VMState *state) {
   if (!state->frame) return;
   state->runstate = VM_RUNNING;
   state->error = NULL;
-  // TODO move to state init
-  if (!state->shared->vcache.args_prealloc) {
-    state->shared->vcache.args_prealloc = malloc(sizeof(Object**) * 10);
-    for (int i = 0; i < 10; ++i) { state->shared->vcache.args_prealloc[i] = malloc(sizeof(Object*) * i); }
-  }
   // this should, frankly, really be done in vm_step
   // but meh, it's faster to only do it once
   GCRootSet result_set;

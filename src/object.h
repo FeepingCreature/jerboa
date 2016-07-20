@@ -88,7 +88,6 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
 typedef struct {
   Object *bool_false, *bool_true;
   Object *int_zero; // TODO array
-  Object ***args_prealloc;
   Object *int_base, *bool_base, *float_base;
   Object *closure_base, *function_base;
   Object *array_base, *string_base, *pointer_base;
