@@ -24,7 +24,7 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
     vm_error(state, "invalid function: no instructions");
     return;
   }
-  cf->instr_ptr = cf->uf->body.blocks_ptr[0].instrs_ptr;
+  cf->instr_ptr = cf->uf->body.instrs_ptr;
 }
 
 #include "vm/optimize.h"

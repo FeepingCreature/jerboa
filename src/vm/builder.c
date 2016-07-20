@@ -41,9 +41,10 @@ FileRange *alloc_and_record_start(char *text) {
 int new_block(FunctionBuilder *builder) {
   assert(builder->block_terminated);
   FunctionBody *body = &builder->body;
+  int offset = (char*) body->instrs_ptr_end - (char*) body->instrs_ptr;
   body->blocks_len ++;
   body->blocks_ptr = realloc(body->blocks_ptr, body->blocks_len * sizeof(InstrBlock));
-  body->blocks_ptr[body->blocks_len - 1] = (InstrBlock){NULL, 0};
+  body->blocks_ptr[body->blocks_len - 1] = (InstrBlock){offset, 0};
   builder->block_terminated = false;
   return body->blocks_len - 1;
 }
@@ -60,11 +61,12 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   instr->context_slot = builder->scope;
   FunctionBody *body = &builder->body;
   InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
-  int current_len = (char*) block->instrs_ptr_end - (char*) block->instrs_ptr;
+  int current_len = (char*) body->instrs_ptr_end - (char*) body->instrs_ptr;
   int new_len = current_len + size;
-  block->instrs_ptr = realloc(block->instrs_ptr, new_len);
-  block->instrs_ptr_end = (Instr*) ((char*) block->instrs_ptr + new_len);
-  memcpy((char*) block->instrs_ptr + current_len, instr, size);
+  body->instrs_ptr = realloc(body->instrs_ptr, new_len);
+  body->instrs_ptr_end = (Instr*) ((char*) body->instrs_ptr + new_len);
+  block->size += size;
+  memcpy((char*) body->instrs_ptr + current_len, instr, size);
   if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
     builder->block_terminated = true;
   }
@@ -79,18 +81,16 @@ void addinstr_like(FunctionBuilder *builder, Instr *basis, int size, Instr *inst
   builder->scope = backup;
 }
 
-static IntVarRef ref_to_instr_about_to_be_added(FunctionBuilder *builder, char *instr, char *ptr) {
+static int offset_to_instr_about_to_be_added(FunctionBuilder *builder, char *instr, char *ptr) {
   FunctionBody *body = &builder->body;
-  InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
-  int current_len = (char*) block->instrs_ptr_end - (char*) block->instrs_ptr;
+  int current_len = (char*) body->instrs_ptr_end - (char*) body->instrs_ptr;
   int delta = ptr - instr;
-  return (IntVarRef) { body->blocks_len - 1, current_len + delta };
+  return current_len + delta;
 }
 
-void set_int_var(FunctionBuilder *builder, IntVarRef ref, int value) {
+void set_int_var(FunctionBuilder *builder, int offset, int value) {
   FunctionBody *body = &builder->body;
-  InstrBlock *block = &body->blocks_ptr[ref.block];
-  *(int*) ((char*) block->instrs_ptr + ref.distance) = value;
+  *(int*) ((char*) body->instrs_ptr + offset) = value;
 }
 
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
@@ -246,22 +246,22 @@ int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, in
   return addinstr_call(builder, fn, this_slot, args, 2);
 }
 
-void addinstr_test_branch(FunctionBuilder *builder, int test, IntVarRef *truebranch, IntVarRef *falsebranch) {
+void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, int *falsebranch) {
   TestBranchInstr *instr = malloc(sizeof(TestBranchInstr));
   instr->base.type = INSTR_TESTBR;
   instr->base.belongs_to = NULL;
   instr->test_slot = test;
-  *truebranch = ref_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->true_blk);
-  *falsebranch = ref_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->false_blk);
+  *truebranch = offset_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->true_blk);
+  *falsebranch = offset_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->false_blk);
   
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }
 
-void addinstr_branch(FunctionBuilder *builder, IntVarRef *branch) {
+void addinstr_branch(FunctionBuilder *builder, int *branch) {
   BranchInstr *instr = malloc(sizeof(BranchInstr));
   instr->base.type = INSTR_BR;
   instr->base.belongs_to = NULL;
-  *branch = ref_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->blk);
+  *branch = offset_to_instr_about_to_be_added(builder, (char*) instr, (char*) &instr->blk);
   
   addinstr(builder, sizeof(*instr), (Instr*) instr);
 }

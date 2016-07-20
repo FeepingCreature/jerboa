@@ -67,12 +67,18 @@ typedef struct {
 int instr_size(Instr*);
 
 typedef struct {
-  Instr* instrs_ptr, *instrs_ptr_end;
+  int offset, size;
 } InstrBlock;
 
 typedef struct {
   InstrBlock* blocks_ptr; int blocks_len;
+  // first instruction of first block to last instruction of last block
+  // (linear because cache)
+  Instr *instrs_ptr, *instrs_ptr_end;
 } FunctionBody;
+
+#define BLOCK_START(FN, IDX) ((Instr*) ((char*) (FN)->body.instrs_ptr + (FN)->body.blocks_ptr[IDX].offset))
+#define BLOCK_END(FN, IDX) ((Instr*) ((char*) (FN)->body.instrs_ptr + (FN)->body.blocks_ptr[IDX].offset + (FN)->body.blocks_ptr[IDX].size))
 
 typedef struct {
   int arity; // first n slots are reserved for parameters

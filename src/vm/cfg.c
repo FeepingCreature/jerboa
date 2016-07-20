@@ -152,9 +152,8 @@ void cfg_build(CFG *cfg, UserFunction *uf) {
   int blocks_len = uf->body.blocks_len;
   int *num_preds = calloc(sizeof(int), blocks_len); // count predecessors per block
   for (int i = 0; i < blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       if (instr->type == INSTR_BR) {
         num_edges += 1;
         num_preds[((BranchInstr*)instr)->blk] += 1;
@@ -187,11 +186,10 @@ void cfg_build(CFG *cfg, UserFunction *uf) {
   free(num_preds);
   
   for (int i = 0; i < blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
     nodes[i].succ_ptr = succ_edgelist_cursor;
     bool exit_tracked = false;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       if (instr->type == INSTR_BR) {
         exit_tracked = true;
         int blk = ((BranchInstr*)instr)->blk;

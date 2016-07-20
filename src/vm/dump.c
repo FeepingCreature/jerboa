@@ -191,9 +191,8 @@ void dump_fn(VMState *state, UserFunction *fn) {
   fprintf(stderr, "function %s (%i), %i slots, %i refslots [\n", fn->name, fn->arity, fn->slots, fn->refslots);
   for (int i = 0; i < body->blocks_len; ++i) {
     fprintf(stderr, "  block <%i> [\n", i);
-    InstrBlock *block = &body->blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(fn, i), *instr_end = BLOCK_END(fn, i);
+    while (instr != instr_end) {
       if (instr->type == INSTR_ALLOC_CLOSURE_OBJECT) {
         other_fns_ptr = realloc(other_fns_ptr, sizeof(UserFunction*) * ++other_fns_len);
         other_fns_ptr[other_fns_len - 1] = ((AllocClosureObjectInstr*) instr)->fn;

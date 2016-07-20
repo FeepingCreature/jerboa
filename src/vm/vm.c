@@ -648,7 +648,7 @@ static FnWrap vm_instr_br(FastVMState *state) {
   BranchInstr *br_instr = (BranchInstr*) state->instr;
   int blk = br_instr->blk;
   VM_ASSERT2_SLOT(blk < state->cf->uf->body.blocks_len, "slot numbering error");
-  state->instr = state->cf->uf->body.blocks_ptr[blk].instrs_ptr;
+  state->instr = (Instr*) ((char*) state->cf->uf->body.instrs_ptr + state->cf->uf->body.blocks_ptr[blk].offset);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -672,7 +672,7 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   }
   
   int target_blk = test ? true_blk : false_blk;
-  state->instr = state->cf->uf->body.blocks_ptr[target_blk].instrs_ptr;
+  state->instr = (Instr*) ((char*) state->cf->uf->body.instrs_ptr + state->cf->uf->body.blocks_ptr[target_blk].offset);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 

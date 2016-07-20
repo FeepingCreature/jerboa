@@ -15,9 +15,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   for (int i = 0; i < uf->slots; ++i) slots[i] = true; // default assumption
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
 #define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
         case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
       switch (instr->type) {
@@ -63,9 +62,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
 static Object **find_constant_slots(UserFunction *uf) {
   Object **slots = calloc(sizeof(Object*), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       if (instr->type == INSTR_SET_SLOT) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
         slots[ssi->target_slot] = ssi->value;
@@ -117,9 +115,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
   Object **constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    Instr *instr_end = block->instrs_ptr_end;
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       if (instr->type == INSTR_ALLOC_OBJECT) {
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
@@ -166,9 +162,8 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
   
   // gather all constraints
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
         SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
         Object *constraint = constant_slots[scski->constraint_slot];
@@ -208,11 +203,10 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         AccessStringKeyInstr *aski_new = malloc(sizeof(AccessStringKeyInstr));
@@ -287,11 +281,10 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
   // the refslot accesses will also dominate the refslot declaration.
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       // O(n²) but nbd
       // TODO bdaa
       // TODO store block/instr index with after_object_decl, invert into array of arrays for instrs
@@ -381,11 +374,10 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
   int slot_table_len = 0;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
       AccessInstr *acci = (AccessInstr*) instr;
       AssignInstr *assi = (AssignInstr*) instr;
@@ -488,9 +480,8 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
 static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   bool *slot_live = calloc(sizeof(bool), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
 #define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
         case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
       switch (instr->type) {
@@ -565,11 +556,9 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    Instr *instr = block->instrs_ptr;
-    Instr *instr_end = block->instrs_ptr_end;
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       bool add = true;
       if (instr->type == INSTR_SET_SLOT) {
@@ -618,9 +607,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   ConstraintInfo **slot_constraints = calloc(sizeof(ConstraintInfo*), uf->slots);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
-    Instr *instr = block->instrs_ptr;
-    Instr *instr_end = block->instrs_ptr_end;
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       if (instr->type == INSTR_SET_SLOT) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
@@ -684,11 +671,10 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   builder->block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    Instr *instr = block->instrs_ptr;
-    while (instr != block->instrs_ptr_end) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
       bool replace_with_ssi = false;
       Object *obj = NULL; char *opt_info = NULL; int target_slot = 0;
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
@@ -772,11 +758,11 @@ UserFunction *optimize(UserFunction *uf) {
 bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later) {
   int blk_earlier = -1, blk_later = -1;
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *blk = &uf->body.blocks_ptr[i];
-    if (earlier >= blk->instrs_ptr && earlier < blk->instrs_ptr_end) {
+    Instr *blk_start = BLOCK_START(uf, i), *blk_end = BLOCK_END(uf, i);
+    if (earlier >= blk_start && earlier < blk_end) {
       blk_earlier = i;
     }
-    if (later >= blk->instrs_ptr && later < blk->instrs_ptr_end) {
+    if (later >= blk_start && later < blk_end) {
       blk_later = i;
     }
     if (blk_earlier != -1 && blk_later != -1) break;
@@ -813,11 +799,9 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
   Object **constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    InstrBlock *block = &uf->body.blocks_ptr[i];
     new_block(builder);
     
-    Instr *instr = block->instrs_ptr;
-    Instr *instr_end = block->instrs_ptr_end;
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       if (instr->type == INSTR_ALLOC_OBJECT) {
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;

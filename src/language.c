@@ -738,7 +738,7 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
     log_parser_error(text, "if expected closing paren");
     return PARSE_ERROR;
   }
-  IntVarRef true_blk, false_blk, end_blk;
+  int true_blk, false_blk, end_blk;
   use_range_start(builder, keywd_range);
   addinstr_test_branch(builder, testslot, &true_blk, &false_blk);
   use_range_end(builder, keywd_range);
@@ -760,7 +760,7 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
     if (res == PARSE_ERROR) return PARSE_ERROR;
     assert(res == PARSE_OK);
     
-    IntVarRef end_blk2;
+    int end_blk2;
     use_range_start(builder, keywd_range);
     addinstr_branch(builder, &end_blk2);
     use_range_end(builder, keywd_range);
@@ -782,13 +782,13 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   }
   
   use_range_start(builder, range);
-  IntVarRef test_blk;
+  int test_blk;
   addinstr_branch(builder, &test_blk);
   int test_blk_idx = new_block(builder);
   set_int_var(builder, test_blk, test_blk_idx);
   use_range_end(builder, range);
   
-  IntVarRef loop_blk, end_blk;
+  int loop_blk, end_blk;
   
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, 0, &test_expr);
@@ -810,7 +810,7 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   assert(res == PARSE_OK);
   
   use_range_start(builder, range);
-  IntVarRef test_blk2;
+  int test_blk2;
   addinstr_branch(builder, &test_blk2);
   use_range_end(builder, range);
   
@@ -988,13 +988,13 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   }
   
   use_range_start(builder, range);
-  IntVarRef test_blk;
+  int test_blk;
   addinstr_branch(builder, &test_blk);
   int test_blk_idx = new_block(builder);
   set_int_var(builder, test_blk, test_blk_idx);
   use_range_end(builder, range);
   
-  IntVarRef loop_blk, end_blk;
+  int loop_blk, end_blk;
   
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, 0, &test_expr);
@@ -1038,7 +1038,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   assert(res == PARSE_OK); // what? this already worked above...
   
   use_range_start(builder, range);
-  IntVarRef test_blk2;
+  int test_blk2;
   addinstr_branch(builder, &test_blk2);
   set_int_var(builder, test_blk2, test_blk_idx);
   
