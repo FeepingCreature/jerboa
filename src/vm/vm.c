@@ -601,14 +601,13 @@ static FnWrap vm_instr_call(FastVMState *state) {
   else { args = malloc(sizeof(Object*) * args_length); }
   
   for (int i = 0; i < args_length; ++i) {
-    int argslot = call_instr->args_ptr[i];
+    int argslot = ((int*)(call_instr + 1))[i];
     VM_ASSERT2_SLOT(argslot < state->cf->slots_len, "slot numbering error");
     args[i] = state->cf->slots_ptr[argslot];
   }
   
-  Callframe *old_cf = state->reststate->frame;
-  
-  // update, because mark_const which is called sometimes needs cf->instr
+  // update now so that setup_call can open a new stackframe if it wants
+  state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
   state->cf->instr_ptr = state->instr;
   
   if (!setup_call(state->reststate, this_obj, fn_obj, args, args_length)) return (FnWrap) { vm_halt };
@@ -616,14 +615,12 @@ static FnWrap vm_instr_call(FastVMState *state) {
   // intrinsic may have errored.
   if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };
   
-  old_cf->instr_ptr = (Instr*)(call_instr + 1); // step past call in the old stackframe
-  
   if (args_length < 10) { }
   else { free(args); }
   
-  // note: if fn_ptr was an intrinsic, old_cf = state->cf so this is okay.
+  // update fastvm state because call modified vmstate
   state->cf = state->reststate->frame;
-  state->instr = state->cf->instr_ptr; // assign first instr of call.
+  state->instr = state->cf->instr_ptr;
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 

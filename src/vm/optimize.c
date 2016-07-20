@@ -41,9 +41,10 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             slots[scons_instr->obj_slot] = slots[scons_instr->constraint_slot] = false;
           CASE(INSTR_CALL, CallInstr, call_instr)
             slots[call_instr->function_slot] = slots[call_instr->this_slot] = false;
-            for (int i = 0; i < call_instr->args_length; ++i) {
-              slots[call_instr->args_ptr[i]] = false;
+            for (int k = 0; k < call_instr->args_length; ++k) {
+              slots[((int*)(call_instr + 1))[k]] = false;
             }
+            _stepsize += sizeof(int) * call_instr->args_length;
           CASE(INSTR_RETURN, ReturnInstr, return_instr)
             slots[return_instr->ret_slot] = false;
           CASE(INSTR_SAVE_RESULT, SaveResultInstr, save_result_instr)
@@ -520,8 +521,9 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_CALL, CallInstr, call_instr)
             slot_live[call_instr->function_slot] = slot_live[call_instr->this_slot] = true;
             for (int k = 0; k < call_instr->args_length; ++k) {
-              slot_live[call_instr->args_ptr[k]] = true;
+              slot_live[((int*)(call_instr + 1))[k]] = true;
             }
+            _stepsize += sizeof(int) * call_instr->args_length;
           CASE(INSTR_RETURN, ReturnInstr, return_instr)
             slot_live[return_instr->ret_slot] = true;
           CASE(INSTR_SAVE_RESULT, SaveResultInstr, save_result_instr)

@@ -83,10 +83,10 @@ void dump_instr(VMState *state, Instr **instr_p) {
               ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);
       for (int i = 0; i < ((CallInstr*) instr)->args_length; ++i) {
         if (i) fprintf(stderr, ", ");
-        fprintf(stderr, "%%%i", ((CallInstr*) instr)->args_ptr[i]);
+        fprintf(stderr, "%%%i", ((int*)((CallInstr*) instr + 1))[i]);
       }
       fprintf(stderr, " )\n");
-      *instr_p = (Instr*) ((CallInstr*) instr + 1);
+      *instr_p = (Instr*) ((int*)((CallInstr*) instr + 1) + ((CallInstr*) instr)->args_length);
       break;
     case INSTR_RETURN:
       fprintf(stderr, "return: %%%i\n", ((ReturnInstr*) instr)->ret_slot);

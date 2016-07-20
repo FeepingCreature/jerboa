@@ -212,14 +212,14 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
 }
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
-  CallInstr *instr1 = malloc(sizeof(CallInstr));
+  CallInstr *instr1 = malloc(sizeof(CallInstr) + sizeof(int) * args_len);
   instr1->base.type = INSTR_CALL;
   instr1->base.belongs_to = NULL;
   instr1->function_slot = fn;
   instr1->this_slot = this_slot;
   instr1->args_length = args_len;
-  instr1->args_ptr = args_ptr;
-  addinstr(builder, sizeof(*instr1), (Instr*) instr1);
+  memcpy((int*)(instr1 + 1), args_ptr, sizeof(int) * args_len);
+  addinstr(builder, sizeof(*instr1) + sizeof(int) * args_len, (Instr*) instr1);
   
   SaveResultInstr *instr2 = malloc(sizeof(SaveResultInstr));
   instr2->base.type = INSTR_SAVE_RESULT;

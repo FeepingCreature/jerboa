@@ -166,7 +166,7 @@ typedef struct {
 typedef struct {
   Instr base;
   int function_slot, this_slot;
-  int *args_ptr; int args_length;
+  int args_length; // attached to callinstr as a tail
 } CallInstr;
 
 typedef struct {

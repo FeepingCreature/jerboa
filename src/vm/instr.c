@@ -19,7 +19,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_ASSIGN, AssignInstr);
     CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr);
     CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr);
-    CASE(INSTR_CALL, CallInstr); CASE(INSTR_RETURN, ReturnInstr);
+    CASE(INSTR_RETURN, ReturnInstr);
     CASE(INSTR_SAVE_RESULT, SaveResultInstr);
     CASE(INSTR_BR, BranchInstr); CASE(INSTR_TESTBR, TestBranchInstr);
     CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr);
@@ -31,6 +31,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr);
     CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr);
 #undef CASE
+    case INSTR_CALL: return sizeof(CallInstr) + sizeof(int) * ((CallInstr*)instr)->args_length;
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();
   }
 }
