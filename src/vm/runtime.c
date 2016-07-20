@@ -44,6 +44,7 @@ typedef enum {
 
 static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0], "don't know how to compute with null");
   
   Object *int_base = state->shared->vcache.int_base;
   Object *float_base = state->shared->vcache.float_base;
@@ -81,6 +82,8 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
         VM_ASSERT(v2 != 0.0f, "float division by zero");
         res = v1 / v2;
         break;
+      case MATH_BIT_OR: case MATH_BIT_AND:
+        VM_ASSERT(false, "bit math with float operands is not supported");
       default: abort();
     }
     state->result_value = alloc_float(state, res);
@@ -133,6 +136,7 @@ static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0], "don't know how to compute with null");
   
   Object *int_base = state->shared->vcache.int_base;
   Object *float_base = state->shared->vcache.float_base;
@@ -178,6 +182,7 @@ static void float_div_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0], "don't know how to add null to string");
   
   Object
     *sobj1 = obj_instance_of(thisptr, state->shared->vcache.string_base),
@@ -288,6 +293,7 @@ typedef enum {
 
 static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0], "don't know how to compare int with null");
   
   Object
     *int_base = state->shared->vcache.int_base,
@@ -350,6 +356,7 @@ static void int_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **args
 
 static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, CompareOp cmp) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0], "don't know how to compare float with null");
   
   Object
     *int_base = state->shared->vcache.int_base,

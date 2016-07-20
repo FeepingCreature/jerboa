@@ -256,7 +256,7 @@ for (var i = 0; i < fndecls.length; i++) {
       cfile.print("  printf(\"    ", shortn, " = sym;\\n\");");
       cfile.print("  printf(\"    _mark_const(\\\"", shortn, "\\\");\\n\");");
       cfile.print("  printf(\"    return ", shortn, ".apply(arguments);\\n\");");
-      cfile.print("  printf(\"  } else abort;\\n\");");
+      cfile.print("  printf(\"  } else abort();\\n\");");
       cfile.print("  printf(\"};\\n\");");
     } else print("bad skip ", getAttr(decl, "name"));
   } else print("ret skip ", getAttr(decl, "name"));

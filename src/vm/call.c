@@ -92,7 +92,7 @@ bool setup_call(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, 
   ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn, closure_base);
   VM_ASSERT(fn_obj || cl_obj, "object is neither function nor closure") false;
   
-  if (fn_obj) fn_obj->fn_ptr(state, thisptr, fn, args_ptr, args_len);
-  else cl_obj->base.fn_ptr(state, thisptr, fn, args_ptr, args_len);
+  if (fn_obj) fn_obj->fn_ptr(state, thisptr, (Object*) fn_obj, args_ptr, args_len);
+  else cl_obj->base.fn_ptr(state, thisptr, (Object*) cl_obj, args_ptr, args_len);
   return true;
 }

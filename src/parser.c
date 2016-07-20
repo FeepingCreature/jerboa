@@ -201,7 +201,7 @@ void log_parser_error(char *location, char *format, ...) {
     fprintf(stderr, "%.*s\n", (int) (line.end - line.start), line.start);
     int utf8_col = utf8_strnlen(line.start, col);
     int utf8_line_len = utf8_strnlen(line.start, line.end - line.start);
-    for (int i = 0; i < utf8_line_len; ++i) {
+    for (int i = 0; i <= utf8_line_len; ++i) {
       if (i < utf8_col) fprintf(stderr, " ");
       else if (i == utf8_col) fprintf(stderr, "\x1b[1m\x1b[32m^\x1b[0m");
     }

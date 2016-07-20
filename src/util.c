@@ -71,7 +71,7 @@ static bool find_text_pos_from_to(char *text, FileRecord *record, char *text_to,
   while (line.start < text_to) {
     while (line.end < text_to && *line.end != '\n') line.end ++; // scan to newline
     if (line.end < text_to) line.end ++; // scan past newline
-    if (text >= line.start && text < line.end) {
+    if (text >= line.start && text <= line.end) {
       last_line = line;
       last_record = record;
       last_row_nr = row_nr;
@@ -113,7 +113,7 @@ bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_
   // full rescan
   FileRecord *rec = record;
   while (rec) {
-    if (text >= rec->text.start && text < rec->text.end) {
+    if (text >= rec->text.start && text <= rec->text.end) {
       *row_p = 0;
       *line_p = (TextRange) { rec->text.start, rec->text.start };
       bool res = find_text_pos_from_to(text, rec, rec->text.end, name_p, line_p, row_p, col_p);

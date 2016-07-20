@@ -821,13 +821,12 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
     while (instr != instr_end) {
       if (instr->type == INSTR_ALLOC_OBJECT) {
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
-        instr = (Instr*) (alobi + 1);
         bool failed = false;
         StaticFieldInfo *info_ptr = NULL; int info_len = 0;
         int refslots_set = 0;
         bool closed = false;
         
-        Instr *instr_reading = instr;
+        Instr *instr_reading = (Instr*) (alobi + 1);
         while (instr_reading != instr_end) {
           if (instr_reading->type == INSTR_ASSIGN_STRING_KEY) {
             if (closed) { failed = true; break; }

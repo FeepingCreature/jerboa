@@ -30,7 +30,7 @@ static RefValue ref_simple(int slot) {
 static int ref_access(FunctionBuilder *builder, RefValue rv) {
   if (!builder) return 0; // happens when speculatively parsing
   if (rv.key != -1) {
-    bool use_range = builder->current_range != rv.range;
+    bool use_range = builder->current_range == NULL;
     if (use_range) use_range_start(builder, rv.range);
     int res = addinstr_access(builder, rv.base, rv.key);
     if (use_range) use_range_end(builder, rv.range);
@@ -841,25 +841,30 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
       return PARSE_ERROR;
     }
     record_end(text, define_constraint);
-    use_range_start(builder, define_constraint);
-    int constraint_name_slot = addinstr_alloc_string_object(builder, constraint);
-    constraint_slot = addinstr_access(builder, builder->scope, constraint_name_slot);
-    use_range_end(builder, define_constraint);
+    if (builder) {
+      use_range_start(builder, define_constraint);
+      int constraint_name_slot = addinstr_alloc_string_object(builder, constraint);
+      constraint_slot = addinstr_access(builder, builder->scope, constraint_name_slot);
+      use_range_end(builder, define_constraint);
+    }
   }
   
   // allocate the new scope upfront, so that the variable
   // is in scope for the value expression.
   // (this is important for recursion, ie. var foo = function() { foo(); }; )
-  use_range_start(builder, var_range);
-  builder->scope = addinstr_alloc_object(builder, builder->scope);
-  int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
-  use_range_end(builder, var_range);
-  
-  use_range_start(builder, alloc_var_name);
-  int value, varname_slot = addinstr_alloc_string_object(builder, varname);
-  addinstr_assign(builder, var_scope, varname_slot, 0, ASSIGN_PLAIN);
-  addinstr_close_object(builder, var_scope);
-  use_range_end(builder, alloc_var_name);
+  int value = 0, varname_slot = 0, var_scope = 0;
+  if (builder) {
+    use_range_start(builder, var_range);
+    builder->scope = addinstr_alloc_object(builder, builder->scope);
+    var_scope = builder->scope; // in case we later decide that expressions can open new scopes
+    use_range_end(builder, var_range);
+    
+    use_range_start(builder, alloc_var_name);
+    varname_slot = addinstr_alloc_string_object(builder, varname);
+    addinstr_assign(builder, var_scope, varname_slot, 0, ASSIGN_PLAIN);
+    addinstr_close_object(builder, var_scope);
+    use_range_end(builder, alloc_var_name);
+  }
   
   FileRange *assign_value = alloc_and_record_start(text);
   
@@ -881,19 +886,21 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     value = ref_access(builder, rv);
   }
   
-  use_range_start(builder, assign_value);
-  addinstr_assign(builder, var_scope, varname_slot, value, ASSIGN_EXISTING);
-  use_range_end(builder, assign_value);
-  
-  if (constraint_slot != -1) {
-    use_range_start(builder, define_constraint);
-    addinstr_set_constraint(builder, var_scope, varname_slot, constraint_slot);
-    use_range_end(builder, define_constraint);
+  if (builder) {
+    use_range_start(builder, assign_value);
+    addinstr_assign(builder, var_scope, varname_slot, value, ASSIGN_EXISTING);
+    use_range_end(builder, assign_value);
+    
+    if (constraint_slot != -1) {
+      use_range_start(builder, define_constraint);
+      addinstr_set_constraint(builder, var_scope, varname_slot, constraint_slot);
+      use_range_end(builder, define_constraint);
+    }
+    
+    use_range_start(builder, assign_value);
+    if (isconst) addinstr_freeze_object(builder, var_scope);
+    use_range_end(builder, assign_value);
   }
-  
-  use_range_start(builder, assign_value);
-  if (isconst) addinstr_freeze_object(builder, var_scope);
-  use_range_end(builder, assign_value);
   
   // var a, b;
   if (eat_string(&text, ",")) {
@@ -922,6 +929,7 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
   // discard text2, redo with non-null builder
   char *text = *textp;
   res = parse_expr_base(&text, builder, &rv);
+  if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
   FileRange *assign_range = alloc_and_record_start(text);
   if (!eat_string(&text, assign_text)) abort(); // Internal inconsistency
@@ -1052,10 +1060,12 @@ static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRang
   
   int value = ref_access(builder, ret_value);
   
-  use_range_start(builder, keywd_range);
-  addinstr_return(builder, value);
-  new_block(builder);
-  use_range_end(builder, keywd_range);
+  if (builder) {
+    use_range_start(builder, keywd_range);
+    addinstr_return(builder, value);
+    new_block(builder);
+    use_range_end(builder, keywd_range);
+  }
   return PARSE_OK;
 }
 
@@ -1103,6 +1113,10 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
       res = parse_expr_base(&text, builder, &rv);
       if (res == PARSE_NONE) {
         return PARSE_NONE;
+      }
+      if (rv.key != -1) {
+        log_parser_error(text, "property access discarded without effect");
+        return PARSE_ERROR;
       }
     }
   }
