@@ -11,6 +11,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_GET_ROOT, GetRootInstr);
     CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr);
     CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr);
+    CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr);
     CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr);
     CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr);
     CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr);

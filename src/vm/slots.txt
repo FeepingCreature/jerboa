@@ -5,6 +5,8 @@ CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->parent_slot); CHKSLOT(instr->target_slot);
 CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr)
+  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
 CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
 CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr)

@@ -25,6 +25,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
             slots[instr->parent_slot] = false;
           CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
+          CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr)
           CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
           CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr)
           CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr)
@@ -500,6 +501,8 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
             slot_live[instr->parent_slot] = true;
           CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
+            slot_live[instr->target_slot] = true;
+          CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr)
             slot_live[instr->target_slot] = true;
           CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
             slot_live[instr->target_slot] = true;

@@ -22,6 +22,14 @@ void dump_instr(VMState *state, Instr **instr_p) {
               ((AllocIntObjectInstr*) instr)->target_slot, ((AllocIntObjectInstr*) instr)->value);
       *instr_p = (Instr*) ((AllocIntObjectInstr*) instr + 1);
       break;
+    case INSTR_ALLOC_BOOL_OBJECT:
+    {
+      AllocBoolObjectInstr *aboi = (AllocBoolObjectInstr*) instr;
+      fprintf(stderr, "alloc bool object: %%%i = %s\n",
+              aboi->target_slot, aboi->value?"true":"false");
+      *instr_p = (Instr*) (aboi + 1);
+      break;
+    }
     case INSTR_ALLOC_FLOAT_OBJECT:
       fprintf(stderr, "alloc float object: %%%i = new float(%f)\n",
               ((AllocFloatObjectInstr*) instr)->target_slot, ((AllocFloatObjectInstr*) instr)->value);

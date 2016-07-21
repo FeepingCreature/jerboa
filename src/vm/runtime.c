@@ -33,6 +33,20 @@ static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   state->result_value = alloc_bool(state, !thisptr->bool_value);
 }
 
+static void bool_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0], "don't know how to compare bool with null");
+  
+  Object
+    *bool_base = state->shared->vcache.bool_base,
+    *obj1 = thisptr,
+    *obj2 = args_ptr[0];
+  
+  VM_ASSERT(obj1->parent == bool_base, "internal error: bool compare function called on wrong type of object");
+  VM_ASSERT(obj2->parent == bool_base, "internal error: bool compare function called on wrong type of object");
+  state->result_value = alloc_bool(state, obj1->bool_value == obj2->bool_value);
+}
+
 typedef enum {
   MATH_ADD,
   MATH_SUB,
@@ -951,13 +965,16 @@ static void pow_fn(VMState *state, Object *thisptr, Object *fn, Object **args_pt
 }
 
 static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+  VM_ASSERT(args_len == 1 || args_len == 2, "wrong arity: expected 1 or 2, got %i", args_len);
   bool test = obj_is_truthy(state, args_ptr[0]);
-  Object *string_base = state->shared->vcache.string_base;
-  StringObject *msg_obj = (StringObject*) obj_instance_of(args_ptr[1], string_base);
-  VM_ASSERT(msg_obj, "second parameter to assert() must be string");
-  
-  VM_ASSERT(test, "assert failed: %s", msg_obj->value);
+  if (args_len == 2) {
+    Object *string_base = state->shared->vcache.string_base;
+    StringObject *msg_obj = (StringObject*) obj_instance_of(args_ptr[1], string_base);
+    VM_ASSERT(msg_obj, "second parameter to assert() must be string");
+    VM_ASSERT(test, "assert failed: %s", msg_obj->value);
+  } else {
+    VM_ASSERT(test, "assert failed");
+  }
   state->result_value = NULL;
 }
 
@@ -1036,6 +1053,7 @@ Object *create_root(VMState *state) {
   bool_obj->flags |= OBJ_NOINHERIT;
   object_set(root, "bool", bool_obj);
   object_set(bool_obj, "!", alloc_fn(state, bool_not_fn));
+  object_set(bool_obj, "==", alloc_fn(state, bool_eq_fn));
   state->shared->vcache.bool_base = bool_obj;
   bool_obj->flags |= OBJ_FROZEN;
   

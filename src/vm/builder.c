@@ -196,6 +196,19 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int value) {
   return instr.target_slot;
 }
 
+int addinstr_alloc_bool_object(FunctionBuilder *builder, bool value) {
+  AllocBoolObjectInstr instr = {
+    .base = {
+      .type = INSTR_ALLOC_BOOL_OBJECT,
+      .belongs_to = NULL
+    },
+    .target_slot = builder->slot_base++,
+    .value = value
+  };
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+  return instr.target_slot;
+}
+
 int addinstr_alloc_float_object(FunctionBuilder *builder, float value) {
   AllocFloatObjectInstr instr = {
     .base = {

@@ -9,6 +9,7 @@ typedef enum {
   INSTR_GET_ROOT = 0,
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
+  INSTR_ALLOC_BOOL_OBJECT,
   INSTR_ALLOC_FLOAT_OBJECT,
   INSTR_ALLOC_ARRAY_OBJECT,
   INSTR_ALLOC_STRING_OBJECT,
@@ -111,6 +112,12 @@ typedef struct {
   int target_slot;
   int value;
 } AllocIntObjectInstr;
+
+typedef struct {
+  Instr base;
+  int target_slot;
+  bool value;
+} AllocBoolObjectInstr;
 
 typedef struct {
   Instr base;

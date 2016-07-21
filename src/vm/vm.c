@@ -250,6 +250,16 @@ static FnWrap vm_instr_alloc_int_object(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_alloc_bool_object(FastVMState *state) {
+  AllocBoolObjectInstr *alloc_bool_obj_instr = (AllocBoolObjectInstr*) state->instr;
+  int target_slot = alloc_bool_obj_instr->target_slot;
+  bool value = alloc_bool_obj_instr->value;
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
+  state->slots[target_slot] = alloc_bool(state->reststate, value);
+  state->instr = (Instr*)(alloc_bool_obj_instr + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_instr_alloc_float_object(FastVMState *state) {
   AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) state->instr;
   int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
@@ -823,6 +833,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_GET_ROOT] = vm_instr_get_root;
   instr_fns[INSTR_ALLOC_OBJECT] = vm_instr_alloc_object;
   instr_fns[INSTR_ALLOC_INT_OBJECT] = vm_instr_alloc_int_object;
+  instr_fns[INSTR_ALLOC_BOOL_OBJECT] = vm_instr_alloc_bool_object;
   instr_fns[INSTR_ALLOC_FLOAT_OBJECT] = vm_instr_alloc_float_object;
   instr_fns[INSTR_ALLOC_ARRAY_OBJECT] = vm_instr_alloc_array_object;
   instr_fns[INSTR_ALLOC_STRING_OBJECT] = vm_instr_alloc_string_object;
