@@ -9,7 +9,7 @@ void *cache_alloc(int size);
 void cache_free(int size, void *ptr);
 
 #include <stdio.h>
-static inline TableEntry *table_lookup_with_hash_internal2(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv) {
+static inline TableEntry *table_lookup_with_hash_internal2(HashTable *tbl, const char *key_ptr, size_t key_len, size_t hashv) {
   assert(key_ptr != NULL);
   if (tbl->entries_stored == 0) return NULL;
   if ((tbl->bloom & hashv) != hashv) return NULL;
@@ -49,24 +49,24 @@ static inline TableEntry *table_lookup_with_hash_internal2(HashTable *tbl, const
   return NULL;
 }
 
-static inline TableEntry *table_lookup_with_hash_internal(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv) {
+static inline TableEntry *table_lookup_with_hash_internal(HashTable *tbl, const char *key_ptr, size_t key_len, size_t hashv) {
   if (UNLIKELY(key_len == 0)) return table_lookup_with_hash_internal2(tbl, key_ptr, 0, hashv);
   if (UNLIKELY(key_len == 1)) return table_lookup_with_hash_internal2(tbl, key_ptr, 1, hashv);
   if (UNLIKELY(key_len == 2)) return table_lookup_with_hash_internal2(tbl, key_ptr, 2, hashv);
   return table_lookup_with_hash_internal2(tbl, key_ptr, key_len, hashv);
 }
 
-TableEntry *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t hashv) {
+TableEntry *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, size_t key_len, size_t hashv) {
   return table_lookup_with_hash_internal(tbl, key_ptr, key_len, hashv);
 }
 
 // if the key was not found, return null but allocate a mapping in first_free_ptr
-TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, int key_len) {
+TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) {
   size_t hashv = (tbl->entries_num>8)?hash(key_ptr, key_len):0;
   return table_lookup_with_hash_internal(tbl, key_ptr, key_len, hashv);
 }
 
-static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash, TableEntry** first_free_ptr) {
+static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, TableEntry** first_free_ptr) {
   assert(key_ptr != NULL);
   *first_free_ptr = NULL;
   // printf(":: %.*s into %i having %i\n", key_len, key_ptr, tbl->entries_num, tbl->entries_stored);
@@ -128,12 +128,12 @@ static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const c
   return table_lookup_alloc(tbl, key_ptr, key_len, first_free_ptr);
 }
 
-TableEntry *table_lookup_alloc_with_hash(HashTable *tbl, const char *key_ptr, int key_len, size_t key_hash, TableEntry** first_free_ptr) {
+TableEntry *table_lookup_alloc_with_hash(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, TableEntry** first_free_ptr) {
   return table_lookup_alloc_with_hash_internal(tbl, key_ptr, key_len, key_hash, first_free_ptr);
 }
 
 // if the key was not found, return null but allocate a mapping in first_free_ptr
-TableEntry *table_lookup_alloc(HashTable *tbl, const char *key_ptr, int key_len, TableEntry** first_free_ptr) {
+TableEntry *table_lookup_alloc(HashTable *tbl, const char *key_ptr, size_t key_len, TableEntry** first_free_ptr) {
   size_t key_hash = tbl->entries_num?hash(key_ptr, key_len):0;
   return table_lookup_alloc_with_hash_internal(tbl, key_ptr, key_len, key_hash, first_free_ptr);
 }

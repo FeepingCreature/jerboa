@@ -56,7 +56,7 @@ static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, O
 }
 
 static void function_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  // discard calling context (lexical scoping!)
+  (void) thisptr; // discard calling context (lexical scoping!)
   ClosureObject *cl_obj = (ClosureObject*) fn;
   Object *context = cl_obj->context;
   gc_disable(state); // keep context alive, if need be
@@ -66,7 +66,6 @@ static void function_handler(VMState *state, Object *thisptr, Object *fn, Object
 }
 
 static void method_handler(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  // discard calling context (lexical scoping!)
   ClosureObject *cl_obj = (ClosureObject*) fn;
   Object *context = alloc_object(state, cl_obj->context);
   object_set(context, "this", thisptr);

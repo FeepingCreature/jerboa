@@ -590,7 +590,7 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   return fn;
 }
 
-bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later);
+bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later);
 
 UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context) {
   SlotIsStaticObjInfo *static_info;
@@ -650,7 +650,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
             Object *constraint = constraints->constraint_ptr[k];
             Instr *location = constraints->constraint_imposed_here_ptr[k];
             if (constraint == int_base || constraint == float_base) { // primitives, always closed
-              if (dominates(uf, &cfg, node2rpost, sfidoms_ptr, location, instr)) {
+              if (dominates(uf, node2rpost, sfidoms_ptr, location, instr)) {
                 object_known[aski->target_slot] = true;
                 bool key_found = false;
                 known_objects_table[aski->target_slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
@@ -762,7 +762,7 @@ UserFunction *optimize(UserFunction *uf) {
 
 // does earlier dominate later?
 // note: if this is too slow, make a struct InstrLocation { int block; Instr *instr; }
-bool dominates(UserFunction *uf, CFG *cfg, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later) {
+bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later) {
   int blk_earlier = -1, blk_later = -1;
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *blk_start = BLOCK_START(uf, i), *blk_end = BLOCK_END(uf, i);

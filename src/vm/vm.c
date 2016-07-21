@@ -38,7 +38,7 @@ void *vm_stack_alloc_uninitialized(VMState *state, int size) {
 void vm_stack_free(VMState *state, void *ptr, int size) {
   VMSharedState *shared = state->shared;
   int new_offset = shared->stack_data_offset - size;
-  assert(ptr == (char*) shared->stack_data_ptr + new_offset); // must free in reverse order!
+  (void) ptr; assert(ptr == (char*) shared->stack_data_ptr + new_offset); // must free in reverse order!
   shared->stack_data_offset = new_offset;
 }
 
