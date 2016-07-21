@@ -147,8 +147,8 @@ void vm_record_profile(VMState *state) {
       if (k == 0) {
         TableEntry *freeptr;
         TableEntry *entry_p = table_lookup_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
-        if (entry_p) (*(int*) &entry_p->value) ++;
-        else (*(int*) &freeptr->value) = 1;
+        if (entry_p) entry_p->value = (void*) ((size_t) entry_p->value + 1);
+        else freeptr->value = (void*) 1;
       } else {
         // don't double-count ranges in case of recursion
         bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
@@ -156,8 +156,8 @@ void vm_record_profile(VMState *state) {
         if (!range_already_counted) {
           TableEntry *freeptr;
           TableEntry *entry_p = table_lookup_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
-          if (entry_p) (*(int*) &entry_p->value) ++;
-          else (*(int*) &freeptr->value) = 1;
+          if (entry_p) entry_p->value = (void*) ((size_t) entry_p->value + 1);
+          else freeptr->value = (void*) 1;
         }
       }
       instr->belongs_to->last_cycle_seen = cyclecount;
