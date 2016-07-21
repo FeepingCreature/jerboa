@@ -259,7 +259,6 @@ typedef struct {
   
   int info_len;
   StaticFieldInfo *info_ptr;
-  Object *obj_sample;
 } AllocStaticObjectInstr;
 
 #endif

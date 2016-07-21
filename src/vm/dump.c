@@ -174,7 +174,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
                 info->name_len, info->name_ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
       fprintf(stderr, "}\n");
-      *instr_p = (Instr*) (asoi + 1);
+      *instr_p = (Instr*) ((char*) asoi + sizeof(AllocStaticObjectInstr) + sizeof(Object));
       break;
     }
     default:

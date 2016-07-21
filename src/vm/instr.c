@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "object.h"
+
 int instr_size(Instr *instr) {
   switch (instr->type) {
 #define CASE(EN, TY) case EN: return sizeof(TY)
@@ -30,8 +32,8 @@ int instr_size(Instr *instr) {
     CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
     CASE(INSTR_READ_REFSLOT, ReadRefslotInstr);
     CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr);
-    CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr);
 #undef CASE
+    case INSTR_ALLOC_STATIC_OBJECT: return sizeof(AllocStaticObjectInstr) + sizeof(Object);
     case INSTR_CALL: return sizeof(CallInstr) + sizeof(int) * ((CallInstr*)instr)->args_length;
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();
   }

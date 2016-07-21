@@ -877,22 +877,23 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
             
             instr_reading = (Instr*) (scski + 1);
           }
-          Object *sample_obj = (Object*) cache_alloc(sizeof(Object));
+          Object sample_obj = {0};
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
-            char *error = object_set(sample_obj, info->name_ptr, NULL);
+            char *error = object_set(&sample_obj, info->name_ptr, NULL);
             if (error) { fprintf(stderr, "INTERNAL LOGIC ERROR: %s\n", error); abort(); }
           }
           
-          AllocStaticObjectInstr asoi = {
+          AllocStaticObjectInstr *asoi = alloca(sizeof(AllocStaticObjectInstr) + sizeof(Object));
+          *asoi = (AllocStaticObjectInstr) {
             .base = { .type = INSTR_ALLOC_STATIC_OBJECT },
             .info_len = info_len,
             .info_ptr = info_ptr,
             .parent_slot = alobi->parent_slot,
             .target_slot = alobi->target_slot,
-            .obj_sample = sample_obj
           };
-          addinstr_like(builder, instr, sizeof(asoi), (Instr*) &asoi);
+          *(Object*) (asoi + 1) = sample_obj;
+          addinstr_like(builder, instr, sizeof(AllocStaticObjectInstr) + sizeof(Object), (Instr*) asoi);
           instr = instr_reading;
         }
       }
