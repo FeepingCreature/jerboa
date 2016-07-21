@@ -730,26 +730,29 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     FileRange *range = alloc_and_record_start(text);
     if (eat_string(&text, "&&")) {
       /*
-       *  [1]
+       *  [1F]
        * N | \ Y
-       *  [F] [2]
+       *   |  [2F]
        *   | N | \ Y
-       *   |  [F][T]
+       *   |   | [T]
        *   |   | /
        *   |  [φ]
        *   | /
        *  [φ]
        */
       record_end(text, range);
-      // short-circuiting evaluation
-      int slot_test1 = ref_access(builder, *rv);
-      // if (lhs) {
-      int true_blk1, false_blk1;
-      use_range_start(builder, range);
-      addinstr_test_branch(builder, slot_test1, &true_blk1, &false_blk1);
       
-      int blk_true = new_block(builder);
-      set_int_var(builder, true_blk1, blk_true);
+      // short-circuiting evaluation
+      int test1_blk = builder->body.blocks_len - 1;
+      int test1_slot = ref_access(builder, *rv);
+      // if (lhs) {
+      int test1_br_true, test1_br_false;
+      use_range_start(builder, range);
+      int test1_slot_n = addinstr_alloc_bool_object(builder, false);
+      addinstr_test_branch(builder, test1_slot, &test1_br_true, &test1_br_false);
+      
+      int test2_blk = new_block(builder);
+      set_int_var(builder, test1_br_true, test2_blk);
       use_range_end(builder, range);
       
       // if (rhs) { // TODO check truthiness of RHS directly via instr
@@ -757,47 +760,34 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       
-      int slot_test2 = ref_access(builder, rhs_expr);
-      int true_blk2, false_blk2;
+      int test2_slot = ref_access(builder, rhs_expr);
+      int test2_br_true, test2_br_false;
       use_range_start(builder, range);
-      addinstr_test_branch(builder, slot_test2, &true_blk2, &false_blk2);
+      int test2_slot_n = addinstr_alloc_bool_object(builder, false);
+      addinstr_test_branch(builder, test2_slot, &test2_br_true, &test2_br_false);
       
-      int blk_true_true = new_block(builder);
-      set_int_var(builder, true_blk2, blk_true_true);
-      int slot_true_true = addinstr_alloc_bool_object(builder, true); // true && true => true
-      int end_br_true_true;
-      addinstr_branch(builder, &end_br_true_true);
-      
-      // } else {
-      int blk_true_false = new_block(builder);
-      set_int_var(builder, false_blk2, blk_true_false);
-      int slot_true_false = addinstr_alloc_bool_object(builder, false); // true && false => false
-      int end_br_true_false;
-      addinstr_branch(builder, &end_br_true_false);
+      int true_true_blk = new_block(builder);
+      set_int_var(builder, test2_br_true, true_true_blk);
+      int true_true_slot = addinstr_alloc_bool_object(builder, true); // true && true => true
+      int true_true_br;
+      addinstr_branch(builder, &true_true_br);
       
       // }
-      int blk_true_phi = new_block(builder);
-      set_int_var(builder, end_br_true_true, blk_true_phi);
-      set_int_var(builder, end_br_true_false, blk_true_phi);
-      int slot_true_phi = addinstr_phi(builder, blk_true_true, slot_true_true, blk_true_false, slot_true_false);
-      int end_br_true_phi;
-      addinstr_branch(builder, &end_br_true_phi);
-      
-      // } else {
-      int blk_false = new_block(builder);
-      set_int_var(builder, false_blk1, blk_false);
-      int slot_false = addinstr_alloc_bool_object(builder, false); // false && _ => false
-      int end_br_false;
-      addinstr_branch(builder, &end_br_false);
+      int true_phi_blk = new_block(builder);
+      set_int_var(builder, true_true_br, true_phi_blk);
+      set_int_var(builder, test2_br_false, true_phi_blk);
+      int true_phi_slot = addinstr_phi(builder, true_true_blk, true_true_slot, test2_blk, test2_slot_n);
+      int true_phi_br;
+      addinstr_branch(builder, &true_phi_br);
       
       // }
-      int blk_phi = new_block(builder);
-      set_int_var(builder, end_br_false, blk_phi);
-      set_int_var(builder, end_br_true_phi, blk_phi);
-      int slot_phi = addinstr_phi(builder, blk_false, slot_false, blk_true_phi, slot_true_phi);
+      int phi_blk = new_block(builder);
+      set_int_var(builder, test1_br_false, phi_blk);
+      set_int_var(builder, true_phi_br, phi_blk);
+      int phi_slot = addinstr_phi(builder, true_phi_blk, true_phi_slot, test1_blk, test1_slot_n);
       use_range_end(builder, range);
       
-      *rv = ref_simple(slot_phi);
+      *rv = ref_simple(phi_slot);
       continue;
     }
     free(range);
@@ -810,26 +800,29 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     FileRange *range = alloc_and_record_start(text);
     if (eat_string(&text, "||")) {
       /*
-       *  [1]
+       *  [1T]
        * Y | \ N
-       *  [T] [2]
+       *   |  [2T]
        *   | Y | \ N
-       *   |  [T][F]
+       *   |   | [F]
        *   |   | /
        *   |  [φ]
        *   | /
        *  [φ]
        */
       record_end(text, range);
-      // short-circuiting evaluation
-      int slot_test1 = ref_access(builder, *rv);
-      // if (!lhs) {
-      int true_blk1, false_blk1;
-      use_range_start(builder, range);
-      addinstr_test_branch(builder, slot_test1, &true_blk1, &false_blk1);
       
-      int blk_false = new_block(builder);
-      set_int_var(builder, false_blk1, blk_false);
+      // short-circuiting evaluation
+      int test1_blk = builder->body.blocks_len - 1;
+      int test1_slot = ref_access(builder, *rv);
+      // if (!lhs) {
+      int test1_br_true, test1_br_false;
+      use_range_start(builder, range);
+      int test1_slot_y = addinstr_alloc_bool_object(builder, true);
+      addinstr_test_branch(builder, test1_slot, &test1_br_true, &test1_br_false);
+      
+      int test2_blk = new_block(builder);
+      set_int_var(builder, test1_br_false, test2_blk);
       use_range_end(builder, range);
       
       // if (rhs) { // TODO check truthiness of RHS directly via instr
@@ -837,47 +830,34 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       
-      int slot_test2 = ref_access(builder, rhs_expr);
-      int true_blk2, false_blk2;
+      int test2_slot = ref_access(builder, rhs_expr);
+      int test2_br_true, test2_br_false;
       use_range_start(builder, range);
-      addinstr_test_branch(builder, slot_test2, &true_blk2, &false_blk2);
+      int test2_slot_y = addinstr_alloc_bool_object(builder, true);
+      addinstr_test_branch(builder, test2_slot, &test2_br_true, &test2_br_false);
       
-      int blk_false_true = new_block(builder);
-      set_int_var(builder, true_blk2, blk_false_true);
-      int slot_false_true = addinstr_alloc_bool_object(builder, true); // false || true => true
-      int end_br_false_true;
-      addinstr_branch(builder, &end_br_false_true);
-      
-      // } else {
-      int blk_false_false = new_block(builder);
-      set_int_var(builder, false_blk2, blk_false_false);
-      int slot_false_false = addinstr_alloc_bool_object(builder, false); // false || false => false
-      int end_br_false_false;
-      addinstr_branch(builder, &end_br_false_false);
+      int false_false_blk = new_block(builder);
+      set_int_var(builder, test2_br_false, false_false_blk);
+      int false_false_slot = addinstr_alloc_bool_object(builder, false); // false || false => false
+      int false_false_br;
+      addinstr_branch(builder, &false_false_br);
       
       // }
-      int blk_false_phi = new_block(builder);
-      set_int_var(builder, end_br_false_true, blk_false_phi);
-      set_int_var(builder, end_br_false_false, blk_false_phi);
-      int slot_false_phi = addinstr_phi(builder, blk_false_true, slot_false_true, blk_false_false, slot_false_false);
-      int end_br_false_phi;
-      addinstr_branch(builder, &end_br_false_phi);
-      
-      // } else {
-      int blk_true = new_block(builder);
-      set_int_var(builder, true_blk1, blk_true);
-      int slot_true = addinstr_alloc_bool_object(builder, true); // true || _ => true
-      int end_br_true;
-      addinstr_branch(builder, &end_br_true);
+      int false_phi_blk = new_block(builder);
+      set_int_var(builder, false_false_br, false_phi_blk);
+      set_int_var(builder, test2_br_true, false_phi_blk);
+      int slot_false_phi = addinstr_phi(builder, false_false_blk, false_false_slot, test2_blk, test2_slot_y);
+      int false_phi_br;
+      addinstr_branch(builder, &false_phi_br);
       
       // }
-      int blk_phi = new_block(builder);
-      set_int_var(builder, end_br_true, blk_phi);
-      set_int_var(builder, end_br_false_phi, blk_phi);
-      int slot_phi = addinstr_phi(builder, blk_true, slot_true, blk_false_phi, slot_false_phi);
+      int phi_blk = new_block(builder);
+      set_int_var(builder, test1_br_true, phi_blk);
+      set_int_var(builder, false_phi_br, phi_blk);
+      int phi_slot = addinstr_phi(builder, false_phi_blk, slot_false_phi, test1_blk, test1_slot_y);
       use_range_end(builder, range);
       
-      *rv = ref_simple(slot_phi);
+      *rv = ref_simple(phi_slot);
       continue;
     }
     free(range);
