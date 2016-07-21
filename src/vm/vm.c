@@ -662,6 +662,8 @@ static FnWrap vm_instr_br(FastVMState *state) {
   int blk = br_instr->blk;
   VM_ASSERT2_SLOT(blk < state->cf->uf->body.blocks_len, "slot numbering error");
   state->instr = (Instr*) ((char*) state->cf->uf->body.instrs_ptr + state->cf->uf->body.blocks_ptr[blk].offset);
+  state->cf->prev_block = state->cf->block;
+  state->cf->block = blk;
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -676,6 +678,24 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   
   int target_blk = test ? true_blk : false_blk;
   state->instr = (Instr*) ((char*) state->cf->uf->body.instrs_ptr + state->cf->uf->body.blocks_ptr[target_blk].offset);
+  state->cf->prev_block = state->cf->block;
+  state->cf->block = target_blk;
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
+static FnWrap vm_instr_phi(FastVMState *state) {
+  PhiInstr *phi = (PhiInstr*) state->instr;
+  int slot1 = phi->slot1, slot2 = phi->slot2, target_slot = phi->target_slot;
+  VM_ASSERT2_SLOT(slot1 < state->cf->slots_len, "slot_numbering error");
+  VM_ASSERT2_SLOT(slot2 < state->cf->slots_len, "slot_numbering error");
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot_numbering error");
+  if (state->cf->prev_block == phi->block1) {
+    state->slots[target_slot] = state->slots[slot1];
+  } else if (state->cf->prev_block == phi->block2) {
+    state->slots[target_slot] = state->slots[slot2];
+  } else VM_ASSERT2(false, "phi block error: arrived here from block not in list");
+  
+  state->instr = (Instr*)(phi + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -818,6 +838,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_SAVE_RESULT] = vm_instr_save_result;
   instr_fns[INSTR_BR] = vm_instr_br;
   instr_fns[INSTR_TESTBR] = vm_instr_testbr;
+  instr_fns[INSTR_PHI] = vm_instr_phi;
   instr_fns[INSTR_ACCESS_STRING_KEY] = vm_instr_access_string_key;
   instr_fns[INSTR_ASSIGN_STRING_KEY] = vm_instr_assign_string_key;
   instr_fns[INSTR_SET_CONSTRAINT_STRING_KEY] = vm_instr_set_constraint_string_key;

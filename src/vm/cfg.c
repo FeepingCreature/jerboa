@@ -19,7 +19,8 @@ static void cfg_walk_reverse_postorder(CFG *cfg, int nodeidx, int *res_ptr, int 
   if (node_visited[nodeidx]) return;
   node_visited[nodeidx] = true;
   // walk in reverse order, write in reverse order - cancels out
-  for (int i = cfg->nodes_ptr[nodeidx].succ_len - 1; i >= 0; --i) {
+  // for (int i = cfg->nodes_ptr[nodeidx].succ_len - 1; i >= 0; --i) {
+  for (int i = 0; i < cfg->nodes_ptr[nodeidx].succ_len; ++i) { // less "natural" order - exposes some errors
     cfg_walk_reverse_postorder(cfg, cfg->nodes_ptr[nodeidx].succ_ptr[i], res_ptr, residx, node_visited);
   }
   res_ptr[--*residx] = nodeidx;

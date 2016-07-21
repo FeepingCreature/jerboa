@@ -83,6 +83,8 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, i
 
 void addinstr_branch(FunctionBuilder *builder, int *branch);
 
+int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, int slot2);
+
 void addinstr_return(FunctionBuilder *builder, int slot);
 
 int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key);

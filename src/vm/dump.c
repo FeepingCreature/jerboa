@@ -106,6 +106,14 @@ void dump_instr(VMState *state, Instr **instr_p) {
               ((TestBranchInstr*) instr)->test_slot, ((TestBranchInstr*) instr)->true_blk, ((TestBranchInstr*) instr)->false_blk);
       *instr_p = (Instr*) ((TestBranchInstr*) instr + 1);
       break;
+    case INSTR_PHI:
+    {
+      PhiInstr *phi = (PhiInstr*) instr;
+      fprintf(stderr, "phi: %%%i = [ <%i>: %%%i, <%i>: %%%i ]\n",
+              phi->target_slot, phi->block1, phi->slot1, phi->block2, phi->slot2);
+      *instr_p = (Instr*) (phi + 1);
+      break;
+    }
     case INSTR_ACCESS_STRING_KEY:
       fprintf(stderr, "access: %%%i = %%%i . '%.*s' \t\t(opt: string key)\n",
               ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot,

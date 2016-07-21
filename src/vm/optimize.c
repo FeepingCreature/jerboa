@@ -50,6 +50,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_BR, BranchInstr)
           CASE(INSTR_TESTBR, TestBranchInstr)
             slots[instr->test_slot] = false;
+          CASE(INSTR_PHI, PhiInstr)
+            slots[instr->slot1] = slots[instr->slot2] = slots[instr->target_slot] = false;
           CASE(INSTR_LAST, Instr) abort();
         } break;
         default: assert("Unhandled Instruction Type!" && false);
@@ -534,6 +536,8 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_BR, BranchInstr)
           CASE(INSTR_TESTBR, TestBranchInstr)
             slot_live[instr->test_slot] = true;
+          CASE(INSTR_PHI, PhiInstr)
+            slot_live[instr->slot1] = slot_live[instr->slot2] = true;
           CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
             slot_live[instr->obj_slot] = slot_live[instr->target_slot] = true;
           CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)

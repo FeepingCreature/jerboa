@@ -40,6 +40,11 @@ CASE(INSTR_BR, BranchInstr)
 CASE(INSTR_TESTBR, TestBranchInstr)
   CHKSLOT(instr->base.context_slot);
   CHKSLOT(instr->test_slot);
+CASE(INSTR_PHI, PhiInstr)
+  CHKSLOT(instr->base.context_slot);
+  CHKSLOT(instr->slot1);
+  CHKSLOT(instr->slot2);
+  CHKSLOT(instr->target_slot);
 
 CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->target_slot);

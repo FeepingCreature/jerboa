@@ -299,6 +299,23 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, i
   addinstr(builder, sizeof(instr), (Instr*) &instr);
 }
 
+int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, int slot2) {
+  PhiInstr instr = {
+    .base = {
+      .type = INSTR_PHI,
+      .belongs_to = NULL
+    },
+    .block1 = block1,
+    .slot1 = slot1,
+    .block2 = block2,
+    .slot2 = slot2,
+    .target_slot = builder->slot_base ++
+  };
+  
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+  return instr.target_slot;
+}
+
 void addinstr_branch(FunctionBuilder *builder, int *branch) {
   BranchInstr instr = {
     .base = {
