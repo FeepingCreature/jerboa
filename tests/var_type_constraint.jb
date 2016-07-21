@@ -1,0 +1,2 @@
+var i: int = 5;
+i = "foo";

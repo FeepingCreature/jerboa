@@ -1,0 +1,3 @@
+function foo(i: float) {
+}
+foo("bar");

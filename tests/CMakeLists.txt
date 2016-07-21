@@ -1,0 +1,5 @@
+set( CWD ${CMAKE_CURRENT_SOURCE_DIR} )
+add_test( NAME ack37 COMMAND jerboa ${CWD}/ack.jb )
+add_test( NAME var-type-constraint COMMAND jerboa ${CWD}/var_type_constraint.jb )
+add_test( NAME fun-type-constraint COMMAND jerboa ${CWD}/fun_type_constraint.jb )
+set_tests_properties( var-type-constraint fun-type-constraint PROPERTIES WILL_FAIL true )

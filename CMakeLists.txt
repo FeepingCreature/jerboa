@@ -21,3 +21,6 @@ target_link_libraries (jerboa dl ffi xml2)
 target_link_libraries (repl dl ffi xml2)
 install(TARGETS jerboa RUNTIME DESTINATION bin)
 install(TARGETS repl RUNTIME DESTINATION bin)
+
+enable_testing()
+add_subdirectory( tests )
