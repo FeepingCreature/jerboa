@@ -234,7 +234,6 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
       if (instr->type == INSTR_ASSIGN_STRING_KEY) {
         AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
         if (aski->type == ASSIGN_EXISTING) {
-          // TODO remove all the instr mallocs
           AssignStringKeyInstr aski_new = *aski;
           while (true) {
             int obj_slot = aski_new.obj_slot;
@@ -873,7 +872,7 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
             SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr_reading;
             
             if (scski->obj_slot != alobi->target_slot) break;
-            if (!constant_slots[scski->constraint_slot]) break; // TODO emit, then keep looking for a bit
+            if (!constant_slots[scski->constraint_slot]) break;
             
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];

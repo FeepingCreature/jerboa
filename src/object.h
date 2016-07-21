@@ -104,7 +104,9 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
 
 typedef struct {
   Object *bool_false, *bool_true;
-  Object *int_zero; // TODO array
+  // I could speed up int math a lot with an array here, but that wouldn't do anything for floats.
+  // TODO maybe later.
+  Object *int_zero;
   Object *int_base, *bool_base, *float_base;
   Object *closure_base, *function_base;
   Object *array_base, *string_base, *pointer_base;
@@ -224,7 +226,7 @@ Object *alloc_bool_uncached(VMState *state, bool value);
 
 Object *alloc_array(VMState *state, Object **ptr, Object *length);
 
-Object *alloc_ptr(VMState *state, void *ptr); // TODO unify with alloc_fn
+Object *alloc_ptr(VMState *state, void *ptr);
 
 Object *alloc_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom);
 

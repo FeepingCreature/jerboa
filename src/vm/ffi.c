@@ -63,17 +63,16 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   Object *int_base = state->shared->vcache.int_base;
   Object *pointer_base = state->shared->vcache.pointer_base;
   
-  // TODO grab direct from ffi object
-  Object *ffi = OBJECT_LOOKUP_STRING(root, "ffi", NULL);
-  Object *ffi_type = OBJECT_LOOKUP_STRING(ffi, "type", NULL);
-  Object *ffi_short = OBJECT_LOOKUP_STRING(ffi, "short", NULL);
-  Object *ffi_int = OBJECT_LOOKUP_STRING(ffi, "int", NULL);
-  Object *ffi_ushort = OBJECT_LOOKUP_STRING(ffi, "ushort", NULL);
-  Object *ffi_int8 = OBJECT_LOOKUP_STRING(ffi, "int8", NULL);
-  Object *ffi_uint8 = OBJECT_LOOKUP_STRING(ffi, "uint8", NULL);
-  // Object *ffi_uint32 = OBJECT_LOOKUP_STRING(ffi, "uint32", NULL);
-  Object *ffi_pointer = OBJECT_LOOKUP_STRING(ffi, "pointer", NULL);
-  Object *ffi_charptr = OBJECT_LOOKUP_STRING(ffi, "char_pointer", NULL);
+  FFIObject *ffi = (FFIObject*) OBJECT_LOOKUP_STRING(root, "ffi", NULL);
+  Object *ffi_type = OBJECT_LOOKUP_STRING((Object*) ffi, "type", NULL);
+  Object *ffi_short = ffi->short_obj;
+  Object *ffi_int = ffi->int_obj;
+  Object *ffi_ushort = ffi->ushort_obj;
+  Object *ffi_int8 = ffi->int8_obj;
+  Object *ffi_uint8 = ffi->uint8_obj;
+  // Object *ffi_uint32 = ffi->uint32_obj;
+  Object *ffi_pointer = ffi->pointer_obj;
+  Object *ffi_charptr = ffi->char_pointer_obj;
   
   VM_ASSERT(thisptr->parent == pointer_base, "internal error");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
@@ -84,25 +83,25 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   int offs = offs_obj->int_value;
   assert(ffi_type_obj);
   char *offset_ptr = (char*) thisptr_obj->ptr + offs;
-  if (obj_instance_of_or_equal(ffi_type_obj, ffi_short)) {
+  if (ffi_type_obj == ffi_short) {
     short s = *(short*) offset_ptr;
     state->result_value = alloc_int(state, s);
-  } else if (obj_instance_of_or_equal(ffi_type_obj, ffi_ushort)) {
+  } else if (ffi_type_obj == ffi_ushort) {
     unsigned short us = *(unsigned short*) offset_ptr;
     state->result_value = alloc_int(state, us);
-  } else if (obj_instance_of_or_equal(ffi_type_obj, ffi_int)) {
+  } else if (ffi_type_obj == ffi_int) {
     int i = *(int*) offset_ptr;
     state->result_value = alloc_int(state, i);
-  } else if (obj_instance_of_or_equal(ffi_type_obj, ffi_uint8)) {
+  } else if (ffi_type_obj == ffi_uint8) {
     uint8_t u8 = *(uint8_t*) offset_ptr;
     state->result_value = alloc_int(state, u8);
-  } else if (obj_instance_of_or_equal(ffi_type_obj, ffi_int8)) {
+  } else if (ffi_type_obj == ffi_int8) {
     int8_t i8 = *(int8_t*) offset_ptr;
     state->result_value = alloc_int(state, i8);
-  } else if (obj_instance_of_or_equal(ffi_type_obj, ffi_pointer)) {
+  } else if (ffi_type_obj == ffi_pointer) {
     void *ptr = *(void**) offset_ptr;
     state->result_value = make_ffi_pointer(state, ptr);
-  } else if (obj_instance_of_or_equal(ffi_type_obj, ffi_charptr)) {
+  } else if (ffi_type_obj == ffi_charptr) {
     char *ptr = *(char**) offset_ptr;
     state->result_value = alloc_string_foreign(state, ptr);
   } else assert("TODO" && false);

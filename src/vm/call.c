@@ -44,7 +44,7 @@ static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, O
   // should have been checked before
   assert(args_len >= uf->arity);
   int varargs_len = args_len - uf->arity;
-  // TODO when/how is this actually freed??
+  // when/how is this actually freed??
   // TODO owned_array?
   Object **varargs_ptr = malloc(sizeof(Object*) * varargs_len);
   for (int i = 0; i < varargs_len; ++i) {

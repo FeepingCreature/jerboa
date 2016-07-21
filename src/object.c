@@ -318,7 +318,6 @@ Object *alloc_string(VMState *state, const char *ptr, int len) {
 }
 
 Object *alloc_string_foreign(VMState *state, char *value) {
-  // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;

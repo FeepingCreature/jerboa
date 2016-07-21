@@ -15,7 +15,6 @@
 #include "util.h"
 
 int main(int argc, char **argv) {
-  // TODO feed spare argv to script as [arguments]
   if (argc < 2) {
     fprintf(stderr, "expected: jerboa [script file] [arguments]\n");
     return 1;

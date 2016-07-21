@@ -479,12 +479,7 @@ static FnWrap vm_instr_assign(FastVMState *state) {
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
-  char *key = skey->value;
-  // Not sure how to correctly handle "key leakage".
-  // TODO figure out better.
-  // TODO update reststate?
-  // TODO copy key??
-  gc_add_perm(state->reststate, key_obj);
+  char *key = my_asprintf("%s", skey->value); // copy so key can get gc'd without problems
   AssignType assign_type = assign_instr->type;
   // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
   VM_ASSERT2(obj, "assignment to null object");
@@ -523,7 +518,7 @@ static FnWrap vm_instr_key_in_obj(FastVMState *state) {
   Object *key_obj = state->slots[key_slot];
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   if (!skey) {
-    VM_ASSERT2(false, "'in' key is not string! TODO overload?");
+    VM_ASSERT2(false, "'in' key is not string! todo overload?");
   }
   char *key = skey->value;
   bool object_found = false;

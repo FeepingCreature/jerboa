@@ -520,10 +520,9 @@ static void array_join_fn(VMState *state, Object *thisptr, Object *fn, Object **
     }
     Object *entry = arr_obj->ptr[i];
     StringObject *entry_str = (StringObject*) obj_instance_of(entry, string_base);
-    // TODO is there a way to write this that doesn't need two scans here?
-    int len = strlen(entry_str->value);
-    memcpy(res_cur, entry_str->value, len);
-    res_cur += len;
+    // this is safe - we counted up the length above
+    // (assuming nobody changes entry_str under us)
+    res_cur = strcpy(res_cur, entry_str->value);
   }
   res_cur[0] = 0;
   // TODO make string constructor that takes ownership of the pointer instead
@@ -728,8 +727,6 @@ static void xml_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
 
 static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
 {
-  Object *bool_base = state->shared->vcache.bool_base;
-  
   VMState substate = {0};
   substate.parent = state;
   substate.root = state->root;
@@ -740,11 +737,8 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
   vm_run(&substate);
   VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error) false;
   
-  // TODO truthy()
   Object *res = substate.result_value;
-  VM_ASSERT(res->parent == bool_base, "predicate must return bool") false;
-  
-  return res->bool_value;
+  return obj_is_truthy(state, res);
 }
 
 static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Object ***array_p_p, int *array_l_p)
