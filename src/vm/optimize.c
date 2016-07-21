@@ -15,47 +15,47 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   for (int i = 0; i < uf->slots; ++i) slots[i] = true; // default assumption
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
-    while (instr != instr_end) {
-#define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
-        case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
-      switch (instr->type) {
-        case INSTR_INVALID: { abort(); int _stepsize = -1;
-          CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
-          CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr, alloc_obj_instr)
-            slots[alloc_obj_instr->parent_slot] = false;
-          CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr, alloc_int_obj_instr)
-          CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr, alloc_float_obj_instr)
-          CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr, alloc_array_obj_instr)
-          CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr, alloc_string_obj_instr)
-          CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr, alloc_closure_obj_instr)
-          CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr, close_obj_instr)
-          CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr, freeze_obj_instr)
-          CASE(INSTR_ACCESS, AccessInstr, access_instr)
-            slots[access_instr->obj_slot] = false;
-          CASE(INSTR_ASSIGN, AssignInstr, assign_instr)
-            slots[assign_instr->obj_slot] = slots[assign_instr->value_slot] = false;
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+#define CASE(KEY, TY) } break; \
+        case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+      switch (instr_cur->type) {
+        case INSTR_INVALID: { abort();
+          CASE(INSTR_GET_ROOT, GetRootInstr)
+          CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
+            slots[instr->parent_slot] = false;
+          CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
+          CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
+          CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr)
+          CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr)
+          CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr)
+          CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr)
+          CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
+          CASE(INSTR_ACCESS, AccessInstr)
+            slots[instr->obj_slot] = false;
+          CASE(INSTR_ASSIGN, AssignInstr)
+            slots[instr->obj_slot] = slots[instr->value_slot] = false;
           // TODO inline key?
-          CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr, key_in_obj_instr)
-          CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr, scons_instr)
-            slots[scons_instr->obj_slot] = slots[scons_instr->constraint_slot] = false;
-          CASE(INSTR_CALL, CallInstr, call_instr)
-            slots[call_instr->function_slot] = slots[call_instr->this_slot] = false;
-            for (int k = 0; k < call_instr->args_length; ++k) {
-              slots[((int*)(call_instr + 1))[k]] = false;
+          CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
+          CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
+            slots[instr->obj_slot] = slots[instr->constraint_slot] = false;
+          CASE(INSTR_CALL, CallInstr)
+            slots[instr->function_slot] = slots[instr->this_slot] = false;
+            for (int k = 0; k < instr->args_length; ++k) {
+              slots[((int*)(instr + 1))[k]] = false;
             }
-            _stepsize += sizeof(int) * call_instr->args_length;
-          CASE(INSTR_RETURN, ReturnInstr, return_instr)
-            slots[return_instr->ret_slot] = false;
-          CASE(INSTR_SAVE_RESULT, SaveResultInstr, save_result_instr)
-          CASE(INSTR_BR, BranchInstr, branch_instr)
-          CASE(INSTR_TESTBR, TestBranchInstr, test_branch_instr)
-            slots[test_branch_instr->test_slot] = false;
-          CASE(INSTR_LAST, Instr, _instr) (void) _stepsize; abort();
+          CASE(INSTR_RETURN, ReturnInstr)
+            slots[instr->ret_slot] = false;
+          CASE(INSTR_SAVE_RESULT, SaveResultInstr)
+          CASE(INSTR_BR, BranchInstr)
+          CASE(INSTR_TESTBR, TestBranchInstr)
+            slots[instr->test_slot] = false;
+          CASE(INSTR_LAST, Instr) abort();
         } break;
         default: assert("Unhandled Instruction Type!" && false);
       }
 #undef CASE
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
 }
@@ -210,10 +210,9 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
     while (instr != instr_end) {
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
-        AccessStringKeyInstr *aski_new = malloc(sizeof(AccessStringKeyInstr));
-        *aski_new = *aski;
+        AccessStringKeyInstr aski_new = *aski;
         while (true) {
-          int obj_slot = aski_new->obj_slot;
+          int obj_slot = aski_new.obj_slot;
           if (!info[obj_slot].static_object) break;
           int field = static_info_find_field(&info[obj_slot], aski->key_len, aski->key_ptr);
           if (field != -1) break;
@@ -222,9 +221,9 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           // not succeed at runtime either
           // (since the object is closed, its keys are statically known)
           // so instead look up in the (known) parent object from the start
-          aski_new->obj_slot = info[obj_slot].parent_slot;
+          aski_new.obj_slot = info[obj_slot].parent_slot;
         }
-        addinstr_like(builder, instr, sizeof(*aski_new), (Instr*) aski_new);
+        addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
         instr = (Instr*) (aski + 1);
         continue;
       }
@@ -485,72 +484,71 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
 static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   bool *slot_live = calloc(sizeof(bool), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
-    while (instr != instr_end) {
-#define CASE(KEY, TY, VAR) instr = (Instr*) ((char*) instr + _stepsize); } break; \
-        case KEY: { int _stepsize = sizeof(TY); TY *VAR = (TY*) instr; (void) VAR;
-      switch (instr->type) {
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+#define CASE(KEY, TY) instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur)); } break; \
+        case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+      switch (instr_cur->type) {
         // mark all slots that are accessed in an instr other than INSTR_WRITE_SLOT
-        case INSTR_INVALID: { abort(); int _stepsize = -1;
-          CASE(INSTR_GET_ROOT, GetRootInstr, get_root_instr)
-            slot_live[get_root_instr->slot] = true;
-          CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr, alloc_obj_instr)
-            slot_live[alloc_obj_instr->parent_slot] = true;
-          CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr, alloc_int_obj_instr)
-            slot_live[alloc_int_obj_instr->target_slot] = true;
-          CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr, alloc_float_obj_instr)
-            slot_live[alloc_float_obj_instr->target_slot] = true;
-          CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr, alloc_array_obj_instr)
-            slot_live[alloc_array_obj_instr->target_slot] = true;
-          CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr, alloc_string_obj_instr)
-            slot_live[alloc_string_obj_instr->target_slot] = true;
-          CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr, alloc_closure_obj_instr)
-            slot_live[alloc_closure_obj_instr->target_slot] = slot_live[alloc_closure_obj_instr->base.context_slot] = true;
-          CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr, close_obj_instr)
-            slot_live[close_obj_instr->slot] = true;
-          CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr, freeze_obj_instr)
-            slot_live[freeze_obj_instr->slot] = true;
-          CASE(INSTR_ACCESS, AccessInstr, access_instr)
-            slot_live[access_instr->obj_slot] = slot_live[access_instr->key_slot]
-              = slot_live[access_instr->target_slot] = true;
-          CASE(INSTR_ASSIGN, AssignInstr, assign_instr)
-            slot_live[assign_instr->obj_slot] = slot_live[assign_instr->key_slot]
-              = slot_live[assign_instr->value_slot] = true;
+        case INSTR_INVALID: { abort();
+          CASE(INSTR_GET_ROOT, GetRootInstr)
+            slot_live[instr->slot] = true;
+          CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
+            slot_live[instr->parent_slot] = true;
+          CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
+            slot_live[instr->target_slot] = true;
+          CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
+            slot_live[instr->target_slot] = true;
+          CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr)
+            slot_live[instr->target_slot] = true;
+          CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr)
+            slot_live[instr->target_slot] = true;
+          CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr)
+            slot_live[instr->target_slot] = slot_live[instr->base.context_slot] = true;
+          CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr)
+            slot_live[instr->slot] = true;
+          CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
+            slot_live[instr->slot] = true;
+          CASE(INSTR_ACCESS, AccessInstr)
+            slot_live[instr->obj_slot] = slot_live[instr->key_slot]
+              = slot_live[instr->target_slot] = true;
+          CASE(INSTR_ASSIGN, AssignInstr)
+            slot_live[instr->obj_slot] = slot_live[instr->key_slot]
+              = slot_live[instr->value_slot] = true;
           // TODO inline key?
-          CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr, kio)
-            slot_live[kio->key_slot] = slot_live[kio->obj_slot]
-              = slot_live[kio->target_slot] = true;
-          CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr, scons_instr)
-            slot_live[scons_instr->obj_slot] = slot_live[scons_instr->constraint_slot] = true;
-          CASE(INSTR_CALL, CallInstr, call_instr)
-            slot_live[call_instr->function_slot] = slot_live[call_instr->this_slot] = true;
-            for (int k = 0; k < call_instr->args_length; ++k) {
-              slot_live[((int*)(call_instr + 1))[k]] = true;
+          CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
+            slot_live[instr->key_slot] = slot_live[instr->obj_slot]
+              = slot_live[instr->target_slot] = true;
+          CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
+            slot_live[instr->obj_slot] = slot_live[instr->constraint_slot] = true;
+          CASE(INSTR_CALL, CallInstr)
+            slot_live[instr->function_slot] = slot_live[instr->this_slot] = true;
+            for (int k = 0; k < instr->args_length; ++k) {
+              slot_live[((int*)(instr + 1))[k]] = true;
             }
-            _stepsize += sizeof(int) * call_instr->args_length;
-          CASE(INSTR_RETURN, ReturnInstr, return_instr)
-            slot_live[return_instr->ret_slot] = true;
-          CASE(INSTR_SAVE_RESULT, SaveResultInstr, save_result_instr)
-          CASE(INSTR_BR, BranchInstr, branch_instr)
-          CASE(INSTR_TESTBR, TestBranchInstr, test_branch_instr)
-            slot_live[test_branch_instr->test_slot] = true;
-          CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr, aski)
-            slot_live[aski->obj_slot] = slot_live[aski->target_slot] = true;
-          CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr, aski)
-            slot_live[aski->obj_slot] = slot_live[aski->value_slot] = true;
-          CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr, scski)
-            slot_live[scski->constraint_slot] = slot_live[scski->obj_slot] = true;
-          CASE(INSTR_SET_SLOT, SetSlotInstr, ssi)
-          CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr, dri)
-            slot_live[dri->obj_slot] = true;
-          CASE(INSTR_READ_REFSLOT, ReadRefslotInstr, rri)
-            slot_live[rri->target_slot] = true;
-          CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr, wri)
-            slot_live[wri->source_slot] = true;
-          CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr, asoi)
-            for (int k = 0; k < asoi->info_len; ++k)
-              slot_live[asoi->info_ptr[k].slot] = true;
-          CASE(INSTR_LAST, Instr, _instr) (void) _stepsize; abort();
+          CASE(INSTR_RETURN, ReturnInstr)
+            slot_live[instr->ret_slot] = true;
+          CASE(INSTR_SAVE_RESULT, SaveResultInstr)
+          CASE(INSTR_BR, BranchInstr)
+          CASE(INSTR_TESTBR, TestBranchInstr)
+            slot_live[instr->test_slot] = true;
+          CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
+            slot_live[instr->obj_slot] = slot_live[instr->target_slot] = true;
+          CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
+            slot_live[instr->obj_slot] = slot_live[instr->value_slot] = true;
+          CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)
+            slot_live[instr->constraint_slot] = slot_live[instr->obj_slot] = true;
+          CASE(INSTR_SET_SLOT, SetSlotInstr)
+          CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr)
+            slot_live[instr->obj_slot] = true;
+          CASE(INSTR_READ_REFSLOT, ReadRefslotInstr)
+            slot_live[instr->target_slot] = true;
+          CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr)
+            slot_live[instr->source_slot] = true;
+          CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
+            for (int k = 0; k < instr->info_len; ++k)
+              slot_live[instr->info_ptr[k].slot] = true;
+          CASE(INSTR_LAST, Instr) abort();
         } break;
         default: assert("Unhandled Instruction Type!" && false);
       }
