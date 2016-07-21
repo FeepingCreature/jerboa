@@ -66,6 +66,8 @@ typedef struct {
 
 int instr_size(Instr*);
 
+// Note: the IR is *lexically ordered*.
+// That means, any use of a slot must come after its initialization *in iteration order*.
 typedef struct {
   int offset, size;
 } InstrBlock;
@@ -86,6 +88,7 @@ typedef struct {
   char *name;
   bool is_method, variadic_tail;
   FunctionBody body;
+  bool non_ssa, optimized;
 } UserFunction;
 
 

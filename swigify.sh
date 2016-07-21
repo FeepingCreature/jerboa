@@ -44,4 +44,4 @@ gcc swig_c_gen.c -o swig_c_gen $@
 echo "-- Running C -> Jb"
 ./swig_c_gen > "$JB_FILE"
 echo "-- Done."
-rm swig.xml swig_c_gen.c swig_c_gen
+rm swig.xml swig.2.xml swig_c_gen.c swig_c_gen

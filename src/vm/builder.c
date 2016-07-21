@@ -379,5 +379,7 @@ UserFunction *build_function(FunctionBuilder *builder) {
   fn->name = builder->name;
   fn->body = builder->body;
   fn->is_method = false;
+  fn->non_ssa = false;
+  fn->optimized = false;
   return fn;
 }

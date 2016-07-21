@@ -170,7 +170,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
         StaticFieldInfo *info = &asoi->info_ptr[i];
         char *infostr = "";
         if (info->constraint) infostr = get_type_info(state, info->constraint);
-        fprintf(stderr, "%.*s %s%s = %%%i (&%i); ",
+        fprintf(stderr, "%.*s%s%s = %%%i (&%i); ",
                 info->name_len, info->name_ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
       fprintf(stderr, "}\n");

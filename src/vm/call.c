@@ -30,8 +30,10 @@ void call_function(VMState *state, Object *context, UserFunction *fn, Object **a
 #include "vm/optimize.h"
 void call_closure(VMState *state, Object *context, ClosureObject *cl, Object **args_ptr, int args_len) {
   cl->num_called ++;
-  if (cl->num_called == 10) {
+  if (UNLIKELY(cl->num_called == 10)) {
+    assert(!cl->vmfun->optimized);
     cl->vmfun = optimize_runtime(state, cl->vmfun, context);
+    assert(cl->vmfun->optimized);
   }
   call_function(state, context, cl->vmfun, args_ptr, args_len);
 }

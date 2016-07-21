@@ -908,7 +908,113 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
   return fn;
 }
 
+static void reassign_slot(int *slot_p, int numslots, Instr *instr_cur, Instr **first_use, Instr **last_use, bool *newslot_in_use, int *slot_map) {
+  int slot = *slot_p;
+  if (instr_cur == first_use[slot]) {
+    int selected_slot = -1;
+    for (int k = 0; k < numslots; ++k) if (!newslot_in_use[k]) {
+      selected_slot = k;
+      break;
+    }
+    assert(selected_slot != -1);
+    newslot_in_use[selected_slot] = true;
+    slot_map[slot] = selected_slot;
+  }
+  *slot_p = slot_map[slot];
+  if (instr_cur == last_use[slot]) {
+    newslot_in_use[slot_map[slot]] = false;
+  }
+}
+
+// WARNING
+// this function makes the IR **NON-SSA**
+// and thus it **MUST** come completely last!!
+UserFunction *compactify_registers(UserFunction *uf) {
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->block_terminated = true;
+  
+  // use the lexical orderedness assumption
+  Instr **first_use = calloc(sizeof(Instr*), uf->slots);
+  Instr **last_use = calloc(sizeof(Instr*), uf->slots);
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+#define CHKSLOT(VAL) if (!first_use[VAL]) first_use[VAL] = instr_cur; last_use[VAL] = instr_cur
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+      switch (instr_cur->type) {
+        case INSTR_INVALID: { abort();
+#include "vm/slots.txt"
+          CASE(INSTR_LAST, Instr) abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+      }
+#undef CASE
+#undef CHKSLOT
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  
+  bool *newslot_in_use = calloc(sizeof(bool), uf->slots);
+  int *slot_map = calloc(sizeof(int), uf->slots);
+  
+  // specials
+  for (int i = 0; i < 2 + uf->arity; ++i) {
+    first_use[i] = NULL;
+    last_use[i] = NULL;
+    newslot_in_use[i] = true;
+    slot_map[i] = i;
+  }
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    new_block(builder);
+    
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      switch (instr_cur->type) {
+
+#define CASE(KEY, TY) \
+          use_range_start(builder, instr_cur->belongs_to);\
+          builder->scope = ((Instr*) instr)->context_slot;\
+          addinstr(builder, sz, (Instr*) instr);\
+          use_range_end(builder, instr_cur->belongs_to);\
+          instr_cur = (Instr*) ((char*) instr_cur + sz);\
+          continue;\
+        }\
+        case KEY: {\
+          int sz = instr_size(instr_cur);\
+          TY *instr = (TY*) alloca(sz);\
+          memcpy(instr, instr_cur, sz);
+
+#define CHKSLOT(S) reassign_slot(&S, uf->slots, instr_cur, first_use, last_use, newslot_in_use, slot_map)
+
+        case INSTR_INVALID: { abort(); Instr *instr = NULL; int sz = 0;
+#include "vm/slots.txt"
+          CASE(INSTR_LAST, Instr) abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+
+#undef CHKSLOT
+#undef CASE
+      }
+    }
+  }
+  
+  int maxslot = 0;
+  for (int i = 0; i < uf->slots; ++i) if (slot_map[i] > maxslot) maxslot = slot_map[i];
+  
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  fn->slots = maxslot + 1;
+  fn->non_ssa = true;
+  return fn;
+}
+
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
+  if (uf->non_ssa != false) {
+    fprintf(stderr, "called optimizer on function that is non-ssa!\n");
+    abort();
+  }
   /*
   printf("runtime optimize %s with %p\n", uf->name, (void*) context);
   if (uf->name && strcmp(uf->name, "gear") == 0) print_recursive(state, context, false);
@@ -957,6 +1063,11 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   // must be late!
   uf = fuse_static_object_alloc(uf);
   uf = remove_dead_slot_writes(uf);
+  
+  // must be very very *very* last!
+  uf = compactify_registers(uf);
+  
+  uf->optimized = true; // will be optimized no further
   
   if (uf->name) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);
