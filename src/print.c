@@ -14,9 +14,11 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
   Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
   Object *pointer_base = state->shared->vcache.pointer_base;
+  Object *function_base = state->shared->vcache.function_base;
   Object
     *sobj = obj_instance_of(obj, string_base),
-    *aobj = obj_instance_of(obj, array_base);
+    *aobj = obj_instance_of(obj, array_base),
+    *fobj = obj_instance_of(obj, function_base);
   if (obj->parent == int_base) {
     fprintf(fh, "%i", obj->int_value);
     return;
@@ -34,16 +36,21 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
     fprintf(fh, "%s", ((StringObject*)sobj)->value);
     return;
   }
+  if (fobj) {
+    fprintf(fh, "<function %p>", *(void**) &((FunctionObject*)fobj)->fn_ptr);
+    return;
+  }
   if (obj->parent == pointer_base) {
     fprintf(fh, "(void*) %p", ((PointerObject*)obj)->ptr);
     return;
   }
   if (aobj) {
-    fprintf(fh, "[ ");
+    fprintf(fh, "[");
     ArrayObject *a_obj = (ArrayObject*) aobj;
     for (int i = 0; i < a_obj->length; ++i) {
       Object *child = a_obj->ptr[i];
       if (i) fprintf(fh, ", ");
+      else fprintf(fh, " ");
       print_recursive(state, fh, child, allow_tostring);
       if (state->runstate == VM_ERRORED) return;
     }

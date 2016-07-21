@@ -17,8 +17,8 @@ add_executable(repl src/repl.c ${BASE_SRC} ${VM_SRC})
 
 target_compile_options(jerboa PRIVATE ${FLAGS})
 target_compile_options(repl PRIVATE ${FLAGS})
-target_link_libraries (jerboa dl ffi xml2)
-target_link_libraries (repl dl ffi xml2)
+target_link_libraries (jerboa dl ffi xml2 m)
+target_link_libraries (repl dl ffi xml2 m)
 install(TARGETS jerboa RUNTIME DESTINATION bin)
 install(TARGETS repl RUNTIME DESTINATION bin)
 

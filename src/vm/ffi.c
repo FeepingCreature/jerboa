@@ -587,6 +587,15 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   state->result_value = fn_obj;
 }
 
+static void malloc_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  VM_ASSERT(args_ptr[0]->parent == state->shared->vcache.int_base, "malloc expected int");
+  VM_ASSERT(args_ptr[0]->int_value >= 0, "malloc expected positive number");
+  void *res = malloc(args_ptr[0]->int_value);
+  VM_ASSERT(res, "memory allocation failed");
+  state->result_value = make_ffi_pointer(state, res);
+}
+
 void ffi_setup_root(VMState *state, Object *root) {
   FFIObject *ffi = (FFIObject*) alloc_object_internal(state, sizeof(FFIObject));
   Object *ffi_obj = (Object*) ffi;
@@ -630,5 +639,8 @@ void ffi_setup_root(VMState *state, Object *root) {
   object_set(handle_obj, "sym", alloc_fn(state, ffi_sym_fn));
   
   object_set(root, "ffi", ffi_obj);
+  
+  object_set(root, "malloc", alloc_fn(state, malloc_fn));
+  
   state->shared->vcache.ffi_obj = ffi_obj;
 }

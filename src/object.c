@@ -144,6 +144,19 @@ Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
   return obj_instance_of(obj, proto);
 }
 
+bool obj_is_truthy(VMState *state, Object *obj) {
+  if (!obj) return false;
+  Object *int_base = state->shared->vcache.int_base;
+  Object *bool_base = state->shared->vcache.bool_base;
+  if (obj->parent == bool_base) {
+    return obj->bool_value;
+  }
+  if (obj->parent == int_base) {
+    return obj->int_value != 0;
+  }
+  return true;
+}
+
 // change a property in-place
 // returns an error string or NULL
 char *object_set_existing(Object *obj, const char *key, Object *value) {

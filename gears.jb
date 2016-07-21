@@ -1,12 +1,6 @@
 const glfw = require("c/glfw3.jb");
 const gl = require("c/gl.jb");
 
-var libm_so = ffi.open("libm.so.6");
-const malloc = libm_so.sym("malloc", ffi.pointer, [ffi.int]);
-const sin = libm_so.sym("sin", ffi.double, [ffi.double]);
-const cos = libm_so.sym("cos", ffi.double, [ffi.double]);
-const sqrt = libm_so.sym("sqrt", ffi.double, [ffi.double]);
-
 if (glfw.Init() == 0) return -1;
 
 var width = 640, height = 480;
@@ -67,13 +61,13 @@ function gear(inner_radius:float, outer_radius:float, width:float, teeth:int, to
   const r0:float = inner_radius;
   const r1:float = outer_radius - tooth_depth / 2.0;
   const r2:float = outer_radius + tooth_depth / 2.0;
-
+  const cos = math.cos, sin = math.sin, sqrt = math.sqrt;
   const da:float = 2.0 * M_PI / teeth / 4.0;
   
   gl.ShadeModel(gl.FLAT);
-
+  
   gl.Normal3f(0.0, 0.0, 1.0);
-
+  
   /* draw front face */
   gl.Begin(gl.QUAD_STRIP);
   for (var i:int = 0; i <= teeth; i++) {

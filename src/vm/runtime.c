@@ -1,5 +1,6 @@
 #include "vm/runtime.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdint.h>
@@ -614,17 +615,17 @@ static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
   gc_enable(state);
 }
 
-static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node, Object *element_node) {
+static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node_base, Object *element_node_base) {
   Object *res;
   if (element->type == 1) {
-    res = alloc_object(state, element_node);
+    res = alloc_object(state, element_node_base);
     xmlNode *child = element->children;
     int children_len = 0;
     for (; child; child = child->next) children_len ++;
     Object **children_ptr = malloc(sizeof(Object*) * children_len);
     int i = 0;
     for (child = element->children; child; child = child->next) {
-      children_ptr[i++] = xml_to_object(state, child, text_node, element_node);
+      children_ptr[i++] = xml_to_object(state, child, text_node_base, element_node_base);
     }
     Object *attr = alloc_object(state, NULL);
     xmlAttr *xml_attr = element->properties;
@@ -647,7 +648,7 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
     object_set(res, "attr", attr);
     object_set(res, "children", alloc_array(state, children_ptr, children_len_obj));
   } else if (element->type == 3) {
-    res = alloc_object(state, text_node);
+    res = alloc_object(state, text_node_base);
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
     char *content = (char*) element->content;
     object_set(res, "value", alloc_string(state, content, strlen(content)));
@@ -659,7 +660,9 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
-  Object *node_base = OBJECT_LOOKUP_STRING(OBJECT_LOOKUP_STRING(root, "xml", NULL), "node", NULL);
+  Object *xml_base = OBJECT_LOOKUP_STRING(root, "xml", NULL);
+  Object *text_node_base = OBJECT_LOOKUP_STRING(xml_base, "text_node", NULL);
+  Object *element_node_base = OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL);
   
   StringObject *str_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
   VM_ASSERT(str_obj, "parameter to xml.load must be string");
@@ -674,20 +677,37 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   
   gc_disable(state);
   
-  Object *text_node = alloc_object(state, node_base);
-  object_set(text_node, "nodeName", alloc_string_foreign(state, ""));
-  object_set(text_node, "nodeType", alloc_int(state, 3));
-  object_set(text_node, "attr", alloc_object(state, NULL));
-  object_set(text_node, "children", alloc_array(state, NULL, state->shared->vcache.int_zero));
-  
-  Object *element_node = alloc_object(state, node_base);
-  object_set(element_node, "nodeType", alloc_int(state, 1));
-  object_set(element_node, "value", NULL);
-  
-  state->result_value = xml_to_object(state, root_element, text_node, element_node);
+  state->result_value = xml_to_object(state, root_element, text_node_base, element_node_base);
   gc_enable(state);
-  // letting it leak is actually _saving_ us memory
-  // at least until we can properly track the source resource in string allocation
+  
+  xmlFreeDoc(doc);
+  xmlCleanupParser();
+}
+
+static void xml_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *root = state->root;
+  Object *string_base = state->shared->vcache.string_base;
+  Object *xml_base = OBJECT_LOOKUP_STRING(root, "xml", NULL);
+  Object *text_node_base = OBJECT_LOOKUP_STRING(xml_base, "text_node", NULL);
+  Object *element_node_base = OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL);
+  
+  StringObject *str_obj = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(str_obj, "parameter to xml.parse must be string");
+  char *text = str_obj->value;
+  
+  LIBXML_TEST_VERSION
+  
+  xmlDoc *doc = xmlReadMemory(text, strlen(text), NULL, NULL, 0);
+  VM_ASSERT(doc != NULL, "failed to parse XML string");
+  
+  xmlNode *root_element = xmlDocGetRootElement(doc);
+  
+  gc_disable(state);
+  
+  state->result_value = xml_to_object(state, root_element, text_node_base, element_node_base);
+  gc_enable(state);
+  
   xmlFreeDoc(doc);
   xmlCleanupParser();
 }
@@ -882,21 +902,57 @@ static void obj_keys_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   state->result_value = alloc_array(state, keys_ptr, alloc_int(state, keys_len));
 }
 
-static bool is_truthy(VMState *state, Object *obj) {
-  Object *int_base = state->shared->vcache.int_base;
-  Object *bool_base = state->shared->vcache.bool_base;
-  if (obj->parent == bool_base) {
-    return obj->bool_value;
-  }
-  if (obj->parent == int_base) {
-    return obj->int_value != 0;
-  }
-  return !!obj;
+static void sin_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  float f;
+  if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
+  else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
+  else VM_ASSERT(false, "unexpected type for math.sin()");
+  state->result_value = alloc_float(state, sinf(f));
+}
+
+static void cos_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  float f;
+  if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
+  else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
+  else VM_ASSERT(false, "unexpected type for math.cos()");
+  state->result_value = alloc_float(state, cosf(f));
+}
+
+static void tan_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  float f;
+  if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
+  else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
+  else VM_ASSERT(false, "unexpected type for math.tan()");
+  state->result_value = alloc_float(state, tanf(f));
+}
+
+static void sqrt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  float f;
+  if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
+  else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
+  else VM_ASSERT(false, "unexpected type for math.sqrt()");
+  state->result_value = alloc_float(state, sqrtf(f));
+}
+
+static void pow_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+  float a, b;
+  if (args_ptr[0]->parent == state->shared->vcache.float_base) a = args_ptr[0]->float_value;
+  else if (args_ptr[0]->parent == state->shared->vcache.int_base) a = args_ptr[0]->int_value;
+  VM_ASSERT(false, "unexpected type for math.pow()");
+  if (args_ptr[1]->parent == state->shared->vcache.float_base) b = args_ptr[1]->float_value;
+  else if (args_ptr[1]->parent == state->shared->vcache.int_base) b = args_ptr[1]->int_value;
+  VM_ASSERT(false, "unexpected type for math.pow()");
+  state->result_value = alloc_float(state, powf(a, b));
 }
 
 static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
-  bool test = is_truthy(state, args_ptr[0]);
+  bool test = obj_is_truthy(state, args_ptr[0]);
   Object *string_base = state->shared->vcache.string_base;
   StringObject *msg_obj = (StringObject*) obj_instance_of(args_ptr[1], string_base);
   VM_ASSERT(msg_obj, "second parameter to assert() must be string");
@@ -1024,11 +1080,26 @@ Object *create_root(VMState *state) {
   
   Object *xml_obj = alloc_object(state, NULL);
   object_set(xml_obj, "load", alloc_fn(state, xml_load_fn));
+  object_set(xml_obj, "parse", alloc_fn(state, xml_parse_fn));
+  
   Object *node_obj = alloc_object(state, NULL);
-  object_set(xml_obj, "node", node_obj);
   object_set(node_obj, "find_array", alloc_fn(state, xml_node_find_array_fn));
   object_set(node_obj, "find_array_by_name", alloc_fn(state, xml_node_find_by_name_array_fn));
   xml_obj->flags |= OBJ_FROZEN;
+  object_set(xml_obj, "node", node_obj);
+  
+  Object *text_node_obj = alloc_object(state, node_obj);
+  object_set(text_node_obj, "nodeName", alloc_string_foreign(state, ""));
+  object_set(text_node_obj, "nodeType", alloc_int(state, 3));
+  object_set(text_node_obj, "attr", alloc_object(state, NULL));
+  object_set(text_node_obj, "children", alloc_array(state, NULL, state->shared->vcache.int_zero));
+  object_set(xml_obj, "text_node", node_obj);
+  
+  Object *element_node_obj = alloc_object(state, node_obj);
+  object_set(element_node_obj, "nodeType", alloc_int(state, 1));
+  object_set(element_node_obj, "value", NULL);
+  object_set(xml_obj, "element_node", node_obj);
+  
   object_set(root, "xml", xml_obj);
   
   Object *file_obj = alloc_object(state, NULL);
@@ -1053,6 +1124,15 @@ Object *create_root(VMState *state) {
   object_set(root, "freeze", alloc_fn(state, freeze_fn));
   object_set(root, "_mark_const", alloc_fn(state, mark_const_fn));
   object_set(root, "assert", alloc_fn(state, assert_fn));
+  
+  Object *math_obj = alloc_object(state, NULL);
+  object_set(math_obj, "sin", alloc_fn(state, sin_fn));
+  object_set(math_obj, "cos", alloc_fn(state, cos_fn));
+  object_set(math_obj, "tan", alloc_fn(state, tan_fn));
+  object_set(math_obj, "sqrt", alloc_fn(state, sqrt_fn));
+  object_set(math_obj, "pow", alloc_fn(state, pow_fn));
+  math_obj->flags |= OBJ_FROZEN;
+  object_set(root, "math", math_obj);
   
   Object *obj_tools = alloc_object(state, NULL);
   obj_tools->flags |= OBJ_NOINHERIT;
