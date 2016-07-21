@@ -15,9 +15,10 @@ void *freelist[FREELIST_LIMIT] = {0};
 void *cache_alloc(int size) {
   if (UNLIKELY(size == 0)) return NULL;
   size = (size + 15) & ~15; // align to 16
+  // printf(": %i\n", size);
   int slot = size >> 4;
   void *res;
-  if (UNLIKELY((size == 32 || size == 64) && !freelist[slot])) {
+  if (UNLIKELY((size == 32 || size == 64 || size == 128) && !freelist[slot])) {
     // feed the freelist with a single big alloc
     void *bigalloc = malloc(size * 1024);
     // stitch backwards
