@@ -672,13 +672,13 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   VM_ASSERT2_SLOT(test_slot < state->cf->slots_len, "slot numbering error");
   Object *test_value = state->slots[test_slot];
   
-  bool test = false;
-  if (test_value->parent == state->reststate->shared->vcache.bool_base) {
-    if (((BoolObject*) test_value)->value == true) test = true;
+  bool test = true;
+  if (test_value == NULL) {
+    test = false;
+  } else if (test_value->parent == state->reststate->shared->vcache.bool_base) {
+    test = ((BoolObject*) test_value)->value == true;
   } else if (test_value->parent ==  state->reststate->shared->vcache.int_base) {
-    if (((IntObject*) test_value)->value != 0) test = true;
-  } else {
-    test = test_value != NULL;
+    test = ((IntObject*) test_value)->value != 0;
   }
   
   int target_blk = test ? true_blk : false_blk;
