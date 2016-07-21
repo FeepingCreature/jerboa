@@ -513,6 +513,13 @@ static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefV
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv) {
   char *text = *textp;
   
+  bool negate = false;
+  FileRange *neg_range = alloc_and_record_start(text);
+  if (eat_string(&text, "-")) {
+    record_end(text, neg_range);
+    negate = true;
+  } else free(neg_range);
+  
   FileRange *expr_range = alloc_and_record_start(text);
   ParseResult res = parse_expr_stem(&text, builder, rv);
   if (res == PARSE_ERROR) {
@@ -534,29 +541,6 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
     break;
   }
   
-  *textp = text;
-  return PARSE_OK;
-}
-
-/*
- * 0: == != < > <= >=
- * 1: + -
- * 2: * /
- */
-static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv) {
-  char *text = *textp;
-  
-  bool negate = false;
-  FileRange *neg_range = alloc_and_record_start(text);
-  if (eat_string(&text, "-")) {
-    record_end(text, neg_range);
-    negate = true;
-  } else free(neg_range);
-  
-  ParseResult res = parse_expr_base(&text, builder, rv);
-  if (res == PARSE_ERROR) return PARSE_ERROR;
-  assert(res == PARSE_OK);
-  
   if (negate) {
     use_range_start(builder, neg_range);
     int zero_slot = 0;
@@ -566,16 +550,76 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     build_op(builder, "-", rv, zref, *rv, neg_range);
   }
   
-  if (level > 5) { *textp = text; return PARSE_OK; }
+  *textp = text;
+  return PARSE_OK;
+}
+
+/*
+ * 0: ||
+ * 1: &&
+ * 2: == != < > <= >=
+ * 3: in
+ * 4: + -
+ * 5: * /
+ * 6: |
+ * 7: &
+ */
+static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv) {
+  char *text = *textp;
+  
+  ParseResult res = parse_expr_base(&text, builder, rv);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
+  
+  if (level > 7) { *textp = text; return PARSE_OK; }
   
   RefValue rhs_expr;
   while (true) {
     FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "&")) {
+    char *text2 = text;
+    if (!eat_string(&text2, "&&") && eat_string(&text, "&")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 8, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "&", rv, *rv, rhs_expr, range);
+      continue;
+    }
+    free(range);
+    break;
+  }
+  
+  if (level > 6) { *textp = text; return PARSE_OK; }
+  
+  while (true) {
+    FileRange *range = alloc_and_record_start(text);
+    char *text2 = text;
+    if (!eat_string(&text2, "||") && eat_string(&text, "|")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 7, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "|", rv, *rv, rhs_expr, range);
+      continue;
+    }
+    free(range);
+    break;
+  }
+  
+  if (level > 5) { *textp = text; return PARSE_OK; }
+  
+  while (true) {
+    FileRange *range = alloc_and_record_start(text);
+    if (eat_string(&text, "*")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 6, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "&", rv, *rv, rhs_expr, range);
+      build_op(builder, "*", rv, *rv, rhs_expr, range);
+      continue;
+    }
+    if (eat_string(&text, "/")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 6, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "/", rv, *rv, rhs_expr, range);
       continue;
     }
     free(range);
@@ -586,11 +630,18 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   
   while (true) {
     FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "|")) {
+    if (eat_string(&text, "+")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 5, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "|", rv, *rv, rhs_expr, range);
+      build_op(builder, "+", rv, *rv, rhs_expr, range);
+      continue;
+    }
+    if (eat_string(&text, "-")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 5, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "-", rv, *rv, rhs_expr, range);
       continue;
     }
     free(range);
@@ -601,53 +652,9 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   
   while (true) {
     FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "*")) {
-      record_end(text, range);
-      res = parse_expr(&text, builder, 4, &rhs_expr);
-      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "*", rv, *rv, rhs_expr, range);
-      continue;
-    }
-    if (eat_string(&text, "/")) {
-      record_end(text, range);
-      res = parse_expr(&text, builder, 4, &rhs_expr);
-      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "/", rv, *rv, rhs_expr, range);
-      continue;
-    }
-    free(range);
-    break;
-  }
-  
-  if (level > 2) { *textp = text; return PARSE_OK; }
-  
-  while (true) {
-    FileRange *range = alloc_and_record_start(text);
-    if (eat_string(&text, "+")) {
-      record_end(text, range);
-      res = parse_expr(&text, builder, 3, &rhs_expr);
-      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "+", rv, *rv, rhs_expr, range);
-      continue;
-    }
-    if (eat_string(&text, "-")) {
-      record_end(text, range);
-      res = parse_expr(&text, builder, 3, &rhs_expr);
-      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
-      build_op(builder, "-", rv, *rv, rhs_expr, range);
-      continue;
-    }
-    free(range);
-    break;
-  }
-  
-  if (level > 1) { *textp = text; return PARSE_OK; }
-  
-  while (true) {
-    FileRange *range = alloc_and_record_start(text);
     if (eat_keyword(&text, "in")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 2, &rhs_expr);
+      res = parse_expr(&text, builder, 4, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       int key_slot = ref_access(builder, *rv);
       int obj_slot = ref_access(builder, rhs_expr);
@@ -662,19 +669,19 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     break;
   }
   
-  if (level > 0) { *textp = text; return PARSE_OK; }
+  if (level > 2) { *textp = text; return PARSE_OK; }
   
   bool negate_expr = false;
   
   FileRange *range = alloc_and_record_start(text);
   if (eat_string(&text, "==")) {
     record_end(text, range);
-    res = parse_expr(&text, builder, 1, &rhs_expr);
+    res = parse_expr(&text, builder, 3, &rhs_expr);
     if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
     build_op(builder, "==", rv, *rv, rhs_expr, range);
   } else if (eat_string(&text, "!=")) {
     record_end(text, range);
-    res = parse_expr(&text, builder, 1, &rhs_expr);
+    res = parse_expr(&text, builder, 3, &rhs_expr);
     if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
     build_op(builder, "==", rv, *rv, rhs_expr, range);
     negate_expr = true;
@@ -684,22 +691,22 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     }
     if (eat_string(&text, "<=")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 1, &rhs_expr);
+      res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "<=", rv, *rv, rhs_expr, range);
     } else if (eat_string(&text, ">=")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 1, &rhs_expr);
+      res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, ">=", rv, *rv, rhs_expr, range);
     } else if (eat_string(&text, "<")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 1, &rhs_expr);
+      res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "<", rv, *rv, rhs_expr, range);
     } else if (eat_string(&text, ">")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 1, &rhs_expr);
+      res = parse_expr(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, ">", rv, *rv, rhs_expr, range);
     } else if (negate_expr) {
@@ -715,6 +722,166 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     int notfn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, "!"));
     *rv = ref_simple(addinstr_call0(builder, notfn, lhs_value));
     use_range_end(builder, range);
+  }
+  
+  if (level > 1) { *textp = text; return PARSE_OK; }
+  
+  while (true) {
+    FileRange *range = alloc_and_record_start(text);
+    if (eat_string(&text, "&&")) {
+      /*
+       *  [1]
+       * N | \ Y
+       *  [F] [2]
+       *   | N | \ Y
+       *   |  [F][T]
+       *   |   | /
+       *   |  [φ]
+       *   | /
+       *  [φ]
+       */
+      record_end(text, range);
+      // short-circuiting evaluation
+      int slot_test1 = ref_access(builder, *rv);
+      // if (lhs) {
+      int true_blk1, false_blk1;
+      use_range_start(builder, range);
+      addinstr_test_branch(builder, slot_test1, &true_blk1, &false_blk1);
+      
+      int blk_true = new_block(builder);
+      set_int_var(builder, true_blk1, blk_true);
+      use_range_end(builder, range);
+      
+      // if (rhs) { // TODO check truthiness of RHS directly via instr
+      res = parse_expr(&text, builder, 2, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR;
+      assert(res == PARSE_OK);
+      
+      int slot_test2 = ref_access(builder, rhs_expr);
+      int true_blk2, false_blk2;
+      use_range_start(builder, range);
+      addinstr_test_branch(builder, slot_test2, &true_blk2, &false_blk2);
+      
+      int blk_true_true = new_block(builder);
+      set_int_var(builder, true_blk2, blk_true_true);
+      int slot_true_true = addinstr_alloc_bool_object(builder, true); // true && true => true
+      int end_br_true_true;
+      addinstr_branch(builder, &end_br_true_true);
+      
+      // } else {
+      int blk_true_false = new_block(builder);
+      set_int_var(builder, false_blk2, blk_true_false);
+      int slot_true_false = addinstr_alloc_bool_object(builder, false); // true && false => false
+      int end_br_true_false;
+      addinstr_branch(builder, &end_br_true_false);
+      
+      // }
+      int blk_true_phi = new_block(builder);
+      set_int_var(builder, end_br_true_true, blk_true_phi);
+      set_int_var(builder, end_br_true_false, blk_true_phi);
+      int slot_true_phi = addinstr_phi(builder, blk_true_true, slot_true_true, blk_true_false, slot_true_false);
+      int end_br_true_phi;
+      addinstr_branch(builder, &end_br_true_phi);
+      
+      // } else {
+      int blk_false = new_block(builder);
+      set_int_var(builder, false_blk1, blk_false);
+      int slot_false = addinstr_alloc_bool_object(builder, false); // false && _ => false
+      int end_br_false;
+      addinstr_branch(builder, &end_br_false);
+      
+      // }
+      int blk_phi = new_block(builder);
+      set_int_var(builder, end_br_false, blk_phi);
+      set_int_var(builder, end_br_true_phi, blk_phi);
+      int slot_phi = addinstr_phi(builder, blk_false, slot_false, blk_true_phi, slot_true_phi);
+      use_range_end(builder, range);
+      
+      *rv = ref_simple(slot_phi);
+      continue;
+    }
+    free(range);
+    break;
+  }
+  
+  if (level > 0) { *textp = text; return PARSE_OK; }
+  
+  while (true) {
+    FileRange *range = alloc_and_record_start(text);
+    if (eat_string(&text, "||")) {
+      /*
+       *  [1]
+       * Y | \ N
+       *  [T] [2]
+       *   | Y | \ N
+       *   |  [T][F]
+       *   |   | /
+       *   |  [φ]
+       *   | /
+       *  [φ]
+       */
+      record_end(text, range);
+      // short-circuiting evaluation
+      int slot_test1 = ref_access(builder, *rv);
+      // if (!lhs) {
+      int true_blk1, false_blk1;
+      use_range_start(builder, range);
+      addinstr_test_branch(builder, slot_test1, &true_blk1, &false_blk1);
+      
+      int blk_false = new_block(builder);
+      set_int_var(builder, false_blk1, blk_false);
+      use_range_end(builder, range);
+      
+      // if (rhs) { // TODO check truthiness of RHS directly via instr
+      res = parse_expr(&text, builder, 1, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR;
+      assert(res == PARSE_OK);
+      
+      int slot_test2 = ref_access(builder, rhs_expr);
+      int true_blk2, false_blk2;
+      use_range_start(builder, range);
+      addinstr_test_branch(builder, slot_test2, &true_blk2, &false_blk2);
+      
+      int blk_false_true = new_block(builder);
+      set_int_var(builder, true_blk2, blk_false_true);
+      int slot_false_true = addinstr_alloc_bool_object(builder, true); // false || true => true
+      int end_br_false_true;
+      addinstr_branch(builder, &end_br_false_true);
+      
+      // } else {
+      int blk_false_false = new_block(builder);
+      set_int_var(builder, false_blk2, blk_false_false);
+      int slot_false_false = addinstr_alloc_bool_object(builder, false); // false || false => false
+      int end_br_false_false;
+      addinstr_branch(builder, &end_br_false_false);
+      
+      // }
+      int blk_false_phi = new_block(builder);
+      set_int_var(builder, end_br_false_true, blk_false_phi);
+      set_int_var(builder, end_br_false_false, blk_false_phi);
+      int slot_false_phi = addinstr_phi(builder, blk_false_true, slot_false_true, blk_false_false, slot_false_false);
+      int end_br_false_phi;
+      addinstr_branch(builder, &end_br_false_phi);
+      
+      // } else {
+      int blk_true = new_block(builder);
+      set_int_var(builder, true_blk1, blk_true);
+      int slot_true = addinstr_alloc_bool_object(builder, true); // true || _ => true
+      int end_br_true;
+      addinstr_branch(builder, &end_br_true);
+      
+      // }
+      int blk_phi = new_block(builder);
+      set_int_var(builder, end_br_true, blk_phi);
+      set_int_var(builder, end_br_false_phi, blk_phi);
+      int slot_phi = addinstr_phi(builder, blk_true, slot_true, blk_false_phi, slot_false_phi);
+      use_range_end(builder, range);
+      
+      *rv = ref_simple(slot_phi);
+      continue;
+    }
+    free(range);
+    break;
   }
   
   *textp = text;

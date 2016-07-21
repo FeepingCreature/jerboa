@@ -1,0 +1,16 @@
+function test_or(a, b, a_test, b_test, c_test) {
+  var evaluated_a = false, evaluated_b = false;
+  function a_fn() { evaluated_a = true; return a; }
+  function b_fn() { evaluated_b = true; return b; }
+  var result = false;
+  if (a_fn() || b_fn()) result = true;
+  print(a, " <", evaluated_a, "> || ", b, " <", evaluated_b, "> = ", result);
+  assert(a_test == evaluated_a, "boolean short-circuit and: logic error with lhs");
+  assert(b_test == evaluated_b, "boolean short-circuit and: logic error with rhs");
+  assert(c_test == result     , "boolean short-circuit and: logic error with result");
+}
+
+test_or(false, false,   true , true , false);
+test_or(false, true ,   true , true , true );
+test_or(true , false,   true , false, true );
+test_or(true , true ,   true , false, true );
