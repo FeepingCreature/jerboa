@@ -348,8 +348,8 @@ void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int tar
       .belongs_to = NULL
     },
     .source_refslot = source_refslot,
-    target_slot = target_slot,
-    opt_info = opt_info
+    .target_slot = target_slot,
+    .opt_info = opt_info
   };
   
   addinstr(builder, sizeof(instr), (Instr*) &instr);
