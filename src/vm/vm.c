@@ -758,6 +758,12 @@ static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
     // copied from sample, should be no need to allocate
     assert(entry && !freeptr);
     entry->value = state->slots[info->slot];
+    if (info->constraint) {
+      entry->value_aux = info->constraint;
+      if (!entry->value || ((Object*) entry->value)->parent != info->constraint) {
+        VM_ASSERT2(false, "type constraint violated on variable");
+      }
+    }
     state->cf->refslots_ptr[info->refslot] = (Object**) &entry->value;
   }
   
