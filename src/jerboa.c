@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
   for (int i = 2; i < argc; ++i) {
     args_ptr[i-2] = alloc_string(&vmstate, argv[i], strlen(argv[i]));
   }
-  Object *args = alloc_array(&vmstate, args_ptr, (IntObject*) alloc_int(&vmstate, args_len));
+  Object *args = alloc_array(&vmstate, args_ptr, alloc_int(&vmstate, args_len));
   object_set(root, "arguments", args);
   
   call_function(&vmstate, root, module, NULL, 0);

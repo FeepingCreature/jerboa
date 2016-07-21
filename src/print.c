@@ -18,16 +18,16 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
     *sobj = obj_instance_of(obj, string_base),
     *aobj = obj_instance_of(obj, array_base);
   if (obj->parent == int_base) {
-    fprintf(fh, "%i", ((IntObject*)obj)->value);
+    fprintf(fh, "%i", obj->int_value);
     return;
   }
   if (obj->parent == bool_base) {
-    if (((BoolObject*)obj)->value) fprintf(fh, "true");
+    if (obj->bool_value) fprintf(fh, "true");
     else fprintf(fh, "false");
     return;
   }
   if (obj->parent == float_base) {
-    fprintf(fh, "%f", ((FloatObject*)obj)->value);
+    fprintf(fh, "%f", obj->float_value);
     return;
   }
   if (sobj) {
@@ -85,17 +85,19 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
     if (obj->flags & OBJ_NOINHERIT) fprintf(fh, "NOI");
     fprintf(fh, ")");
   }
-  HashTable *tbl = &obj->tbl;
-  bool first = true;
-  for (int i = 0; i < tbl->entries_num; ++i) {
-    TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr) {
-      fprintf(fh, "\n");
-      for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
-      if (first) { first = false; fprintf(fh, "| "); }
-      else fprintf(fh, ", ");
-      fprintf(fh, "'%.*s': ", (int) entry->name_len, entry->name_ptr);
-      print_recursive_indent(state, fh, entry->value, allow_tostring, indent+1);
+  if (!(obj->flags & OBJ_PRIMITIVE)) {
+    HashTable *tbl = &obj->tbl;
+    bool first = true;
+    for (int i = 0; i < tbl->entries_num; ++i) {
+      TableEntry *entry = &tbl->entries_ptr[i];
+      if (entry->name_ptr) {
+        fprintf(fh, "\n");
+        for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
+        if (first) { first = false; fprintf(fh, "| "); }
+        else fprintf(fh, ", ");
+        fprintf(fh, "'%.*s': ", (int) entry->name_len, entry->name_ptr);
+        print_recursive_indent(state, fh, entry->value, allow_tostring, indent+1);
+      }
     }
   }
   if (obj->parent) {

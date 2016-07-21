@@ -263,7 +263,7 @@ static FnWrap vm_instr_alloc_array_object(FastVMState *state) {
   AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) state->instr;
   int target_slot = alloc_array_obj_instr->target_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = alloc_array(state->reststate, NULL, (IntObject*) state->reststate->shared->vcache.int_zero);
+  Object *obj = alloc_array(state->reststate, NULL, state->reststate->shared->vcache.int_zero);
   state->slots[target_slot] = obj;
   state->instr = (Instr*)(alloc_array_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -676,9 +676,9 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   if (test_value == NULL) {
     test = false;
   } else if (test_value->parent == state->reststate->shared->vcache.bool_base) {
-    test = ((BoolObject*) test_value)->value == true;
+    test = test_value->bool_value == true;
   } else if (test_value->parent ==  state->reststate->shared->vcache.int_base) {
-    test = ((IntObject*) test_value)->value != 0;
+    test = test_value->int_value != 0;
   }
   
   int target_blk = test ? true_blk : false_blk;
@@ -752,10 +752,10 @@ static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
   Object *obj = alloc_object(state->reststate, state->slots[parent_slot]);
   
   // TODO table_clone
-  obj->tbl = asoi->obj_sample->tbl;
+  obj->tbl = ((Object*)(asoi+1))->tbl;
   int tbl_len = sizeof(TableEntry) * obj->tbl.entries_num;
   obj->tbl.entries_ptr = cache_alloc(tbl_len);
-  memcpy(obj->tbl.entries_ptr, asoi->obj_sample->tbl.entries_ptr, tbl_len);
+  memcpy(obj->tbl.entries_ptr, ((Object*)(asoi+1))->tbl.entries_ptr, tbl_len);
   
   for (int i = 0; i < asoi->info_len; ++i) {
     StaticFieldInfo *info = &asoi->info_ptr[i];
@@ -772,7 +772,7 @@ static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
   
   state->slots[target_slot] = obj;
   
-  state->instr = (Instr*)(asoi + 1);
+  state->instr = (Instr*)((char*) asoi + sizeof(AllocStaticObjectInstr) + sizeof(Object));
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 

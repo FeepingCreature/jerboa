@@ -70,8 +70,6 @@ function gear(inner_radius:float, outer_radius:float, width:float, teeth:int, to
 
   const da:float = 2.0 * M_PI / teeth / 4.0;
   
-  if (true) { } else { }
-  
   gl.ShadeModel(gl.FLAT);
 
   gl.Normal3f(0.0, 0.0, 1.0);

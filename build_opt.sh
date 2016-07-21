@@ -8,5 +8,5 @@ XML_FLAGS=$(pkg-config libxml-2.0 --cflags --libs)
 # OPTFLAGS="-O3 -ffast-math -march=native -flto -fwhole-program -fno-omit-frame-pointer"
 # OPTFLAGS="-O3 -ffast-math -march=native -flto -fwhole-program"
 OPTFLAGS="-O2 -ffast-math -march=native -fno-omit-frame-pointer"
-gcc -ljemalloc -DNDEBUG -D_GNU_SOURCE -g $OPTFLAGS $@ -std=c99 -Wall -pedantic -Isrc $FFI_FLAGS $XML_FLAGS $SOURCES -o build/jerboa -ldl
-# clang -ljemalloc -g -D_GNU_SOURCE $@ -DNDEBUG $SOURCES -o build/jerboa -Isrc -Wall -Wextra -pedantic $FFI_FLAGS $XML_FLAGS -ldl -Ofast
+gcc -ljemalloc -DNDEBUG -D_GNU_SOURCE -g $OPTFLAGS $@ -std=c11 -Wall -pedantic -Isrc $FFI_FLAGS $XML_FLAGS $SOURCES -o build/jerboa -ldl
+# clang -ljemalloc -DNDEBUG -D_GNU_SOURCE -g -Ofast $@ -std=c11 -Isrc -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -pedantic $FFI_FLAGS $XML_FLAGS $SOURCES -o build/jerboa -ldl

@@ -50,7 +50,7 @@ static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, O
   for (int i = 0; i < varargs_len; ++i) {
     varargs_ptr[i] = args_ptr[uf->arity + i];
   }
-  object_set(context, "arguments", alloc_array(state, varargs_ptr, (IntObject*) alloc_int(state, varargs_len)));
+  object_set(context, "arguments", alloc_array(state, varargs_ptr, alloc_int(state, varargs_len)));
   context->flags |= OBJ_CLOSED;
   return context;
 }
@@ -76,11 +76,18 @@ static void method_handler(VMState *state, Object *thisptr, Object *fn, Object *
   gc_enable(state);
 }
 
+static void closure_mark_fn(VMState *state, Object *obj) {
+  Object *closure_base = state->shared->vcache.closure_base;
+  ClosureObject *clobj = (ClosureObject*) obj_instance_of(obj, closure_base);
+  if (clobj) obj_mark(state, clobj->context);
+}
+
 Object *alloc_closure_fn(VMState *state, Object *context, UserFunction *fn) {
   ClosureObject *obj = calloc(sizeof(ClosureObject), 1);
-  obj->base.base.parent = state->shared->vcache.closure_base;
-  if (fn->is_method) obj->base.fn_ptr = method_handler;
-  else obj->base.fn_ptr = function_handler;
+  obj->base.parent = state->shared->vcache.closure_base;
+  if (fn->is_method) obj->fn_ptr = method_handler;
+  else obj->fn_ptr = function_handler;
+  obj->base.mark_fn = closure_mark_fn;
   obj->context = context;
   obj->vmfun = fn;
   return (Object*) obj;
@@ -94,6 +101,6 @@ bool setup_call(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, 
   VM_ASSERT(fn_obj || cl_obj, "object is neither function nor closure") false;
   
   if (fn_obj) fn_obj->fn_ptr(state, thisptr, (Object*) fn_obj, args_ptr, args_len);
-  else cl_obj->base.fn_ptr(state, thisptr, (Object*) cl_obj, args_ptr, args_len);
+  else cl_obj->fn_ptr(state, thisptr, (Object*) cl_obj, args_ptr, args_len);
   return true;
 }

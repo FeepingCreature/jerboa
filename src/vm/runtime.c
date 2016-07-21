@@ -29,8 +29,7 @@ static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *bool_base = state->shared->vcache.bool_base;
   VM_ASSERT(thisptr->parent == bool_base, "internal error: bool negation called on wrong type of object");
   
-  BoolObject *boolobj = (BoolObject*) thisptr;
-  state->result_value = alloc_bool(state, !boolobj->value);
+  state->result_value = alloc_bool(state, !thisptr->bool_value);
 }
 
 typedef enum {
@@ -53,7 +52,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *obj2 = args_ptr[0];
   
   if (obj2->parent == int_base) {
-    int i1 = ((IntObject*) thisptr)->value, i2 = ((IntObject*) obj2)->value;
+    int i1 = thisptr->int_value, i2 = obj2->int_value;
     int res;
     switch (mop) {
       case MATH_ADD: res = i1 + i2; break;
@@ -72,7 +71,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   }
   
   if (obj2->parent == float_base) {
-    float v1 = ((IntObject*) thisptr)->value, v2 = ((FloatObject*) obj2)->value;
+    float v1 = thisptr->int_value, v2 = obj2->float_value;
     float res;
     switch (mop) {
       case MATH_ADD: res = v1 + v2; break;
@@ -145,9 +144,9 @@ static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **
   Object *obj2 = args_ptr[0];
   VM_ASSERT(obj1->parent == float_base, "internal error: float math function called on wrong type of object");
   
-  float v1 = ((FloatObject*) obj1)->value, v2;
-  if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
-  else if (obj2->parent == int_base) v2 = ((IntObject*) obj2)->value;
+  float v1 = obj1->float_value, v2;
+  if (obj2->parent == float_base) v2 = obj2->float_value;
+  else if (obj2->parent == int_base) v2 = obj2->int_value;
   else { vm_error(state, "don't know how to perform float math with %p", args_ptr[0]); return; }
   
   float res;
@@ -195,9 +194,9 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
   
   char *str1 = ((StringObject*) sobj1)->value, *str2;
   if (sobj2) str2 = my_asprintf("%s", ((StringObject*) sobj2)->value);
-  else if (obj2->parent == float_base) str2 = my_asprintf("%f", ((FloatObject*) obj2)->value);
-  else if (obj2->parent == int_base) str2 = my_asprintf("%i", ((IntObject*) obj2)->value);
-  else if (obj2->parent == bool_base) if (((BoolObject*)obj2)->value) str2 = my_asprintf("%s", "true"); else str2 = my_asprintf("%s", "false");
+  else if (obj2->parent == float_base) str2 = my_asprintf("%f", obj2->float_value);
+  else if (obj2->parent == int_base) str2 = my_asprintf("%i", obj2->int_value);
+  else if (obj2->parent == bool_base) if (obj2->bool_value) str2 = my_asprintf("%s", "true"); else str2 = my_asprintf("%s", "false");
   else VM_ASSERT(false, "don't know how to format object: %p", args_ptr[0]);
   char *str3 = my_asprintf("%s%s", str1, str2);
   free(str2);
@@ -303,7 +302,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   
   VM_ASSERT(obj1->parent == int_base, "internal error: int compare function called on wrong type of object");
   if (obj2->parent == int_base) {
-    int i1 = ((IntObject*) obj1)->value, i2 = ((IntObject*) obj2)->value;
+    int i1 = obj1->int_value, i2 = obj2->int_value;
     bool res;
     switch (cmp) {
       case CMP_EQ: res = i1 == i2; break;
@@ -318,7 +317,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   }
   
   if (obj2->parent == float_base) {
-    float v1 = ((IntObject*) obj1)->value, v2 = ((FloatObject*) obj2)->value;
+    float v1 = obj1->int_value, v2 = obj2->float_value;
     bool res;
     switch (cmp) {
       case CMP_EQ: res = v1 == v2; break;
@@ -365,9 +364,9 @@ static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **a
     *obj2 = args_ptr[0];
   VM_ASSERT(obj1->parent == float_base, "internal error: float compare function called on wrong type of object");
   
-  float v1 = ((FloatObject*) obj1)->value, v2;
-  if (obj2->parent == float_base) v2 = ((FloatObject*) obj2)->value;
-  else if (obj2->parent == int_base) v2 = ((IntObject*) obj2)->value;
+  float v1 = obj1->float_value, v2;
+  if (obj2->parent == float_base) v2 = obj2->float_value;
+  else if (obj2->parent == int_base) v2 = obj2->int_value;
   else { vm_error(state, "don't know how to compare float with %p", obj2); return; }
   
   bool res;
@@ -402,22 +401,6 @@ static void float_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_GE);
 }
 
-static void closure_mark_fn(VMState *state, Object *obj) {
-  Object *closure_base = state->shared->vcache.closure_base;
-  ClosureObject *clobj = (ClosureObject*) obj_instance_of(obj, closure_base);
-  if (clobj) obj_mark(state, clobj->context);
-}
-
-static void array_mark_fn(VMState *state, Object *obj) {
-  Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
-  if (arr_obj) { // else it's obj == array_base
-    for (int i = 0; i < arr_obj->length; ++i) {
-      obj_mark(state, arr_obj->ptr[i]);
-    }
-  }
-}
-
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *pointer_base = state->shared->vcache.pointer_base;
@@ -435,7 +418,7 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
   VM_ASSERT(arg->parent == int_base, "parameter to resize function must be int");
   VM_ASSERT(arr_obj, "internal error: resize called on object that is not an array");
   int oldsize = arr_obj->length;
-  int newsize = ((IntObject*) arg)->value;
+  int newsize = arg->int_value;
   VM_ASSERT(newsize >= 0, "bad size: %i", newsize);
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * newsize);
   memset(arr_obj->ptr + oldsize, 0, sizeof(Object*) * (newsize - oldsize));
@@ -475,7 +458,7 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
   Object *arg = args_ptr[0];
   if (arg->parent != int_base) { state->result_value = NULL; return; }
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
-  int index = ((IntObject*) arg)->value;
+  int index = arg->int_value;
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   state->result_value = arr_obj->ptr[index];
 }
@@ -488,7 +471,7 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
   Object *arg = args_ptr[0];
   VM_ASSERT(arr_obj, "internal error: array '[]=' called on object that is not an array");
   VM_ASSERT(arg->parent == int_base, "index of array '[]=' must be int");
-  int index = ((IntObject*) arg)->value;
+  int index = arg->int_value;
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   Object *value = args_ptr[1];
   arr_obj->ptr[index] = value;
@@ -609,20 +592,25 @@ static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
   gc_disable(state);
   int res_len = 0;
   Object *obj = args_ptr[0];
-  HashTable *tbl = &obj->tbl;
-  for (int i = 0; i < tbl->entries_num; ++i) {
-    TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr) res_len ++;
-  }
-  Object **res_ptr = malloc(sizeof(Object*) * res_len);
-  int k = 0;
-  for (int i = 0; i < tbl->entries_num; ++i) {
-    TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr) {
-      res_ptr[k++] = alloc_string(state, entry->name_ptr, strlen(entry->name_ptr));
+  if (!(obj->flags & OBJ_PRIMITIVE)) {
+    HashTable *tbl = &obj->tbl;
+    for (int i = 0; i < tbl->entries_num; ++i) {
+      TableEntry *entry = &tbl->entries_ptr[i];
+      if (entry->name_ptr) res_len ++;
     }
   }
-  state->result_value = alloc_array(state, res_ptr, (IntObject*) alloc_int(state, res_len));
+  Object **res_ptr = malloc(sizeof(Object*) * res_len);
+  if (!(obj->flags & OBJ_PRIMITIVE)) {
+    int k = 0;
+    HashTable *tbl = &obj->tbl;
+    for (int i = 0; i < tbl->entries_num; ++i) {
+      TableEntry *entry = &tbl->entries_ptr[i];
+      if (entry->name_ptr) {
+        res_ptr[k++] = alloc_string(state, entry->name_ptr, strlen(entry->name_ptr));
+      }
+    }
+  }
+  state->result_value = alloc_array(state, res_ptr, alloc_int(state, res_len));
   gc_enable(state);
 }
 
@@ -654,7 +642,7 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
       object_set(attr, name2, alloc_string(state, content, strlen(content)));
     }
     // printf("alloc_string(%lu)\n", strlen((char*) element->name));
-    IntObject *children_len_obj = (IntObject*) alloc_int(state, children_len);
+    Object *children_len_obj = alloc_int(state, children_len);
     object_set(res, "nodeName", alloc_string(state, (char*) element->name, strlen((char*) element->name)));
     object_set(res, "attr", attr);
     object_set(res, "children", alloc_array(state, children_ptr, children_len_obj));
@@ -690,7 +678,7 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   object_set(text_node, "nodeName", alloc_string_foreign(state, ""));
   object_set(text_node, "nodeType", alloc_int(state, 3));
   object_set(text_node, "attr", alloc_object(state, NULL));
-  object_set(text_node, "children", alloc_array(state, NULL, (IntObject*) state->shared->vcache.int_zero));
+  object_set(text_node, "children", alloc_array(state, NULL, state->shared->vcache.int_zero));
   
   Object *element_node = alloc_object(state, node_base);
   object_set(element_node, "nodeType", alloc_int(state, 1));
@@ -722,7 +710,7 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
   Object *res = substate.result_value;
   VM_ASSERT(res->parent == bool_base, "predicate must return bool") false;
   
-  return ((BoolObject*) res)->value;
+  return res->bool_value;
 }
 
 static void xml_node_find_recurse(VMState *state, Object *node, Object *pred, Object ***array_p_p, int *array_l_p)
@@ -752,7 +740,7 @@ static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, 
   Object **array_ptr = NULL; int array_length = 0;
   gc_disable(state);
   xml_node_find_recurse(state, thisptr, args_ptr[0], &array_ptr, &array_length);
-  IntObject *array_len_obj = (IntObject*) alloc_int(state, array_length);
+  Object *array_len_obj = alloc_int(state, array_length);
   state->result_value = alloc_array(state, array_ptr, array_len_obj);
   gc_enable(state);
 }
@@ -790,7 +778,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Obje
   Object **array_ptr = NULL; int array_length = 0;
   gc_disable(state);
   xml_node_find_by_name_recurse(state, thisptr, name_obj->value, &array_ptr, &array_length);
-  IntObject *array_len_obj = (IntObject*) alloc_int(state, array_length);
+  Object *array_len_obj = alloc_int(state, array_length);
   state->result_value = alloc_array(state, array_ptr, array_len_obj);
   gc_enable(state);
 }
@@ -860,6 +848,7 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   Object *context = cf->slots_ptr[context_slot];
   
   Object *cur = context;
+  if (cur->flags & OBJ_PRIMITIVE) cur = cur->parent; // known to be non-primitive from here up because noinherit
   while (cur) {
     TableEntry *entry = table_lookup_with_hash(&cur->tbl, key_ptr, key_len, key_hash);
     if (entry) {
@@ -875,28 +864,32 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
 static void obj_keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   Object *obj = args_ptr[0];
-  int keys_len = obj->tbl.entries_stored;
-  Object **keys_ptr = malloc(sizeof(Object*) * keys_len);
-  int k = 0;
-  for (int i = 0; i < obj->tbl.entries_num; i++) {
-    const char *name_ptr = obj->tbl.entries_ptr[i].name_ptr;
-    int name_len = obj->tbl.entries_ptr[i].name_len;
-    if (name_ptr) {
-      keys_ptr[k++] = alloc_string(state, name_ptr, name_len);
+  int keys_len = 0;
+  Object **keys_ptr = NULL;
+  if (!(obj->flags & OBJ_PRIMITIVE)) {
+    keys_len = obj->tbl.entries_stored;
+    keys_ptr = malloc(sizeof(Object*) * keys_len);
+    int k = 0;
+    for (int i = 0; i < obj->tbl.entries_num; i++) {
+      const char *name_ptr = obj->tbl.entries_ptr[i].name_ptr;
+      int name_len = obj->tbl.entries_ptr[i].name_len;
+      if (name_ptr) {
+        keys_ptr[k++] = alloc_string(state, name_ptr, name_len);
+      }
     }
+    assert(k == keys_len);
   }
-  assert(k == keys_len);
-  state->result_value = alloc_array(state, keys_ptr, (IntObject*) alloc_int(state, keys_len));
+  state->result_value = alloc_array(state, keys_ptr, alloc_int(state, keys_len));
 }
 
 static bool is_truthy(VMState *state, Object *obj) {
   Object *int_base = state->shared->vcache.int_base;
   Object *bool_base = state->shared->vcache.bool_base;
   if (obj->parent == bool_base) {
-    return ((BoolObject*) obj)->value;
+    return obj->bool_value;
   }
   if (obj->parent == int_base) {
-    return ((IntObject*) obj)->value != 0;
+    return obj->int_value != 0;
   }
   return !!obj;
 }
@@ -979,7 +972,6 @@ Object *create_root(VMState *state) {
   
   Object *closure_obj = alloc_object(state, NULL);
   closure_obj->flags |= OBJ_NOINHERIT;
-  closure_obj->mark_fn = closure_mark_fn;
   object_set(root, "closure", closure_obj);
   object_set(closure_obj, "apply", alloc_fn(state, fn_apply_fn));
   state->shared->vcache.closure_base = closure_obj;
@@ -1013,7 +1005,6 @@ Object *create_root(VMState *state) {
   
   Object *array_obj = alloc_object(state, NULL);
   array_obj->flags |= OBJ_NOINHERIT;
-  array_obj->mark_fn = array_mark_fn;
   object_set(root, "array", array_obj);
   object_set(array_obj, "resize", alloc_fn(state, array_resize_fn));
   object_set(array_obj, "push", alloc_fn(state, array_push_fn));

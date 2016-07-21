@@ -19,7 +19,9 @@ typedef enum {
                        // used for prototypes of objects with payload,
                        // like int or float, that have their own alloc functions.
                        // you can still prototype the objects themselves though.
-  OBJ_GC_MARK = 0x8   // reachable in the "gc mark" phase
+  OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
+  OBJ_PRIMITIVE = 0x10,// no table, no mark_fn
+  OBJ_PRIMITIVE_VALUE = OBJ_FROZEN | OBJ_CLOSED | OBJ_PRIMITIVE | OBJ_NOINHERIT // primitive must entail noinherit!
 } ObjectFlagsBase;
 
 typedef short int ObjectFlags;
@@ -28,13 +30,27 @@ struct _VMState;
 typedef struct _VMState VMState;
 
 struct _Object {
-  HashTable tbl;
   Object *parent;
   short int size;
   ObjectFlags flags;
   Object *prev; // for gc
-  void (*mark_fn)(VMState *state, Object *obj); // for gc
+  
+  union {
+    struct {
+      HashTable tbl;
+      void (*mark_fn)(VMState *state, Object *obj); // for gc
+    };
+    int int_value;
+    float float_value;
+    bool bool_value;
+    struct {
+      union { int _int; float _float; bool _bool; };
+      int _primitive_end_marker;
+    };
+  };
 };
+
+#define PRIMITIVE_OBJ_SIZE offsetof(Object, _primitive_end_marker)
 
 struct _GCRootSet;
 typedef struct _GCRootSet GCRootSet;
@@ -161,26 +177,12 @@ typedef struct {
 } FunctionObject;
 
 typedef struct {
-  FunctionObject base;
+  Object base;
+  VMFunctionPointer fn_ptr;
   Object *context;
   UserFunction *vmfun;
   int num_called; // used for triggering optimization
 } ClosureObject;
-
-typedef struct {
-  Object base;
-  int value;
-} IntObject;
-
-typedef struct {
-  Object base;
-  bool value;
-} BoolObject;
-
-typedef struct {
-  Object base;
-  float value;
-} FloatObject;
 
 typedef struct {
   Object base;
@@ -217,7 +219,7 @@ Object *alloc_bool(VMState *state, bool value);
 // returns newly allocated bool object (used to initialize value_cache)
 Object *alloc_bool_uncached(VMState *state, bool value);
 
-Object *alloc_array(VMState *state, Object **ptr, IntObject *length);
+Object *alloc_array(VMState *state, Object **ptr, Object *length);
 
 Object *alloc_ptr(VMState *state, void *ptr); // TODO unify with alloc_fn
 

@@ -81,7 +81,7 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   Object *ffi_type_obj = obj_instance_of(args_ptr[0], ffi_type);
   Object *offs_obj = args_ptr[1];
   VM_ASSERT(offs_obj->parent == int_base, "offset must be integer");
-  int offs = ((IntObject*) offs_obj)->value;
+  int offs = offs_obj->int_value;
   assert(ffi_type_obj);
   char *offset_ptr = (char*) thisptr_obj->ptr + offs;
   if (obj_instance_of_or_equal(ffi_type_obj, ffi_short)) {
@@ -114,9 +114,9 @@ bool ffi_pointer_write(VMState *state, Object *type, void *ptr, Object *value_ob
   FFIObject *ffi = (FFIObject*) vcache->ffi_obj;
   if (type == ffi->float_obj) {
     if (value_obj->parent == vcache->float_base) {
-      *(float*) ptr = ((FloatObject*) value_obj)->value;
+      *(float*) ptr = value_obj->float_value;
     } else if (value_obj->parent == vcache->int_base) {
-      *(float*) ptr = ((IntObject*) value_obj)->value;
+      *(float*) ptr = value_obj->int_value;
     } else {
       VM_ASSERT(false, "invalid value for float type") false;
     }
@@ -160,11 +160,11 @@ static void ffi_ptr_index_fn(VMState *state, Object *thisptr, Object *fn, Object
   
   Object *offs_obj = args_ptr[0];
   VM_ASSERT(offs_obj->parent == int_base, "offset must be integer");
-  int offs = ((IntObject*) offs_obj)->value;
+  int offs = offs_obj->int_value;
   
-  IntObject *sizeof_obj = (IntObject*) OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
-  VM_ASSERT(sizeof_obj && sizeof_obj->base.parent == int_base, "internal error: sizeof wrong type or undefined");
-  int elemsize = sizeof_obj->value;
+  Object *sizeof_obj = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
+  VM_ASSERT(sizeof_obj && sizeof_obj->parent == int_base, "internal error: sizeof wrong type or undefined");
+  int elemsize = sizeof_obj->int_value;
   
   char *offset_ptr = (char*) thisptr_obj->ptr + elemsize * offs;
   
@@ -184,11 +184,11 @@ static void ffi_ptr_index_assign_fn(VMState *state, Object *thisptr, Object *fn,
   
   Object *offs_obj = args_ptr[0];
   VM_ASSERT(offs_obj->parent == int_base, "offset must be integer");
-  int offs = ((IntObject*) offs_obj)->value;
+  int offs = offs_obj->int_value;
   
-  IntObject *sizeof_obj = (IntObject*) OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
-  VM_ASSERT(sizeof_obj && sizeof_obj->base.parent == int_base, "internal error: sizeof wrong type or undefined");
-  int elemsize = sizeof_obj->value;
+  Object *sizeof_obj = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
+  VM_ASSERT(sizeof_obj && sizeof_obj->parent == int_base, "internal error: sizeof wrong type or undefined");
+  int elemsize = sizeof_obj->int_value;
   
   char *offset_ptr = (char*) thisptr_obj->ptr + elemsize * offs;
   
@@ -207,9 +207,9 @@ static void ffi_ptr_add(VMState *state, Object *thisptr, Object *fn, Object **ar
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
   void *ptr = (void*) thisptr_obj->ptr;
   
-  IntObject *offset_obj = (IntObject*) args_ptr[0];
-  VM_ASSERT(offset_obj->base.parent == int_base, "offset must be integer");
-  int offset = offset_obj->value;
+  Object *offset_obj = args_ptr[0];
+  VM_ASSERT(offset_obj->parent == int_base, "offset must be integer");
+  int offset = offset_obj->int_value;
   
   state->result_value = make_ffi_pointer(state, (void*) ((char*)ptr + offset));
 }
@@ -319,9 +319,9 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     else if (type == ffi->float_obj) {
       // fprintf(stderr, "f");
       Object *obj = args_ptr[i];
-      if (obj->parent == float_base) *(float*) data = ((FloatObject*) obj)->value;
+      if (obj->parent == float_base) *(float*) data = obj->float_value;
       else {
-        if (obj->parent == int_base) *(float*) data = ((IntObject*) obj)->value;
+        if (obj->parent == int_base) *(float*) data = obj->int_value;
         else {
           VM_ASSERT(false, "ffi float argument must be int or float");
         }
@@ -333,7 +333,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       // fprintf(stderr, "i32");
       Object *obj = args_ptr[i];
       VM_ASSERT(obj->parent == int_base, "ffi int argument must be int");
-      *(int*) data = ((IntObject*) obj)->value;
+      *(int*) data = obj->int_value;
       par_ptrs[i] = data;
       data = (char*) data + sizeof(long);
     }
@@ -341,7 +341,7 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       // fprintf(stderr, "l");
       Object *obj = args_ptr[i];
       VM_ASSERT(obj->parent == int_base, "ffi long argument must be int");
-      *(long*) data = ((IntObject*) obj)->value;
+      *(long*) data = obj->int_value;
       par_ptrs[i] = data;
       data = (char*) data + sizeof(long);
     }
@@ -349,16 +349,16 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       // fprintf(stderr, "i64");
       Object *obj = args_ptr[i];
       VM_ASSERT(obj->parent == int_base, "ffi (u)int64 argument must be int");
-      *(int64_t*) data = ((IntObject*) obj)->value;
+      *(int64_t*) data = obj->int_value;
       par_ptrs[i] = data;
       data = (char*) data + sizeof(int64_t);
     }
     else if (type == ffi->double_obj) {
       // fprintf(stderr, "d");
       Object *obj = args_ptr[i];
-      if (obj->parent == float_base) *(double*) data = ((FloatObject*) obj)->value;
+      if (obj->parent == float_base) *(double*) data = obj->float_value;
       else {
-        if (obj->parent == int_base) *(double*) data = ((IntObject*) obj)->value;
+        if (obj->parent == int_base) *(double*) data = obj->int_value;
         else {
           VM_ASSERT(false, "ffi double argument must be int or float");
         }
@@ -447,9 +447,9 @@ static void ffi_call_fn_special_d_d(VMState *state, Object *thisptr, Object *fn,
   void *ret_ptr = alloca(sizeof(double));
   
   Object *arg0 = args_ptr[0];
-  if (arg0->parent == float_base) *(double*) data = ((FloatObject*) arg0)->value;
+  if (arg0->parent == float_base) *(double*) data = arg0->float_value;
   else {
-    if (arg0->parent == int_base) *(double*) data = ((IntObject*) arg0)->value;
+    if (arg0->parent == int_base) *(double*) data = arg0->int_value;
     else {
       VM_ASSERT(false, "ffi double argument must be int or float");
     }
@@ -487,9 +487,9 @@ static void ffi_call_fn_special_fx_v(VMState *state, Object *thisptr, Object *fn
   
   for (int i = 0; i < args_len; ++i) {
     Object *arg = args_ptr[i];
-    if (arg->parent == float_base) *(float*) data = ((FloatObject*) arg)->value;
+    if (arg->parent == float_base) *(float*) data = arg->float_value;
     else {
-      if (arg->parent == int_base) *(float*) data = ((IntObject*) arg)->value;
+      if (arg->parent == int_base) *(float*) data = arg->int_value;
       else {
         VM_ASSERT(false, "ffi float argument %i must be int or float", i);
       }
