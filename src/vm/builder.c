@@ -134,6 +134,7 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
     .obj_slot = obj,
     .value_slot = slot,
     .key_slot = key_slot,
+    .target_slot = builder->slot_base++,
     .type = type
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);

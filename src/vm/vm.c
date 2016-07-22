@@ -347,6 +347,21 @@ static FnWrap vm_instr_freeze_object(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap call_internal(FastVMState *state, int target_slot, Object *this_obj, Object *fn_obj, Object **args_ptr, int args_len, FileRange **prev_instr) {
+  // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
+  // solve explicitly
+  state->cf->backtrace_belongs_to_p = prev_instr;
+  state->cf->target_slot = &state->cf->slots_ptr[target_slot];
+  state->cf->instr_ptr = state->instr;
+  if (!setup_call(state->reststate, this_obj, fn_obj, args_ptr, args_len)) return (FnWrap) { vm_halt };
+  
+  // intrinsic may have errored.
+  if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };
+  
+  faststate_refresh(state);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_instr_access(FastVMState *state) {
   AccessInstr *access_instr = (AccessInstr*) state->instr;
   int obj_slot, target_slot;
@@ -378,26 +393,9 @@ static FnWrap vm_instr_access(FastVMState *state) {
     if (index_op) {
       Object *key_obj = state->slots[access_instr->key_slot];
       
-      VMState substate = {0};
-      // TODO update_state()
-      substate.parent = state->reststate;
-      substate.root = state->root;
-      substate.shared = state->reststate->shared;
-      state->cf->instr_ptr = state->instr;
-      
-      if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
-      
-      vm_run(&substate);
-      
-      if (substate.runstate == VM_ERRORED) {
-        vm_error(state->reststate, "[] overload failed: %s\n", substate.error);
-        state->reststate->backtrace = vm_record_backtrace(&substate, &state->reststate->backtrace_depth);
-        return (FnWrap) { vm_halt };
-      }
-      
-      state->slots[target_slot] = substate.exit_value;
-      
-      object_found = true; // rely on the [] call to error on its own, if key not found
+      FileRange **prev_instr = &state->instr->belongs_to;
+      state->instr = (Instr*)(access_instr + 1);
+      return call_internal(state, target_slot, obj, index_op, &key_obj, 1, prev_instr);
     }
   }
   if (!object_found) {
@@ -418,27 +416,9 @@ static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
   if (index_op) {
     Object *key_obj = alloc_string(state->reststate, aski->key_ptr, aski->key_len);
     
-    VMState substate = {0};
-    // TODO see above
-    substate.parent = state->reststate;
-    substate.root = state->root;
-    substate.shared = state->reststate->shared;
-    state->cf->instr_ptr = state->instr;
-    
-    if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
-    
-    vm_run(&substate);
-    
-    if (substate.runstate == VM_ERRORED) {
-      vm_error(state->reststate, "[] overload failed: %s\n", substate.error);
-      state->reststate->backtrace = vm_record_backtrace(&substate, &state->reststate->backtrace_depth);
-      return (FnWrap) { vm_halt };
-    }
-    
-    state->slots[aski->target_slot] = substate.exit_value;
-    
+    FileRange **prev_instr = &state->instr->belongs_to;
     state->instr = (Instr*)(aski + 1);
-    return (FnWrap) { instr_fns[state->instr->type] };
+    return call_internal(state, aski->target_slot, obj, index_op, &key_obj, 1, prev_instr);
   } else {
     VM_ASSERT2(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr);
   }
@@ -471,10 +451,11 @@ static FnWrap vm_instr_access_string_key(FastVMState *state) {
 static FnWrap vm_instr_assign(FastVMState *state) {
   AssignInstr *assign_instr = (AssignInstr*) state->instr;
   int obj_slot = assign_instr->obj_slot, value_slot = assign_instr->value_slot;
-  int key_slot = assign_instr->key_slot;
+  int key_slot = assign_instr->key_slot, target_slot = assign_instr->target_slot;
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(value_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2(state->slots[key_slot], "key slot null"); // TODO see above
   Object *obj = state->slots[obj_slot];
   Object *value_obj = state->slots[value_slot];
@@ -486,24 +467,10 @@ static FnWrap vm_instr_assign(FastVMState *state) {
     Object *index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (index_assign_op) {
       Object *key_value_pair[] = {state->slots[assign_instr->key_slot], value_obj};
-      VMState substate = {0};
       
-      substate.parent = state->reststate;
-      substate.root = state->root;
-      substate.shared = state->reststate->shared;
-      state->cf->instr_ptr = state->instr;
-      
-      if (!setup_call(&substate, obj, index_assign_op, key_value_pair, 2)) return (FnWrap) { vm_halt };
-      vm_run(&substate);
-      
-      if (substate.runstate == VM_ERRORED) {
-        vm_error(state->reststate, "[]= overload failed: %s\n", substate.error);
-        state->reststate->backtrace = vm_record_backtrace(&substate, &state->reststate->backtrace_depth);
-        return (FnWrap) { vm_halt };
-      }
-      
+      FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
-      return (FnWrap) { instr_fns[state->instr->type] };
+      return call_internal(state, target_slot, obj, index_assign_op, key_value_pair, 2, prev_instr);
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -653,22 +620,9 @@ static FnWrap vm_instr_call(FastVMState *state) {
     args[i] = state->slots[argslot];
   }
   
-  // update now so that setup_call can open a new stackframe if it wants
-  // we need to point instr_ptr at the instr _after_ the call, but this messes up backtraces
-  // solve explicitly
-  state->cf->backtrace_belongs_to_p = &state->instr->belongs_to;
-  state->cf->target_slot = &state->cf->slots_ptr[target_slot];
+  FileRange **prev_instr = &state->instr->belongs_to;
   state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
-  state->cf->instr_ptr = state->instr;
-  
-  if (!setup_call(state->reststate, this_obj, fn_obj, args, args_length)) return (FnWrap) { vm_halt };
-  
-  // intrinsic may have errored.
-  if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };
-  
-  // call modified vmstate, so refresh
-  faststate_refresh(state);
-  return (FnWrap) { instr_fns[state->instr->type] };
+  return call_internal(state, target_slot, this_obj, fn_obj, args, args_length, prev_instr);
 }
 
 static FnWrap vm_halt(FastVMState *state) {

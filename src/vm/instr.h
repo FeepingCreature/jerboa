@@ -159,7 +159,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot, value_slot, key_slot;
+  int obj_slot, value_slot, key_slot, target_slot /* scratch space for calls */;
   AssignType type;
 } AssignInstr;
 

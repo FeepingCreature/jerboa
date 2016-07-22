@@ -68,8 +68,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
       char *mode = "(plain)";
       if (((AssignInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
-      fprintf(stderr, "assign%s: %%%i . %%%i = %%%i\n",
-              mode, ((AssignInstr*) instr)->obj_slot, ((AssignInstr*) instr)->key_slot, ((AssignInstr*) instr)->value_slot);
+      fprintf(stderr, "assign%s: (%%%i=) %%%i . %%%i = %%%i\n",
+              mode, ((AssignInstr*) instr)->target_slot, ((AssignInstr*) instr)->obj_slot,
+              ((AssignInstr*) instr)->key_slot, ((AssignInstr*) instr)->value_slot);
       *instr_p = (Instr*) ((AssignInstr*) instr + 1);
       break;
     }
