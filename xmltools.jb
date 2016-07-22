@@ -100,23 +100,3 @@ xml.node["findByName"] = method(name) {
     length = array.length;
   };
 };
-function getAttr(node, name) {
-  // <attributelist><attribute></attribute></attributelist>
-  var firstSubNode = null;
-  var i = 0;
-  var children = node.children;
-  while (children[i].nodeType != 1) {
-    i++;
-    if (i == children.length) { print("fail"); (1/0); }
-  }
-  var attrs = children[i].children;
-  for (var i = 0; i < attrs.length; i++) {
-    var attr = attrs[i];
-    if (attr.nodeType == 1 && attr.nodeName == "attribute") {
-      if (attr.attr["name"] == name) {
-        return attr.attr["value"];
-      }
-    }
-  }
-  return null;
-}
