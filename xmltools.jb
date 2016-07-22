@@ -100,3 +100,19 @@ xml.node["findByName"] = method(name) {
     length = array.length;
   };
 };
+xml.node["append"] = method(arg) {
+  if (arg instanceof string) {
+    arg = xml.parse(arg);
+  }
+  var array_arg;
+  if (arg instanceof array) array_arg = arg;
+  else if (arg instanceof XmlResults) array_arg = arg.array;
+  if (array_arg) {
+    for (var i = 0; i < array_arg.length; i++) {
+      this.children.push(array_arg[i]);
+    }
+  } else {
+    this.children.push(arg);
+  }
+};
+

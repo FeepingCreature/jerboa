@@ -9,11 +9,6 @@ var xmlfile = arguments[0], libfile = arguments[1];
 var prefixes = [];
 for (var i = 2; i < arguments.length; i++) prefixes.push(arguments[i]);
 
-function startswithnum(str) {
-  return "0123456789".find(str.slice(0, 1)) != -1;
-  return false;
-}
-
 function getAttr(node, name) {
   // <attributelist><attribute></attribute></attributelist>
   var firstSubNode = null;
@@ -33,6 +28,10 @@ function getAttr(node, name) {
     }
   }
   return null;
+}
+
+function startswithnum(str) {
+  return "0123456789".find(str.slice(0, 1)) != -1;
 }
 
 function short_name(str) {

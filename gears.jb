@@ -6,7 +6,7 @@ if (glfw.Init() == 0) return -1;
 var width = 640, height = 480;
 
 var window = glfw.CreateWindow(width, height, "Hello World", null, null);
-if (window) { } else {
+if (!window) {
   glfw.Terminate();
   return -1;
 }

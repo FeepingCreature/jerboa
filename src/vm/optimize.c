@@ -38,6 +38,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             slots[instr->obj_slot] = slots[instr->value_slot] = false;
           // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
+            slots[instr->key_slot] = slots[instr->obj_slot] = false;
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slots[instr->obj_slot] = slots[instr->constraint_slot] = false;
           CASE(INSTR_CALL, CallInstr)

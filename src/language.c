@@ -677,7 +677,8 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_keyword(&text, "in")) {
       record_end(text, range);
       res = parse_expr(&text, builder, 8, &rhs_expr);
-      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      if (res == PARSE_ERROR) return PARSE_ERROR;
+      assert(res == PARSE_OK);
       int key_slot = ref_access(builder, *rv);
       int obj_slot = ref_access(builder, rhs_expr);
       int in_slot = 0;
@@ -1572,6 +1573,7 @@ ParseResult parse_module(char **textp, UserFunction **uf_p) {
   addinstr_return(builder, builder->scope);
   use_range_end(builder, modrange);
   
-  *uf_p = optimize(build_function(builder));
+  *uf_p = build_function(builder);
+  *uf_p = optimize(*uf_p);
   return PARSE_OK;
 }

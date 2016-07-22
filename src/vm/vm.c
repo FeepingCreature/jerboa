@@ -519,6 +519,7 @@ static FnWrap vm_instr_key_in_obj(FastVMState *state) {
   Object *obj = state->slots[obj_slot];
   Object *string_base = state->reststate->shared->vcache.string_base;
   Object *key_obj = state->slots[key_slot];
+  VM_ASSERT2(key_obj, "key is null");
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   if (!skey) {
     VM_ASSERT2(false, "'in' key is not string! todo overload?");
