@@ -82,21 +82,38 @@ void vm_remove_frame(VMState *state) {
   vm_stack_free(state, cf->refslots_ptr, sizeof(Object**)*cf->refslots_len);
   vm_stack_free(state, cf->slots_ptr, sizeof(Object*)*cf->slots_len);
   state->frame = cf->above;
+  if (state->frame) state->frame->backtrace_belongs_to_p = NULL; // we're the head frame again, use instr_ptr again
   vm_stack_free(state, cf, sizeof(Callframe));
 }
 
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
   if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
-  for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
-    Instr *instr = curf->instr_ptr;
-    
-    const char *file;
-    TextRange line;
-    int row, col;
-    bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
-    (void) found; assert(found);
-    fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k+1, file, row+1, (int) (line.end - line.start - 1), line.start);
+  while (state) {
+    for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
+      Instr *instr = curf->instr_ptr;
+      FileRange *belongs_to;
+      if (curf->backtrace_belongs_to_p) belongs_to = *curf->backtrace_belongs_to_p;
+      else belongs_to = instr->belongs_to;
+      
+      const char *file;
+      TextRange line;
+      int row, col1, col2;
+      bool found = find_text_pos(belongs_to->text_from, &file, &line, &row, &col1);
+      (void) found;
+      assert(found);
+      found = find_text_pos(belongs_to->text_to, &file, &line, &row, &col2);
+      assert(found);
+      int len = (int) (line.end - line.start - 1);
+      if (col1 > len) col1 = len;
+      if (col2 > len) col2 = len;
+      // if (strcmp(file, "test4.jb") == 0 && row == 18) __asm__("int $3");
+      fprintf(stderr, "#%i\t%s:%i\t", k+1, file, row+1);
+      fprintf(stderr, "%.*s", col1, line.start);
+      fprintf(stderr, "\x1b[1m%.*s\x1b[0m", col2 - col1, line.start + col1);
+      fprintf(stderr, "%.*s\n", len - col2, line.start + col2);
+    }
+    state = state->parent;
   }
 }
 
@@ -110,11 +127,14 @@ char *vm_record_backtrace(VMState *state, int *depth) {
   } else res_ptr = malloc(1);
   for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
     Instr *instr = curf->instr_ptr;
+    FileRange *belongs_to;
+    if (curf->backtrace_belongs_to_p) belongs_to = *curf->backtrace_belongs_to_p;
+    else belongs_to = instr->belongs_to;
     
     const char *file;
     TextRange line;
     int row, col;
-    bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
+    bool found = find_text_pos(belongs_to->text_from, &file, &line, &row, &col);
     (void) found; assert(found);
     int size = snprintf(NULL, 0, "#%i\t%s:%i\t%.*s\n", k+1, file, row+1, (int) (line.end - line.start - 1), line.start);
     res_ptr = realloc(res_ptr, res_len + size + 1);
@@ -133,14 +153,19 @@ void vm_record_profile(VMState *state) {
   
   VMState *curstate = state;
   // fprintf(stderr, "generate backtrace\n");
+  // fprintf(stderr, "------\n");
+  // vm_print_backtrace(state);
   int k = 0;
   while (curstate) {
     for (Callframe *curf = curstate->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
+      FileRange **belongs_to_p = curf->backtrace_belongs_to_p;
+      if (!belongs_to_p) belongs_to_p = &instr->belongs_to;
+      
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
-      char *key_ptr = (char*) &instr->belongs_to;
-      int key_len = sizeof(instr->belongs_to);
+      char *key_ptr = (char*) belongs_to_p;
+      int key_len = sizeof(*belongs_to_p);
       
       size_t key_hash = hash(key_ptr, key_len);
       
@@ -151,7 +176,7 @@ void vm_record_profile(VMState *state) {
         else freeptr->value = (void*) 1;
       } else {
         // don't double-count ranges in case of recursion
-        bool range_already_counted = instr->belongs_to->last_cycle_seen == cyclecount;
+        bool range_already_counted = (*belongs_to_p)->last_cycle_seen == cyclecount;
         
         if (!range_already_counted) {
           TableEntry *freeptr;
@@ -160,7 +185,7 @@ void vm_record_profile(VMState *state) {
           else freeptr->value = (void*) 1;
         }
       }
-      instr->belongs_to->last_cycle_seen = cyclecount;
+      (*belongs_to_p)->last_cycle_seen = cyclecount;
     }
     curstate = curstate->parent;
   }
@@ -358,6 +383,7 @@ static FnWrap vm_instr_access(FastVMState *state) {
       substate.parent = state->reststate;
       substate.root = state->root;
       substate.shared = state->reststate->shared;
+      state->cf->instr_ptr = state->instr;
       
       if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
       
@@ -397,6 +423,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
     substate.parent = state->reststate;
     substate.root = state->root;
     substate.shared = state->reststate->shared;
+    state->cf->instr_ptr = state->instr;
     
     if (!setup_call(&substate, obj, index_op, &key_obj, 1)) return (FnWrap) { vm_halt };
     
@@ -464,6 +491,7 @@ static FnWrap vm_instr_assign(FastVMState *state) {
       substate.parent = state->reststate;
       substate.root = state->root;
       substate.shared = state->reststate->shared;
+      state->cf->instr_ptr = state->instr;
       
       if (!setup_call(&substate, obj, index_assign_op, key_value_pair, 2)) return (FnWrap) { vm_halt };
       vm_run(&substate);
@@ -625,6 +653,9 @@ static FnWrap vm_instr_call(FastVMState *state) {
   }
   
   // update now so that setup_call can open a new stackframe if it wants
+  // we need to point instr_ptr at the instr _after_ the call, but this messes up backtraces
+  // solve explicitly
+  state->cf->backtrace_belongs_to_p = &state->instr->belongs_to;
   state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
   state->cf->instr_ptr = state->instr;
   

@@ -61,8 +61,6 @@ void terminate(FunctionBuilder *builder) {
 void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   assert(!builder->block_terminated);
   if (!builder->current_range) abort();
-  instr->belongs_to = builder->current_range;
-  instr->context_slot = builder->scope;
   FunctionBody *body = &builder->body;
   InstrBlock *block = &body->blocks_ptr[body->blocks_len - 1];
   int current_len = (char*) body->instrs_ptr_end - (char*) body->instrs_ptr;
@@ -70,12 +68,16 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   body->instrs_ptr = realloc(body->instrs_ptr, new_len);
   body->instrs_ptr_end = (Instr*) ((char*) body->instrs_ptr + new_len);
   block->size += size;
-  memcpy((char*) body->instrs_ptr + current_len, instr, size);
+  Instr *new_instr = (Instr*) ((char*) body->instrs_ptr + current_len);
+  memcpy((void*) new_instr, instr, size);
+  new_instr->belongs_to = builder->current_range;
+  new_instr->context_slot = builder->scope;
   if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
     builder->block_terminated = true;
   }
 }
 
+#include <stdio.h>
 void addinstr_like(FunctionBuilder *builder, Instr *basis, int size, Instr *instr) {
   int backup = builder->scope;
   use_range_start(builder, basis->belongs_to);

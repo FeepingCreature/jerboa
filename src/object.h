@@ -90,6 +90,9 @@ struct _Callframe {
   Object ***refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots; // gc entries
   Instr *instr_ptr;
+  // overrides instr_ptr->belongs_to, used when in a call
+  // double pointer due to Dark Magic
+  FileRange **backtrace_belongs_to_p;
   int block, prev_block; // required for phi nodes
   Callframe *above;
 };

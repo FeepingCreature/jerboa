@@ -906,6 +906,7 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
           *(Object*) (asoi + 1) = sample_obj;
           addinstr_like(builder, instr, sizeof(AllocStaticObjectInstr) + sizeof(Object), (Instr*) asoi);
           instr = instr_reading;
+          continue;
         }
       }
       

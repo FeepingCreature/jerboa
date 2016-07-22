@@ -378,7 +378,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
   char *text = *textp;
   FileRange *call_range = alloc_and_record_start(text);
   FileRange *expr_range = malloc(sizeof(FileRange));
-  *expr_range = *expr_range_dyn;
+  *expr_range = *expr_range_dyn; // copy, since it's updated after each call segment
   
   if (!eat_string(&text, "(")) {
     free(call_range);
