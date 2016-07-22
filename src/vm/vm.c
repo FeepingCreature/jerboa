@@ -384,7 +384,7 @@ static FnWrap vm_instr_access(FastVMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   bool object_found = false;
   if (skey) {
-    gc_add_perm(state->reststate, key_obj);
+    key_obj->flags |= OBJ_IMMORTAL; // TODO better way
     key = skey->value;
     state->slots[target_slot] = object_lookup(obj, key, &object_found);
   }

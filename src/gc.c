@@ -37,7 +37,8 @@ static void gc_mark(VMState *state) {
 static void gc_sweep(VMState *state) {
   Object **curp = &state->shared->gcstate.last_obj_allocated;
   while (*curp) {
-    if (!((*curp)->flags & OBJ_GC_MARK)) {
+    int flags = (*curp)->flags;
+    if (!(flags & (OBJ_GC_MARK|OBJ_IMMORTAL))) {
       Object *prev = (*curp)->prev;
       obj_free(*curp);
       state->shared->gcstate.num_obj_allocated --;
@@ -69,14 +70,4 @@ void gc_run(VMState *state) {
   }
   gc_mark(state);
   gc_sweep(state);
-}
-
-void gc_init(VMState *state) {
-  gc_add_roots(state, NULL, 0, &state->shared->gcstate.permanents);
-}
-
-void gc_add_perm(VMState *state, Object *obj) {
-  GCRootSet *permanents = &state->shared->gcstate.permanents;
-  permanents->objects = realloc(permanents->objects, sizeof(Object*) * ++permanents->num_objects);
-  permanents->objects[permanents->num_objects - 1] = obj;
 }

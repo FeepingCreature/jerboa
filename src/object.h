@@ -21,7 +21,8 @@ typedef enum {
                        // you can still prototype the objects themselves though.
   OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
   OBJ_PRIMITIVE = 0x10,// no table, no mark_fn
-  OBJ_PRIMITIVE_VALUE = OBJ_FROZEN | OBJ_CLOSED | OBJ_PRIMITIVE | OBJ_NOINHERIT // primitive must entail noinherit!
+  OBJ_PRIMITIVE_VALUE = OBJ_FROZEN | OBJ_CLOSED | OBJ_PRIMITIVE | OBJ_NOINHERIT, // primitive must entail noinherit!
+  OBJ_IMMORTAL = 0x20, // will never be freed
 } ObjectFlags;
 
 struct _VMState;
@@ -78,7 +79,6 @@ typedef struct {
   int num_obj_allocated_total;
 #endif
   
-  GCRootSet permanents; // objects that never get freed, globals, instr-cached objects, etc.
   int disabledness;
   bool missed_gc; // tried to run gc when it was disabled
 } GCState;

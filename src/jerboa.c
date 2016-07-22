@@ -22,7 +22,6 @@ int main(int argc, char **argv) {
   
   VMState vmstate = {0};
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
-  gc_init(&vmstate);
   
   int argc2 = 0;
   char **argv2 = NULL;

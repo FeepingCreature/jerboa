@@ -703,7 +703,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         AllocIntObjectInstr *aioi = (AllocIntObjectInstr*) instr;
         replace_with_ssi = true;
         obj = alloc_int(state, aioi->value);
-        gc_add_perm(state, obj);
+        obj->flags |= OBJ_IMMORTAL;
         opt_info = my_asprintf("inlined alloc_int %i", aioi->value);
         target_slot = aioi->target_slot;
       }
@@ -712,7 +712,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         AllocFloatObjectInstr *afoi = (AllocFloatObjectInstr*) instr;
         replace_with_ssi = true;
         obj = alloc_float(state, afoi->value);
-        gc_add_perm(state, obj);
+        obj->flags |= OBJ_IMMORTAL;
         opt_info = my_asprintf("inlined alloc_float %f", afoi->value);
         target_slot = afoi->target_slot;
       }
@@ -722,7 +722,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         replace_with_ssi = true;
         int len = strlen(asoi->value);
         obj = alloc_string(state, asoi->value, len);
-        gc_add_perm(state, obj);
+        obj->flags |= OBJ_IMMORTAL;
         opt_info = my_asprintf("inlined alloc_string %.*s", len, asoi->value);
         target_slot = asoi->target_slot;
       }

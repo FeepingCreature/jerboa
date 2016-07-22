@@ -1110,7 +1110,7 @@ Object *create_root(VMState *state) {
   state->shared->vcache.int_base = int_obj;
   int_obj->flags |= OBJ_FROZEN;
   state->shared->vcache.int_zero = alloc_int(state, 0);
-  gc_add_perm(state, state->shared->vcache.int_zero);
+  state->shared->vcache.int_zero->flags |= OBJ_IMMORTAL;
   
   Object *float_obj = alloc_object(state, NULL);
   float_obj->flags |= OBJ_NOINHERIT;
