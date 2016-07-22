@@ -20,11 +20,24 @@ int main(int argc, char **argv) {
     return 1;
   }
   
-  init_instr_fn_table();
-  
   VMState vmstate = {0};
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
   gc_init(&vmstate);
+  
+  int argc2 = 0;
+  char **argv2 = NULL;
+  for (int i = 0; i < argc; ++i) {
+    if (i > 0 && strcmp(argv[i], "-v") == 0) {
+      vmstate.shared->verbose = true;
+    } else {
+      argv2 = realloc(argv2, sizeof(char*) * ++argc2);
+      argv2[argc2 - 1] = argv[i];
+    }
+  }
+  argc = argc2;
+  argv = argv2;
+  
+  init_instr_fn_table();
   
   vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);
@@ -43,15 +56,19 @@ int main(int argc, char **argv) {
     return 1;
   }
   assert(res == PARSE_OK);
-  // dump_fn(module);
   
   int args_len = argc - 2;
   Object **args_ptr = malloc(sizeof(Object*) * args_len);
   for (int i = 2; i < argc; ++i) {
-    args_ptr[i-2] = alloc_string(&vmstate, argv[i], strlen(argv[i]));
+    args_ptr[i - 2] = alloc_string(&vmstate, argv[i], strlen(argv[i]));
   }
+  
   Object *args = alloc_array(&vmstate, args_ptr, alloc_int(&vmstate, args_len));
   object_set(root, "arguments", args);
+  
+  if (vmstate.shared->verbose) {
+    dump_fn(&vmstate, module);
+  }
   
   call_function(&vmstate, root, module, NULL, 0);
   vm_run(&vmstate);
@@ -66,7 +83,9 @@ int main(int argc, char **argv) {
     resvalue = 1;
   }
   
-  printf("(%i cycles)\n", vmstate.shared->cyclecount);
+  if (vmstate.shared->verbose) {
+    printf("(%i cycles)\n", vmstate.shared->cyclecount);
+  }
   
   gc_remove_roots(&vmstate, &set);
   

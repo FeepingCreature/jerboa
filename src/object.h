@@ -132,6 +132,8 @@ typedef struct {
   // stored in shared_state because sub-vms stick to callstack order
   void *stack_data_ptr; int stack_data_len;
   int stack_data_offset;
+  
+  bool verbose;
 } VMSharedState;
 
 struct _VMState {

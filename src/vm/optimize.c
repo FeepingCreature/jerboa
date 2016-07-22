@@ -758,10 +758,12 @@ UserFunction *optimize(UserFunction *uf) {
   
   uf = redirect_predictable_lookup_misses(uf);
   
-  /*if (uf->name) {
+  /*
+  if (uf->name) {
     fprintf(stderr, "static optimized %s to\n", uf->name);
-    dump_fn(uf);
-  }*/
+    dump_fn(NULL, uf);
+  }
+  */
   
   return uf;
 }
@@ -1035,7 +1037,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   
   uf = access_vars_via_refslots(uf);
   
-  {
+  if (state->shared->verbose) {
     CFG cfg;
     cfg_build(&cfg, uf);
     
@@ -1076,9 +1078,9 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   
   uf->optimized = true; // will be optimized no further
   
-  if (uf->name) {
+  if (state->shared->verbose) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);
-    dump_fn(uf);
+    dump_fn(state, uf);
   }
   
   return uf;
