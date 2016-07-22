@@ -483,6 +483,14 @@ static void float_ge_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   float_cmp_fn(state, thisptr, fn, args_ptr, args_len, CMP_GE);
 }
 
+static void float_toint_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
+  Object *float_base = state->shared->vcache.float_base;
+  
+  VM_ASSERT(thisptr && thisptr->parent == float_base, "float.toInt called on wrong type of object");
+  state->result_value = alloc_int(state, (int) thisptr->float_value);
+}
+
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *pointer_base = state->shared->vcache.pointer_base;
@@ -803,10 +811,12 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
   substate.root = state->root;
   substate.shared = state->shared;
   
-  if (!setup_call(&substate, node, pred, &node, 1)) return false;
+  if (!setup_call(&substate, node, pred, &node, 1)) {
+    VM_ASSERT(false, "pred check failure: %s\n", substate.error) false;
+  }
   
   vm_run(&substate);
-  VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error) false;
+  VM_ASSERT(substate.runstate != VM_ERRORED, "pred check failure: %s\n", substate.error) false;
   
   Object *res = substate.result_value;
   return obj_is_truthy(state, res);
@@ -1121,6 +1131,7 @@ Object *create_root(VMState *state) {
   object_set(float_obj, ">" , alloc_fn(state, float_gt_fn));
   object_set(float_obj, "<=", alloc_fn(state, float_le_fn));
   object_set(float_obj, ">=", alloc_fn(state, float_ge_fn));
+  object_set(float_obj, "toInt" , alloc_fn(state, float_toint_fn));
   state->shared->vcache.float_base = float_obj;
   float_obj->flags |= OBJ_FROZEN;
   

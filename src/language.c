@@ -1189,6 +1189,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   
   FileRange *decl_range = alloc_and_record_start(text);
   if (eat_keyword(&text, "var")) {
+    record_end(text, decl_range);
     ParseResult res = parse_vardecl(&text, builder, decl_range, false);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
@@ -1502,7 +1503,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
       RefValue constraint;
       char *text2 = type_constraints_ptr[i];
       ParseResult res = parse_expr_base(&text2, builder, &constraint);
-      assert(res == PARSE_OK);
+      (void) res; assert(res == PARSE_OK);
       constraint_slots[i] = ref_access(builder, constraint);
     }
   }

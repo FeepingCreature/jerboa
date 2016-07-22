@@ -86,6 +86,7 @@ var XmlResults = {
   };
 };
 xml.node["find"] = method(pred) {
+  if (pred instanceof string) return this.findByName(pred);
   var array = this.find_array(pred);
   return new XmlResults {
     array = array;

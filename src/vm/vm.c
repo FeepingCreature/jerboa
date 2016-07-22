@@ -88,7 +88,7 @@ void vm_remove_frame(VMState *state) {
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
   if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
-  for (Callframe *curf = state->frame; curf; curf = curf->above) {
+  for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
     Instr *instr = curf->instr_ptr;
     
     const char *file;
@@ -96,7 +96,7 @@ void vm_print_backtrace(VMState *state) {
     int row, col;
     bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
     (void) found; assert(found);
-    fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
+    fprintf(stderr, "#%i\t%s:%i\t%.*s\n", k+1, file, row+1, (int) (line.end - line.start - 1), line.start);
   }
 }
 
@@ -108,7 +108,7 @@ char *vm_record_backtrace(VMState *state, int *depth) {
     res_ptr = malloc(res_len + 1);
     strncpy(res_ptr, state->backtrace, res_len + 1);
   } else res_ptr = malloc(1);
-  for (Callframe *curf = state->frame; curf; curf = curf->above) {
+  for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
     Instr *instr = curf->instr_ptr;
     
     const char *file;
@@ -116,9 +116,9 @@ char *vm_record_backtrace(VMState *state, int *depth) {
     int row, col;
     bool found = find_text_pos(instr->belongs_to->text_from, &file, &line, &row, &col);
     (void) found; assert(found);
-    int size = snprintf(NULL, 0, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
+    int size = snprintf(NULL, 0, "#%i\t%s:%i\t%.*s\n", k+1, file, row+1, (int) (line.end - line.start - 1), line.start);
     res_ptr = realloc(res_ptr, res_len + size + 1);
-    snprintf(res_ptr + res_len, size + 1, "#%i\t%s:%i\t%.*s\n", k, file, row+1, (int) (line.end - line.start - 1), line.start);
+    snprintf(res_ptr + res_len, size + 1, "#%i\t%s:%i\t%.*s\n", k+1, file, row+1, (int) (line.end - line.start - 1), line.start);
     res_len += size;
   }
   res_ptr[res_len] = 0;
@@ -135,7 +135,7 @@ void vm_record_profile(VMState *state) {
   // fprintf(stderr, "generate backtrace\n");
   int k = 0;
   while (curstate) {
-    for (Callframe *curf = curstate->frame; curf; curf = curf->above) {
+    for (Callframe *curf = curstate->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key

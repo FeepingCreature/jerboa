@@ -490,7 +490,7 @@ static void ffi_call_fn_special_fx_v(VMState *state, Object *thisptr, Object *fn
     else {
       if (arg->parent == int_base) *(float*) data = arg->int_value;
       else {
-        VM_ASSERT(false, "ffi float argument %i must be int or float", i);
+        VM_ASSERT(false, "ffi float argument %i must be int or float, not %s", i, get_type_info(state, arg));
       }
     }
     par_ptrs[i] = data;
