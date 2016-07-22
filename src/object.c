@@ -157,6 +157,24 @@ bool obj_is_truthy(VMState *state, Object *obj) {
   return true;
 }
 
+// returns error or null
+char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint) {
+  assert(obj != NULL);
+  if (obj->flags & OBJ_PRIMITIVE) { fprintf(stderr, "internal error\n"); abort(); }
+  TableEntry *entry = table_lookup(&obj->tbl, key_ptr, key_len);
+  if (!constraint) return "tried to set constraint that was null";
+  if (!entry) return "tried to set constraint on a key that was not yet defined!";
+  if (entry->value_aux) return "tried to set constraint, but key already had a constraint!";
+  Object *existing_value = entry->value;
+  if (!existing_value || existing_value->parent != constraint) {
+    return my_asprintf("value failed type constraint: constraint was %s, but value was %s",
+                       get_type_info(state, constraint), get_type_info(state, existing_value));
+  }
+  // There is no need to check flags here - constraints cannot be changed and don't modify existing data.
+  entry->value_aux = (void*) constraint;
+  return NULL;
+}
+
 // change a property in-place
 // returns an error string or NULL
 char *object_set_existing(Object *obj, const char *key, Object *value) {
@@ -200,30 +218,17 @@ char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *va
       }
       // so create it in obj (not current!)
       object_set(obj, key, value);
+      if (entry->value_aux) {
+        // propagate constraint
+        char *error = object_set_constraint(NULL, obj, key, len, (Object*) entry->value_aux);
+        if (error) return error;
+      }
       *value_set = true;
       return NULL;
     }
     current = current->parent;
   }
   *value_set = false;
-  return NULL;
-}
-
-// returns error or null
-char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint) {
-  assert(obj != NULL);
-  if (obj->flags & OBJ_PRIMITIVE) { fprintf(stderr, "internal error\n"); abort(); }
-  TableEntry *entry = table_lookup(&obj->tbl, key_ptr, key_len);
-  if (!constraint) return "tried to set constraint that was null";
-  if (!entry) return "tried to set constraint on a key that was not yet defined!";
-  if (entry->value_aux) return "tried to set constraint, but key already had a constraint!";
-  Object *existing_value = entry->value;
-  if (!existing_value || existing_value->parent != constraint) {
-    return my_asprintf("value failed type constraint: constraint was %s, but value was %s",
-                       get_type_info(state, constraint), get_type_info(state, existing_value));
-  }
-  // There is no need to check flags here - constraints cannot be changed and don't modify existing data.
-  entry->value_aux = (void*) constraint;
   return NULL;
 }
 

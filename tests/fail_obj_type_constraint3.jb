@@ -1,0 +1,6 @@
+const obj1 = {
+  x: int = 0;
+};
+const obj2 = new obj1;
+obj2.x = 5;
+obj2.x = "foo";
