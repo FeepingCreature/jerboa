@@ -1,0 +1,12 @@
+var i = 5;
+assert(i instanceof int);
+assert("foo" instanceof string);
+assert(!(string instanceof string));
+assert(4.0 instanceof float);
+
+assert(!(null instanceof int));
+
+var Foo = {};
+var Bar = new Foo {};
+var baz = new Bar;
+assert(baz instanceof Foo);

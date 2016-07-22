@@ -97,6 +97,18 @@ void set_int_var(FunctionBuilder *builder, int offset, int value) {
   *(int*) ((char*) body->instrs_ptr + offset) = value;
 }
 
+int addinstr_get_root(FunctionBuilder *builder) {
+  GetRootInstr instr = {
+    .base = {
+      .type = INSTR_GET_ROOT,
+      .belongs_to = NULL
+    },
+    .slot = builder->slot_base++
+  };
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+  return instr.slot;
+}
+
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
   AccessInstr instr = {
     .base = {

@@ -45,6 +45,8 @@ void addinstr_like(FunctionBuilder *builder, Instr *basis, int size, Instr *inst
 
 void set_int_var(FunctionBuilder *builder, int offset, int value);
 
+int addinstr_get_root(FunctionBuilder *builder);
+
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot);
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type);
