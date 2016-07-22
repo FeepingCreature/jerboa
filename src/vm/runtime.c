@@ -1000,15 +1000,6 @@ static void obj_keys_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   *state->frame->target_slot = alloc_array(state, keys_ptr, alloc_int(state, keys_len));
 }
 
-static void obj_instanceof_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
-  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
-  Object *obj = args_ptr[0];
-  Object *parent_obj = args_ptr[1];
-  VM_ASSERT(parent_obj, "bad argument: instanceof null");
-  bool res = !!obj_instance_of(obj, parent_obj);
-  *state->frame->target_slot = alloc_bool(state, res);
-}
-
 static void sin_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
   float f;
@@ -1251,7 +1242,6 @@ Object *create_root(VMState *state) {
   Object *obj_tools = alloc_object(state, NULL);
   obj_tools->flags |= OBJ_NOINHERIT;
   object_set(obj_tools, "keys", alloc_fn(state, obj_keys_fn));
-  object_set(obj_tools, "instanceof", alloc_fn(state, obj_instanceof_fn));
   
   object_set(root, "object", obj_tools);
   

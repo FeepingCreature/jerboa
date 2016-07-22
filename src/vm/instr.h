@@ -19,6 +19,7 @@ typedef enum {
   INSTR_ACCESS,
   INSTR_ASSIGN,
   INSTR_KEY_IN_OBJ,
+  INSTR_INSTANCEOF,
   INSTR_SET_CONSTRAINT,
   INSTR_CALL,
   INSTR_RETURN,
@@ -167,6 +168,11 @@ typedef struct {
   Instr base;
   int obj_slot, key_slot, target_slot;
 } KeyInObjInstr;
+
+typedef struct {
+  Instr base;
+  int obj_slot, proto_slot, target_slot;
+} InstanceofInstr;
 
 typedef struct {
   Instr base;

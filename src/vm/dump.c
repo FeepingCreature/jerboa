@@ -79,6 +79,11 @@ void dump_instr(VMState *state, Instr **instr_p) {
               ((KeyInObjInstr*) instr)->target_slot, ((KeyInObjInstr*) instr)->key_slot, ((KeyInObjInstr*) instr)->obj_slot);
       *instr_p = (Instr*) ((KeyInObjInstr*) instr + 1);
       break;
+    case INSTR_INSTANCEOF:
+      fprintf(stderr, "instance of: %%%i = %%%i instanceof %%%i\n",
+              ((InstanceofInstr*) instr)->target_slot, ((InstanceofInstr*) instr)->obj_slot, ((InstanceofInstr*) instr)->proto_slot);
+      *instr_p = (Instr*) ((InstanceofInstr*) instr + 1);
+      break;
     case INSTR_SET_CONSTRAINT:
     {
       SetConstraintInstr *sci = (SetConstraintInstr*) instr;

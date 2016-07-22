@@ -654,14 +654,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       
       use_range_start(builder, range);
       int result_slot = 0;
-      if (builder) {
-        int root_slot = addinstr_get_root(builder);
-        int object_key = addinstr_alloc_string_object(builder, "object");
-        int object_slot = addinstr_access(builder, root_slot, object_key);
-        int instanceof_key = addinstr_alloc_string_object(builder, "instanceof");
-        int instanceof_fn = addinstr_access(builder, object_slot, instanceof_key);
-        result_slot = addinstr_call2(builder, instanceof_fn, object_slot, lhs_slot, rhs_slot);
-      }
+      if (builder) result_slot = addinstr_instanceof(builder, lhs_slot, rhs_slot);
       use_range_end(builder, range);
       *rv = ref_simple(result_slot);
       continue;

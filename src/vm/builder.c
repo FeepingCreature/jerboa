@@ -154,6 +154,20 @@ int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
   return instr.target_slot;
 }
 
+int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot) {
+  InstanceofInstr instr = {
+    .base = {
+      .type = INSTR_INSTANCEOF,
+      .belongs_to = NULL
+    },
+    .obj_slot = obj_slot,
+    .proto_slot = proto_slot,
+    .target_slot = builder->slot_base++
+  };
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+  return instr.target_slot;
+}
+
 void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slot, int cons_slot) {
   SetConstraintInstr instr = {
     .base = {

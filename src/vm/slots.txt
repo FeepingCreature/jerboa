@@ -26,6 +26,8 @@ CASE(INSTR_ASSIGN, AssignInstr)
   CHKSLOT(instr->target_slot);
 CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->key_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->target_slot);
+CASE(INSTR_INSTANCEOF, InstanceofInstr)
+  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->proto_slot); CHKSLOT(instr->target_slot);
 CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->key_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->constraint_slot); 
 CASE(INSTR_CALL, CallInstr)

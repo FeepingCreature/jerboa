@@ -528,6 +528,23 @@ static FnWrap vm_instr_key_in_obj(FastVMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_instanceof(FastVMState *state) {
+  InstanceofInstr *instr = (InstanceofInstr*) state->instr;
+  int obj_slot = instr->obj_slot, proto_slot = instr->proto_slot;
+  int target_slot = instr->target_slot;
+  VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(proto_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
+  
+  Object *proto_obj = state->slots[proto_slot];
+  VM_ASSERT2(proto_obj, "bad argument: instanceof null");
+  bool res = !!obj_instance_of(state->slots[obj_slot], proto_obj);
+  state->slots[target_slot] = alloc_bool(state->reststate, res);
+  
+  state->instr = (Instr*)(instr + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_instr_set_constraint(FastVMState *state) {
   SetConstraintInstr *set_constraint_instr = (SetConstraintInstr*) state->instr;
   int key_slot = set_constraint_instr->key_slot, obj_slot = set_constraint_instr->obj_slot;
@@ -826,6 +843,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ACCESS] = vm_instr_access;
   instr_fns[INSTR_ASSIGN] = vm_instr_assign;
   instr_fns[INSTR_KEY_IN_OBJ] = vm_instr_key_in_obj;
+  instr_fns[INSTR_INSTANCEOF] = vm_instr_instanceof;
   instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
   instr_fns[INSTR_CALL] = vm_instr_call;
   instr_fns[INSTR_RETURN] = vm_instr_return;

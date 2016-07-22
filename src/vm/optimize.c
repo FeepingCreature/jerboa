@@ -39,6 +39,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             slots[instr->key_slot] = slots[instr->obj_slot] = false;
+          CASE(INSTR_INSTANCEOF, InstanceofInstr)
+            slots[instr->obj_slot] = slots[instr->proto_slot] = false;
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slots[instr->obj_slot] = slots[instr->constraint_slot] = false;
           CASE(INSTR_CALL, CallInstr)
@@ -525,6 +527,8 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             slot_live[instr->key_slot] = slot_live[instr->obj_slot]
               = slot_live[instr->target_slot] = true;
+          CASE(INSTR_INSTANCEOF, InstanceofInstr)
+            slot_live[instr->obj_slot] = slot_live[instr->proto_slot] = true;
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slot_live[instr->obj_slot] = slot_live[instr->constraint_slot] = true;
           CASE(INSTR_CALL, CallInstr)
