@@ -325,6 +325,34 @@ static void string_slice_fn(VMState *state, Object *thisptr, Object *fn, Object 
   state->result_value = alloc_string(state, start, end - start);
 }
 
+static void string_find_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  
+  StringObject *sobj = (StringObject*) obj_instance_of(thisptr, string_base);
+  VM_ASSERT(sobj, "internal error: string.find() called on wrong type of object");
+  StringObject *sobj2 = (StringObject*) obj_instance_of(args_ptr[0], string_base);
+  VM_ASSERT(sobj2, "internal error: string.find() expects string");
+  
+  char *str = sobj->value;
+  int len = strlen(str);
+  char *match = sobj2->value;
+  int matchlen = strlen(match);
+  if (matchlen == 0) {
+    state->result_value = alloc_int(state, 0);
+    return;
+  }
+  
+  char *pos = memmem(str, len, match, matchlen);
+  if (pos == NULL) {
+    state->result_value = alloc_int(state, -1);
+    return;
+  }
+  
+  int pos_utf8 = utf8_strnlen(str, pos - str);
+  state->result_value = alloc_int(state, pos_utf8);
+}
+
 static void string_byte_len_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *string_base = state->shared->vcache.string_base;
@@ -1119,6 +1147,7 @@ Object *create_root(VMState *state) {
   object_set(string_obj, "startsWith", alloc_fn(state, string_startswith_fn));
   object_set(string_obj, "endsWith", alloc_fn(state, string_endswith_fn));
   object_set(string_obj, "slice", alloc_fn(state, string_slice_fn));
+  object_set(string_obj, "find", alloc_fn(state, string_find_fn));
   object_set(string_obj, "byte_len", alloc_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
   

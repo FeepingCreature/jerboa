@@ -1,0 +1,7 @@
+assert("Hello World".find("Hell") == 0);
+assert("Hello World".find("d") == 10);
+assert("Hello World".find("") == 0);
+assert("Hello World".find("bla") == -1);
+
+assert("Hello λ World".find("Hell") == 0);
+assert("Hello λ World".find("d") == 12);
