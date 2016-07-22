@@ -30,7 +30,7 @@ static void bool_not_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *bool_base = state->shared->vcache.bool_base;
   VM_ASSERT(thisptr->parent == bool_base, "internal error: bool negation called on wrong type of object");
   
-  state->result_value = alloc_bool(state, !thisptr->bool_value);
+  *state->frame->target_slot = alloc_bool(state, !thisptr->bool_value);
 }
 
 static void bool_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -44,7 +44,7 @@ static void bool_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   
   VM_ASSERT(obj1->parent == bool_base, "internal error: bool compare function called on wrong type of object");
   VM_ASSERT(obj2->parent == bool_base, "internal error: bool compare function called on wrong type of object");
-  state->result_value = alloc_bool(state, obj1->bool_value == obj2->bool_value);
+  *state->frame->target_slot = alloc_bool(state, obj1->bool_value == obj2->bool_value);
 }
 
 typedef enum {
@@ -81,7 +81,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
       case MATH_BIT_AND: res = i1 & i2; break;
       default: abort();
     }
-    state->result_value = alloc_int(state, res);
+    *state->frame->target_slot = alloc_int(state, res);
     return;
   }
   
@@ -100,7 +100,7 @@ static void int_math_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
         VM_ASSERT(false, "bit math with float operands is not supported");
       default: abort();
     }
-    state->result_value = alloc_float(state, res);
+    *state->frame->target_slot = alloc_float(state, res);
     return;
   }
   vm_error(state, "don't know how to perform int math with %p", args_ptr[0]);
@@ -145,7 +145,7 @@ static void int_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
   }
   text = sobj->value;
   int res = (int) strtol(text, NULL, base);
-  state->result_value = alloc_int(state, res);
+  *state->frame->target_slot = alloc_int(state, res);
 }
 
 static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len, MathOp mop) {
@@ -174,7 +174,7 @@ static void float_math_fn(VMState *state, Object *thisptr, Object *fn, Object **
     case MATH_BIT_AND: vm_error(state, "bitops are undefined for float");
     default: abort();
   }
-  state->result_value = alloc_float(state, res);
+  *state->frame->target_slot = alloc_float(state, res);
   return;
 }
 
@@ -215,7 +215,7 @@ static void string_add_fn(VMState *state, Object *thisptr, Object *fn, Object **
   else VM_ASSERT(false, "don't know how to format object: %p", args_ptr[0]);
   char *str3 = my_asprintf("%s%s", str1, str2);
   free(str2);
-  state->result_value = alloc_string(state, str3, strlen(str3));
+  *state->frame->target_slot = alloc_string(state, str3, strlen(str3));
   free(str3);
 }
 
@@ -233,7 +233,7 @@ static void string_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **a
     *str1 = ((StringObject*) sobj1)->value,
     *str2 = ((StringObject*) sobj2)->value;
   int res = strcmp(str1, str2);
-  state->result_value = alloc_bool(state, res == 0);
+  *state->frame->target_slot = alloc_bool(state, res == 0);
 }
 
 static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -255,9 +255,9 @@ static void string_startswith_fn(VMState *state, Object *thisptr, Object *fn, Ob
   if (len2 > len1) res = -1;
   else res = strncmp(str1, str2, len2);
   if (res == 0) {
-    state->result_value = alloc_string(state, str1 + len2, strlen(str1) - len2);
+    *state->frame->target_slot = alloc_string(state, str1 + len2, strlen(str1) - len2);
   } else {
-    state->result_value = NULL;
+    *state->frame->target_slot = NULL;
   }
 }
 
@@ -280,9 +280,9 @@ static void string_endswith_fn(VMState *state, Object *thisptr, Object *fn, Obje
   if (len2 > len1) res = -1;
   else res = strncmp(str1 + len1 - len2, str2, len2);
   if (res == 0) {
-    state->result_value = alloc_string(state, str1, strlen(str1) - len2);
+    *state->frame->target_slot = alloc_string(state, str1, strlen(str1) - len2);
   } else {
-    state->result_value = NULL;
+    *state->frame->target_slot = NULL;
   }
 }
 
@@ -322,7 +322,7 @@ static void string_slice_fn(VMState *state, Object *thisptr, Object *fn, Object 
   utf8_step(&end, to - from, &error);
   VM_ASSERT(!error, error);
   
-  state->result_value = alloc_string(state, start, end - start);
+  *state->frame->target_slot = alloc_string(state, start, end - start);
 }
 
 static void string_find_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -339,18 +339,18 @@ static void string_find_fn(VMState *state, Object *thisptr, Object *fn, Object *
   char *match = sobj2->value;
   int matchlen = strlen(match);
   if (matchlen == 0) {
-    state->result_value = alloc_int(state, 0);
+    *state->frame->target_slot = alloc_int(state, 0);
     return;
   }
   
   char *pos = memmem(str, len, match, matchlen);
   if (pos == NULL) {
-    state->result_value = alloc_int(state, -1);
+    *state->frame->target_slot = alloc_int(state, -1);
     return;
   }
   
   int pos_utf8 = utf8_strnlen(str, pos - str);
-  state->result_value = alloc_int(state, pos_utf8);
+  *state->frame->target_slot = alloc_int(state, pos_utf8);
 }
 
 static void string_byte_len_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -361,7 +361,7 @@ static void string_byte_len_fn(VMState *state, Object *thisptr, Object *fn, Obje
   VM_ASSERT(sobj, "internal error: string.endsWith() called on wrong type of object");
   
   char *str = ((StringObject*) sobj)->value;
-  state->result_value = alloc_int(state, strlen(str));
+  *state->frame->target_slot = alloc_int(state, strlen(str));
 }
 
 typedef enum {
@@ -394,7 +394,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
       case CMP_GE: res = i1 >= i2; break;
       default: abort();
     }
-    state->result_value = alloc_bool(state, res);
+    *state->frame->target_slot = alloc_bool(state, res);
     return;
   }
   
@@ -409,7 +409,7 @@ static void int_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
       case CMP_GE: res = v1 >= v2; break;
       default: abort();
     }
-    state->result_value = alloc_bool(state, res);
+    *state->frame->target_slot = alloc_bool(state, res);
     return;
   }
   VM_ASSERT(false, "don't know how to compare int with object %p", args_ptr[0]);
@@ -460,7 +460,7 @@ static void float_cmp_fn(VMState *state, Object *thisptr, Object *fn, Object **a
     case CMP_GE: res = v1 >= v2; break;
     default: abort();
   }
-  state->result_value = alloc_bool(state, res);
+  *state->frame->target_slot = alloc_bool(state, res);
 }
 
 static void float_eq_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -488,7 +488,7 @@ static void float_toint_fn(VMState *state, Object *thisptr, Object *fn, Object *
   Object *float_base = state->shared->vcache.float_base;
   
   VM_ASSERT(thisptr && thisptr->parent == float_base, "float.toInt called on wrong type of object");
-  state->result_value = alloc_int(state, (int) thisptr->float_value);
+  *state->frame->target_slot = alloc_int(state, (int) thisptr->float_value);
 }
 
 static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -496,7 +496,7 @@ static void ptr_is_null_fn(VMState *state, Object *thisptr, Object *fn, Object *
   Object *pointer_base = state->shared->vcache.pointer_base;
   VM_ASSERT(thisptr->parent == pointer_base, "internal error");
   PointerObject *ptr_obj = (PointerObject*) thisptr;
-  state->result_value = alloc_bool(state, ptr_obj->ptr == NULL);
+  *state->frame->target_slot = alloc_bool(state, ptr_obj->ptr == NULL);
 }
 
 static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -514,7 +514,7 @@ static void array_resize_fn(VMState *state, Object *thisptr, Object *fn, Object 
   memset(arr_obj->ptr + oldsize, 0, sizeof(Object*) * (newsize - oldsize));
   arr_obj->length = newsize;
   object_set(thisptr, "length", alloc_int(state, newsize));
-  state->result_value = thisptr;
+  *state->frame->target_slot = thisptr;
 }
 
 static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -526,7 +526,7 @@ static void array_push_fn(VMState *state, Object *thisptr, Object *fn, Object **
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * ++arr_obj->length);
   arr_obj->ptr[arr_obj->length - 1] = value;
   object_set(thisptr, "length", alloc_int(state, arr_obj->length));
-  state->result_value = thisptr;
+  *state->frame->target_slot = thisptr;
 }
 
 static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -537,7 +537,7 @@ static void array_pop_fn(VMState *state, Object *thisptr, Object *fn, Object **a
   Object *res = arr_obj->ptr[arr_obj->length - 1];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Object*) * --arr_obj->length);
   object_set(thisptr, "length", alloc_int(state, arr_obj->length));
-  state->result_value = res;
+  *state->frame->target_slot = res;
 }
 
 static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -546,11 +546,13 @@ static void array_index_fn(VMState *state, Object *thisptr, Object *fn, Object *
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(thisptr, array_base);
   Object *arg = args_ptr[0];
-  if (arg->parent != int_base) { state->result_value = NULL; return; }
+  if (arg->parent != int_base) { *state->frame->target_slot = NULL; return; }
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = arg->int_value;
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
-  state->result_value = arr_obj->ptr[index];
+  // sometimes called naked
+  if (state->frame) *state->frame->target_slot = arr_obj->ptr[index];
+  else state->exit_value = arr_obj->ptr[index];
 }
 
 static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -565,7 +567,7 @@ static void array_index_assign_fn(VMState *state, Object *thisptr, Object *fn, O
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   Object *value = args_ptr[1];
   arr_obj->ptr[index] = value;
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
 }
 
 static void array_join_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -605,7 +607,7 @@ static void array_join_fn(VMState *state, Object *thisptr, Object *fn, Object **
   }
   res_cur[0] = 0;
   // TODO make string constructor that takes ownership of the pointer instead
-  state->result_value = alloc_string(state, res, res_len);
+  *state->frame->target_slot = alloc_string(state, res, res_len);
   free(res);
 }
 
@@ -626,7 +628,7 @@ static void file_print_fn(VMState *state, Object *thisptr, Object *fn, Object **
     if (state->runstate == VM_ERRORED) return;
   }
   fprintf(file, "\n");
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
 }
 
 static void file_open_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -648,7 +650,7 @@ static void file_open_fn(VMState *state, Object *thisptr, Object *fn, Object **a
   }
   Object *file_obj = alloc_object(state, file_base);
   object_set(file_obj, "_handle", alloc_ptr(state, (void*) fh));
-  state->result_value = file_obj;
+  *state->frame->target_slot = file_obj;
   gc_enable(state);
 }
 
@@ -667,7 +669,7 @@ static void file_close_fn(VMState *state, Object *thisptr, Object *fn, Object **
   fclose(file);
   object_set(thisptr, "_handle", NULL);
   
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
 }
 
 static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -677,7 +679,7 @@ static void print_fn(VMState *state, Object *thisptr, Object *fn, Object **args_
     if (state->runstate == VM_ERRORED) return;
   }
   fprintf(stdout, "\n");
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
 }
 
 static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -703,7 +705,7 @@ static void keys_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
       }
     }
   }
-  state->result_value = alloc_array(state, res_ptr, alloc_int(state, res_len));
+  *state->frame->target_slot = alloc_array(state, res_ptr, alloc_int(state, res_len));
   gc_enable(state);
 }
 
@@ -769,7 +771,7 @@ static void xml_load_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   
   gc_disable(state);
   
-  state->result_value = xml_to_object(state, root_element, text_node_base, element_node_base);
+  *state->frame->target_slot = xml_to_object(state, root_element, text_node_base, element_node_base);
   gc_enable(state);
   
   xmlFreeDoc(doc);
@@ -797,7 +799,7 @@ static void xml_parse_fn(VMState *state, Object *thisptr, Object *fn, Object **a
   
   gc_disable(state);
   
-  state->result_value = xml_to_object(state, root_element, text_node_base, element_node_base);
+  *state->frame->target_slot = xml_to_object(state, root_element, text_node_base, element_node_base);
   gc_enable(state);
   
   xmlFreeDoc(doc);
@@ -818,7 +820,7 @@ static bool xml_node_check_pred(VMState *state, Object *node, Object *pred)
   vm_run(&substate);
   VM_ASSERT(substate.runstate != VM_ERRORED, "pred check failure: %s\n", substate.error) false;
   
-  Object *res = substate.result_value;
+  Object *res = substate.exit_value;
   return obj_is_truthy(state, res);
 }
 
@@ -850,7 +852,7 @@ static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, 
   gc_disable(state);
   xml_node_find_recurse(state, thisptr, args_ptr[0], &array_ptr, &array_length);
   Object *array_len_obj = alloc_int(state, array_length);
-  state->result_value = alloc_array(state, array_ptr, array_len_obj);
+  *state->frame->target_slot = alloc_array(state, array_ptr, array_len_obj);
   gc_enable(state);
 }
 
@@ -895,7 +897,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, Object *thisptr, Obje
   gc_disable(state);
   xml_node_find_by_name_recurse(state, thisptr, name_obj->value, &array_ptr, &array_length);
   Object *array_len_obj = alloc_int(state, array_length);
-  state->result_value = alloc_array(state, array_ptr, array_len_obj);
+  *state->frame->target_slot = alloc_array(state, array_ptr, array_len_obj);
   gc_enable(state);
 }
 
@@ -936,7 +938,7 @@ static void require_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
     return;
   }
   
-  state->result_value = substate.result_value;
+  *state->frame->target_slot = substate.exit_value;
 }
 
 static void freeze_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -955,7 +957,7 @@ static void mark_const_fn(VMState *state, Object *thisptr, Object *fn, Object **
   int key_len = strlen(key_ptr);
   size_t key_hash = hash(key_ptr, key_len);
   
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
   
   // frames are only allocated for user functions
   // so we're still in the calling frame
@@ -995,7 +997,7 @@ static void obj_keys_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
     }
     assert(k == keys_len);
   }
-  state->result_value = alloc_array(state, keys_ptr, alloc_int(state, keys_len));
+  *state->frame->target_slot = alloc_array(state, keys_ptr, alloc_int(state, keys_len));
 }
 
 static void obj_instanceof_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1004,7 +1006,7 @@ static void obj_instanceof_fn(VMState *state, Object *thisptr, Object *fn, Objec
   Object *parent_obj = args_ptr[1];
   VM_ASSERT(parent_obj, "bad argument: instanceof null");
   bool res = !!obj_instance_of(obj, parent_obj);
-  state->result_value = alloc_bool(state, res);
+  *state->frame->target_slot = alloc_bool(state, res);
 }
 
 static void sin_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1013,7 +1015,7 @@ static void sin_fn(VMState *state, Object *thisptr, Object *fn, Object **args_pt
   if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
   else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
   else VM_ASSERT(false, "unexpected type for math.sin()");
-  state->result_value = alloc_float(state, sinf(f));
+  *state->frame->target_slot = alloc_float(state, sinf(f));
 }
 
 static void cos_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1022,7 +1024,7 @@ static void cos_fn(VMState *state, Object *thisptr, Object *fn, Object **args_pt
   if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
   else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
   else VM_ASSERT(false, "unexpected type for math.cos()");
-  state->result_value = alloc_float(state, cosf(f));
+  *state->frame->target_slot = alloc_float(state, cosf(f));
 }
 
 static void tan_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1031,7 +1033,7 @@ static void tan_fn(VMState *state, Object *thisptr, Object *fn, Object **args_pt
   if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
   else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
   else VM_ASSERT(false, "unexpected type for math.tan()");
-  state->result_value = alloc_float(state, tanf(f));
+  *state->frame->target_slot = alloc_float(state, tanf(f));
 }
 
 static void sqrt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1040,7 +1042,7 @@ static void sqrt_fn(VMState *state, Object *thisptr, Object *fn, Object **args_p
   if (args_ptr[0]->parent == state->shared->vcache.float_base) f = args_ptr[0]->float_value;
   else if (args_ptr[0]->parent == state->shared->vcache.int_base) f = args_ptr[0]->int_value;
   else VM_ASSERT(false, "unexpected type for math.sqrt()");
-  state->result_value = alloc_float(state, sqrtf(f));
+  *state->frame->target_slot = alloc_float(state, sqrtf(f));
 }
 
 static void pow_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1052,7 +1054,7 @@ static void pow_fn(VMState *state, Object *thisptr, Object *fn, Object **args_pt
   if (args_ptr[1]->parent == state->shared->vcache.float_base) b = args_ptr[1]->float_value;
   else if (args_ptr[1]->parent == state->shared->vcache.int_base) b = args_ptr[1]->int_value;
   VM_ASSERT(false, "unexpected type for math.pow()");
-  state->result_value = alloc_float(state, powf(a, b));
+  *state->frame->target_slot = alloc_float(state, powf(a, b));
 }
 
 static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -1066,7 +1068,7 @@ static void assert_fn(VMState *state, Object *thisptr, Object *fn, Object **args
   } else {
     VM_ASSERT(test, "assert failed");
   }
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
 }
 
 char *get_type_info(VMState *state, Object *obj) {

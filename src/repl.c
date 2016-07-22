@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     if (vmstate.runstate == VM_ERRORED) {
       fprintf(stderr, "vm errored: %s\n", vmstate.error);
     } else {
-      root = vmstate.result_value;
+      root = vmstate.exit_value;
     }
   }
   

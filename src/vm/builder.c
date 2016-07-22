@@ -279,24 +279,16 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
 }
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
-  CallInstr *instr1 = alloca(sizeof(CallInstr) + sizeof(int) * args_len);
-  instr1->base.type = INSTR_CALL;
-  instr1->base.belongs_to = NULL;
-  instr1->function_slot = fn;
-  instr1->this_slot = this_slot;
-  instr1->args_length = args_len;
-  memcpy((int*)(instr1 + 1), args_ptr, sizeof(int) * args_len);
-  addinstr(builder, sizeof(*instr1) + sizeof(int) * args_len, (Instr*) instr1);
-  
-  SaveResultInstr instr2 = {
-    .base = {
-      .type = INSTR_SAVE_RESULT,
-      .belongs_to = NULL
-    },
-    .target_slot = builder->slot_base++
-  };
-  addinstr(builder, sizeof(instr2), (Instr*) &instr2);
-  return instr2.target_slot;
+  CallInstr *instr = alloca(sizeof(CallInstr) + sizeof(int) * args_len);
+  instr->base.type = INSTR_CALL;
+  instr->base.belongs_to = NULL;
+  instr->function_slot = fn;
+  instr->this_slot = this_slot;
+  instr->args_length = args_len;
+  instr->target_slot = builder->slot_base++;
+  memcpy((int*)(instr + 1), args_ptr, sizeof(int) * args_len);
+  addinstr(builder, sizeof(*instr) + sizeof(int) * args_len, (Instr*) instr);
+  return instr->target_slot;
 }
 
 int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot) {

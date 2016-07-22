@@ -28,7 +28,7 @@ static void ffi_open_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   Object *handle_obj = alloc_object(state, handle_base);
   handle_obj->flags |= OBJ_FROZEN;
   object_set(handle_obj, "pointer", alloc_ptr(state, dlptr));
-  state->result_value = handle_obj;
+  *state->frame->target_slot = handle_obj;
 }
 
 static ffi_type *type_to_ffi_ptr(Object *ffi_obj, Object *obj) {
@@ -85,25 +85,25 @@ static void ffi_ptr_dereference(VMState *state, Object *thisptr, Object *fn, Obj
   char *offset_ptr = (char*) thisptr_obj->ptr + offs;
   if (ffi_type_obj == ffi_short) {
     short s = *(short*) offset_ptr;
-    state->result_value = alloc_int(state, s);
+    *state->frame->target_slot = alloc_int(state, s);
   } else if (ffi_type_obj == ffi_ushort) {
     unsigned short us = *(unsigned short*) offset_ptr;
-    state->result_value = alloc_int(state, us);
+    *state->frame->target_slot = alloc_int(state, us);
   } else if (ffi_type_obj == ffi_int) {
     int i = *(int*) offset_ptr;
-    state->result_value = alloc_int(state, i);
+    *state->frame->target_slot = alloc_int(state, i);
   } else if (ffi_type_obj == ffi_uint8) {
     uint8_t u8 = *(uint8_t*) offset_ptr;
-    state->result_value = alloc_int(state, u8);
+    *state->frame->target_slot = alloc_int(state, u8);
   } else if (ffi_type_obj == ffi_int8) {
     int8_t i8 = *(int8_t*) offset_ptr;
-    state->result_value = alloc_int(state, i8);
+    *state->frame->target_slot = alloc_int(state, i8);
   } else if (ffi_type_obj == ffi_pointer) {
     void *ptr = *(void**) offset_ptr;
-    state->result_value = make_ffi_pointer(state, ptr);
+    *state->frame->target_slot = make_ffi_pointer(state, ptr);
   } else if (ffi_type_obj == ffi_charptr) {
     char *ptr = *(char**) offset_ptr;
-    state->result_value = alloc_string_foreign(state, ptr);
+    *state->frame->target_slot = alloc_string_foreign(state, ptr);
   } else assert("TODO" && false);
 }
 
@@ -167,7 +167,10 @@ static void ffi_ptr_index_fn(VMState *state, Object *thisptr, Object *fn, Object
   
   char *offset_ptr = (char*) thisptr_obj->ptr + elemsize * offs;
   
-  state->result_value = ffi_pointer_read(state, ffi_type_obj, (void*) offset_ptr);
+  Object *res = ffi_pointer_read(state, ffi_type_obj, (void*) offset_ptr);
+  // sometimes called naked
+  if (state->frame) *state->frame->target_slot = res;
+  else state->exit_value = res;
 }
 
 static void ffi_ptr_index_assign_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -193,8 +196,6 @@ static void ffi_ptr_index_assign_fn(VMState *state, Object *thisptr, Object *fn,
   
   bool res = ffi_pointer_write(state, ffi_type_obj, (void*) offset_ptr, args_ptr[1]);
   if (!res) return;
-  
-  state->result_value = NULL;
 }
 
 static void ffi_ptr_add(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -210,7 +211,7 @@ static void ffi_ptr_add(VMState *state, Object *thisptr, Object *fn, Object **ar
   VM_ASSERT(offset_obj->parent == int_base, "offset must be integer");
   int offset = offset_obj->int_value;
   
-  state->result_value = make_ffi_pointer(state, (void*) ((char*)ptr + offset));
+  *state->frame->target_slot = make_ffi_pointer(state, (void*) ((char*)ptr + offset));
 }
 
 static Object *make_ffi_pointer(VMState *state, void *ptr) {
@@ -396,29 +397,29 @@ static void ffi_call_fn(VMState *state, Object *thisptr, Object *fn, Object **ar
   // fprintf(stderr, " -> ");
   if (ret_type == ffi->void_obj) {
     // fprintf(stderr, "v");
-    state->result_value = NULL;
+    *state->frame->target_slot = NULL;
   } else if (ret_type == ffi->int_obj) {
     // fprintf(stderr, "i");
-    state->result_value = alloc_int(state, *(int*) ret_ptr);
+    *state->frame->target_slot = alloc_int(state, *(int*) ret_ptr);
   } else if (ret_type == ffi->uint_obj) {
     // fprintf(stderr, "u");
-    state->result_value = alloc_int(state, *(unsigned int*) ret_ptr);
+    *state->frame->target_slot = alloc_int(state, *(unsigned int*) ret_ptr);
   } else if (ret_type == ffi->uint32_obj) {
     // fprintf(stderr, "i32");
-    state->result_value = alloc_int(state, *(uint32_t*) ret_ptr);
+    *state->frame->target_slot = alloc_int(state, *(uint32_t*) ret_ptr);
   } else if (ret_type == ffi->char_pointer_obj) {
     // fprintf(stderr, "pc");
-    state->result_value = alloc_string(state, *(char**) ret_ptr, strlen(*(char**) ret_ptr));
+    *state->frame->target_slot = alloc_string(state, *(char**) ret_ptr, strlen(*(char**) ret_ptr));
   } else if (ret_type == ffi->pointer_obj) {
     // fprintf(stderr, "p");
-    state->result_value = make_ffi_pointer(state, *(void**) ret_ptr);
+    *state->frame->target_slot = make_ffi_pointer(state, *(void**) ret_ptr);
   } else if (ret_type == ffi->float_obj) {
     // fprintf(stderr, "f");
-    state->result_value = alloc_float(state, *(float*) ret_ptr);
+    *state->frame->target_slot = alloc_float(state, *(float*) ret_ptr);
   } else if (ret_type == ffi->double_obj) {
     // fprintf(stderr, "d");
     // TODO alloc_double?
-    state->result_value = alloc_float(state, (float) *(double*) ret_ptr);
+    *state->frame->target_slot = alloc_float(state, (float) *(double*) ret_ptr);
   } else VM_ASSERT(false, "unknown return type");
   // fprintf(stderr, "\n");
 }
@@ -458,7 +459,7 @@ static void ffi_call_fn_special_d_d(VMState *state, Object *thisptr, Object *fn,
   void (*sym_fn)() = *(void(**)())&sym_ptr;
   ffi_call(&ffihdl->cif, sym_fn, ret_ptr, par_ptrs);
   // TODO alloc_double?
-  state->result_value = alloc_float(state, (float) *(double*) ret_ptr);
+  *state->frame->target_slot = alloc_float(state, (float) *(double*) ret_ptr);
 }
 
 static void ffi_call_fn_special_fx_v(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -499,7 +500,7 @@ static void ffi_call_fn_special_fx_v(VMState *state, Object *thisptr, Object *fn
   
   void (*sym_fn)() = *(void(**)())&sym_ptr;
   ffi_call(&ffihdl->cif, sym_fn, ret_ptr, par_ptrs);
-  state->result_value = NULL;
+  *state->frame->target_slot = NULL;
 }
 
 VMFunctionPointer ffi_get_specialized_call_fn(FFIObject *ffi, Object *ret_type, ArrayObject *par_types) {
@@ -544,7 +545,7 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   void *fnptr = dlsym(handle, fn_name_obj->value);
   char *error = dlerror();
   // VM_ASSERT(!error, "dlsym failed: %s", error);
-  if (error) { state->result_value = NULL; return; }
+  if (error) { *state->frame->target_slot = NULL; return; }
   
   Object *ret_type = obj_instance_of(args_ptr[1], type_base);
   VM_ASSERT(ret_type, "return type must be ffi.type!");
@@ -583,7 +584,7 @@ static void ffi_sym_fn(VMState *state, Object *thisptr, Object *fn, Object **arg
   ffi_fn->_ffi_pointer = _ffi_pointer;
   ffi_fn->par_len_sum_precomp = ffi_par_len(ret_type, par_types, (FFIObject*) ffi);
   
-  state->result_value = fn_obj;
+  *state->frame->target_slot = fn_obj;
 }
 
 static void malloc_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
@@ -592,7 +593,7 @@ static void malloc_fn(VMState *state, Object *thisptr, Object *fn, Object **args
   VM_ASSERT(args_ptr[0]->int_value >= 0, "malloc expected positive number");
   void *res = malloc(args_ptr[0]->int_value);
   VM_ASSERT(res, "memory allocation failed");
-  state->result_value = make_ffi_pointer(state, res);
+  *state->frame->target_slot = make_ffi_pointer(state, res);
 }
 
 void ffi_setup_root(VMState *state, Object *root) {

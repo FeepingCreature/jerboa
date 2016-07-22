@@ -22,7 +22,6 @@ typedef enum {
   INSTR_SET_CONSTRAINT,
   INSTR_CALL,
   INSTR_RETURN,
-  INSTR_SAVE_RESULT, // separate instr to enable interruptions
   INSTR_BR,
   INSTR_TESTBR,
   INSTR_PHI,
@@ -178,6 +177,7 @@ typedef struct {
   Instr base;
   int function_slot, this_slot;
   int args_length; // attached to callinstr as a tail
+  int target_slot;
 } CallInstr;
 
 typedef struct {

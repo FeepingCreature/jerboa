@@ -7,4 +7,4 @@ UserFunction *optimize(UserFunction *uf);
 
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context);
 
-  #endif
+#endif

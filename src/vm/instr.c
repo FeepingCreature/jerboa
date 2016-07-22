@@ -23,7 +23,6 @@ int instr_size(Instr *instr) {
     CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr);
     CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr);
     CASE(INSTR_RETURN, ReturnInstr);
-    CASE(INSTR_SAVE_RESULT, SaveResultInstr);
     CASE(INSTR_BR, BranchInstr);
     CASE(INSTR_TESTBR, TestBranchInstr);
     CASE(INSTR_PHI, PhiInstr);

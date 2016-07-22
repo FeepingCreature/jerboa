@@ -87,23 +87,21 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     }
     case INSTR_CALL:
-      fprintf(stderr, "call: %%%i . %%%i ( ",
-              ((CallInstr*) instr)->this_slot, ((CallInstr*) instr)->function_slot);
-      for (int i = 0; i < ((CallInstr*) instr)->args_length; ++i) {
+    {
+      CallInstr *ci = (CallInstr*) instr;
+      fprintf(stderr, "call: %%%i = %%%i . %%%i ( ",
+              ci->target_slot, ci->this_slot, ci->function_slot);
+      for (int i = 0; i < ci->args_length; ++i) {
         if (i) fprintf(stderr, ", ");
-        fprintf(stderr, "%%%i", ((int*)((CallInstr*) instr + 1))[i]);
+        fprintf(stderr, "%%%i", ((int*)(ci + 1))[i]);
       }
       fprintf(stderr, " )\n");
-      *instr_p = (Instr*) ((int*)((CallInstr*) instr + 1) + ((CallInstr*) instr)->args_length);
+      *instr_p = (Instr*) ((int*)(ci + 1) + ci->args_length);
       break;
+    }
     case INSTR_RETURN:
       fprintf(stderr, "return: %%%i\n", ((ReturnInstr*) instr)->ret_slot);
       *instr_p = (Instr*) ((ReturnInstr*) instr + 1);
-      break;
-    case INSTR_SAVE_RESULT:
-      fprintf(stderr, "save result: -> %%%i\n",
-              ((SaveResultInstr*) instr)->target_slot);
-      *instr_p = (Instr*) ((SaveResultInstr*) instr + 1);
       break;
     case INSTR_BR:
       fprintf(stderr, "branch: <%i>\n", ((BranchInstr*) instr)->blk);

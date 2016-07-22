@@ -93,6 +93,7 @@ struct _Callframe {
   // overrides instr_ptr->belongs_to, used when in a call
   // double pointer due to Dark Magic
   FileRange **backtrace_belongs_to_p;
+  Object **target_slot; // when returning to this frame, assign result value to this slot
   int block, prev_block; // required for phi nodes
   Callframe *above;
 };
@@ -147,7 +148,7 @@ struct _VMState {
   Callframe *frame;
   
   Object *root;
-  Object *result_value;
+  Object *exit_value; // set when the last stackframe returns
   
   VMRunState runstate;
   char *error;

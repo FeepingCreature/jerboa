@@ -395,7 +395,7 @@ static FnWrap vm_instr_access(FastVMState *state) {
         return (FnWrap) { vm_halt };
       }
       
-      state->slots[target_slot] = substate.result_value;
+      state->slots[target_slot] = substate.exit_value;
       
       object_found = true; // rely on the [] call to error on its own, if key not found
     }
@@ -435,7 +435,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
       return (FnWrap) { vm_halt };
     }
     
-    state->slots[aski->target_slot] = substate.result_value;
+    state->slots[aski->target_slot] = substate.exit_value;
     
     state->instr = (Instr*)(aski + 1);
     return (FnWrap) { instr_fns[state->instr->type] };
@@ -637,8 +637,9 @@ static FnWrap vm_instr_set_constraint_string_key(FastVMState *state) {
 static FnWrap vm_instr_call(FastVMState *state) {
   CallInstr *call_instr = (CallInstr*) state->instr;
   int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
-  int function_slot = call_instr->function_slot;
+  int function_slot = call_instr->function_slot, target_slot = call_instr->target_slot;
   VM_ASSERT2_SLOT(function_slot < state->cf->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(this_slot < state->cf->slots_len, "slot numbering error");
   Object *this_obj = state->slots[this_slot];
   Object *fn_obj = state->slots[function_slot];
@@ -656,6 +657,7 @@ static FnWrap vm_instr_call(FastVMState *state) {
   // we need to point instr_ptr at the instr _after_ the call, but this messes up backtraces
   // solve explicitly
   state->cf->backtrace_belongs_to_p = &state->instr->belongs_to;
+  state->cf->target_slot = &state->cf->slots_ptr[target_slot];
   state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
   state->cf->instr_ptr = state->instr;
   
@@ -666,17 +668,6 @@ static FnWrap vm_instr_call(FastVMState *state) {
   
   // call modified vmstate, so refresh
   faststate_refresh(state);
-  return (FnWrap) { instr_fns[state->instr->type] };
-}
-
-static FnWrap vm_instr_save_result(FastVMState *state) {
-  SaveResultInstr *save_instr = (SaveResultInstr*) state->instr;
-  int save_slot = save_instr->target_slot;
-  VM_ASSERT2_SLOT(save_slot < state->cf->slots_len, "slot numbering error");
-  state->slots[save_slot] = state->reststate->result_value;
-  state->reststate->result_value = NULL;
-  
-  state->instr = (Instr*)(save_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -692,11 +683,15 @@ static FnWrap vm_instr_return(FastVMState *state) {
   Object *res = state->slots[ret_slot];
   gc_remove_roots(state->reststate, &state->cf->frameroot_slots);
   vm_remove_frame(state->reststate);
-  state->reststate->result_value = res;
   
-  if (!state->reststate->frame) return (FnWrap) { vm_halt };
+  if (state->reststate->frame) {
+    faststate_refresh(state);
+    *state->cf->target_slot = res;
+  } else {
+    state->reststate->exit_value = res;
+    return (FnWrap) { vm_halt };
+  }
   
-  faststate_refresh(state);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -880,7 +875,6 @@ void init_instr_fn_table() {
   instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
   instr_fns[INSTR_CALL] = vm_instr_call;
   instr_fns[INSTR_RETURN] = vm_instr_return;
-  instr_fns[INSTR_SAVE_RESULT] = vm_instr_save_result;
   instr_fns[INSTR_BR] = vm_instr_br;
   instr_fns[INSTR_TESTBR] = vm_instr_testbr;
   instr_fns[INSTR_PHI] = vm_instr_phi;
@@ -902,10 +896,6 @@ void vm_run(VMState *state) {
   if (!state->frame) return;
   state->runstate = VM_RUNNING;
   state->error = NULL;
-  // this should, frankly, really be done in vm_step
-  // but meh, it's faster to only do it once
-  GCRootSet result_set;
-  gc_add_roots(state, &state->result_value, 1, &result_set);
   while (state->runstate == VM_RUNNING) {
     vm_step(state);
     if (!state->frame) {
@@ -920,5 +910,4 @@ void vm_run(VMState *state) {
       // fprintf(stderr, "left over %i, set next to %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
     }
   }
-  gc_remove_roots(state, &result_set);
 }

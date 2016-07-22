@@ -48,7 +48,6 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             }
           CASE(INSTR_RETURN, ReturnInstr)
             slots[instr->ret_slot] = false;
-          CASE(INSTR_SAVE_RESULT, SaveResultInstr)
           CASE(INSTR_BR, BranchInstr)
           CASE(INSTR_TESTBR, TestBranchInstr)
             slots[instr->test_slot] = false;
@@ -535,7 +534,6 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             }
           CASE(INSTR_RETURN, ReturnInstr)
             slot_live[instr->ret_slot] = true;
-          CASE(INSTR_SAVE_RESULT, SaveResultInstr)
           CASE(INSTR_BR, BranchInstr)
           CASE(INSTR_TESTBR, TestBranchInstr)
             slot_live[instr->test_slot] = true;
@@ -579,12 +577,6 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
         if (!slot_live[ssi->target_slot]) {
           add = false;
           // fprintf(stderr, "skip set %s\n", ssi->opt_info);
-        }
-      }
-      if (instr->type == INSTR_SAVE_RESULT) {
-        SaveResultInstr *sri = (SaveResultInstr*) instr;
-        if (!slot_live[sri->target_slot]) {
-          add = false;
         }
       }
       if (add) addinstr_like(builder, instr, instr_size(instr), instr);
