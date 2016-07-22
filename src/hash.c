@@ -119,6 +119,7 @@ static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const c
         TableEntry *nope = table_lookup_alloc(&newtable, entry->name_ptr, entry->name_len, &freeptr);
         (void) nope; assert(nope == NULL); // double entry??
         freeptr->value = entry->value;
+        freeptr->value_aux = entry->value_aux;
       }
     }
   }
