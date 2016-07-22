@@ -21,7 +21,7 @@ void vm_alloc_frame(VMState *state, int slots, int refslots);
 
 void vm_remove_frame(VMState *state);
 
-void vm_error(VMState *state, char *fmt, ...);
+void vm_error(VMState *state, const char *fmt, ...);
 
 void vm_print_backtrace(VMState *state);
 

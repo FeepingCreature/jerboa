@@ -1,0 +1,5 @@
+assert("Hello World".slice(0, 5) == "Hello");
+assert("Hello World".slice(6) == "World");
+
+assert("Hello λ World".slice(0, 5) == "Hello");
+assert("Hello λ World".slice(8) == "World");

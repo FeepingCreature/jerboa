@@ -65,6 +65,24 @@ size_t utf8_strnlen(const char *ptr, size_t length) {
   return utf8_len;
 }
 
+size_t utf8_strlen(const char *ptr) {
+  size_t utf8_len = 0;
+  for (; *ptr; ++ptr) {
+    if ((*ptr & 0xC0) != 0x80) utf8_len++;
+  }
+  return utf8_len;
+}
+
+void utf8_step(const char **ptr, int num, const char **error_p) {
+  const char *cur = *ptr;
+  while (num) {
+    if (!*cur) { *error_p = "ran out of utf8 string"; return; }
+    if ((*cur & 0xC0) != 0x80) num--;
+    cur++;
+  }
+  *ptr = cur;
+}
+
 static bool find_text_pos_from_to(char *text, FileRecord *record, char *text_to, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
   int row_nr = *row_p;
   TextRange line = *line_p;

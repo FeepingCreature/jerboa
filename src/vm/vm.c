@@ -65,7 +65,7 @@ void vm_alloc_frame(VMState *state, int slots, int refslots) {
   state->frame = cf;
 }
 
-void vm_error(VMState *state, char *fmt, ...) {
+void vm_error(VMState *state, const char *fmt, ...) {
   assert(state->runstate != VM_ERRORED);
   char *errorstr;
   va_list ap;

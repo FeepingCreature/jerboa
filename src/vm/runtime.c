@@ -286,6 +286,45 @@ static void string_endswith_fn(VMState *state, Object *thisptr, Object *fn, Obje
   }
 }
 
+static void string_slice_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
+  VM_ASSERT(args_len == 1 || args_len == 2, "wrong arity: expected 1 or 2, got %i", args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  Object *int_base = state->shared->vcache.int_base;
+  
+  StringObject *sobj = (StringObject*) obj_instance_of(thisptr, string_base);
+  VM_ASSERT(sobj, "internal error: string.slice() called on wrong type of object");
+  
+  char *str = sobj->value;
+  int len = utf8_strlen(str);
+  int from = 0, to = len;
+  if (args_len == 1) {
+    Object *arg1 = args_ptr[0];
+    VM_ASSERT(arg1->parent == int_base, "string.slice() expected int");
+    from = arg1->int_value;
+  } else {
+    Object *arg1 = args_ptr[0], *arg2 = args_ptr[1];
+    VM_ASSERT(arg1->parent == int_base, "string.slice() expected int as first parameter");
+    VM_ASSERT(arg2->parent == int_base, "string.slice() expected int as second parameter");
+    from = arg1->int_value;
+    to = arg2->int_value;
+  }
+  VM_ASSERT(from >= 0 && from <= len, "string.slice() start must lie inside string");
+  VM_ASSERT(to >= 0 && to <= len, "string.slice() end must lie inside string");
+  VM_ASSERT(from <= to, "string.slice() start must lie before end");
+  
+  const char *start = str;
+  const char *error = NULL;
+  utf8_step(&start, from, &error);
+  VM_ASSERT(!error, error); // lol
+  
+  const char *end = start;
+  error = NULL;
+  utf8_step(&end, to - from, &error);
+  VM_ASSERT(!error, error);
+  
+  state->result_value = alloc_string(state, start, end - start);
+}
+
 static void string_byte_len_fn(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len) {
   VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
   Object *string_base = state->shared->vcache.string_base;
@@ -1079,6 +1118,7 @@ Object *create_root(VMState *state) {
   object_set(string_obj, "==", alloc_fn(state, string_eq_fn));
   object_set(string_obj, "startsWith", alloc_fn(state, string_startswith_fn));
   object_set(string_obj, "endsWith", alloc_fn(state, string_endswith_fn));
+  object_set(string_obj, "slice", alloc_fn(state, string_slice_fn));
   object_set(string_obj, "byte_len", alloc_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
   
