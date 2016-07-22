@@ -837,34 +837,41 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
        */
       record_end(text, range);
       
-      // short-circuiting evaluation
-      int lhs_slot = ref_access(builder, *rv);
-      // if (lhs) {
-      int lhs_blk = get_block(builder);
-      int lhs_br_true, lhs_br_false;
-      use_range_start(builder, range);
-      addinstr_test_branch(builder, lhs_slot, &lhs_br_true, &lhs_br_false);
-      
-      int rhs_blk = new_block(builder);
-      set_int_var(builder, lhs_br_true, rhs_blk);
-      use_range_end(builder, range);
+      int rhs_blk, lhs_br_false, lhs_blk, lhs_slot;
+      if (builder) {
+        // short-circuiting evaluation
+        lhs_slot = ref_access(builder, *rv);
+        // if (lhs) {
+        lhs_blk = get_block(builder);
+        int lhs_br_true;
+        use_range_start(builder, range);
+        addinstr_test_branch(builder, lhs_slot, &lhs_br_true, &lhs_br_false);
+        
+        rhs_blk = new_block(builder);
+        set_int_var(builder, lhs_br_true, rhs_blk);
+        use_range_end(builder, range);
+      }
       res = parse_expr(&text, builder, 2, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
-      int rhs_slot = ref_access(builder, rhs_expr);
-      use_range_start(builder, range);
-      rhs_blk = get_block(builder); // update because parse_expr
-      int rhs_br;
-      addinstr_branch(builder, &rhs_br);
-      
-      // }
-      int phi_blk = new_block(builder);
-      set_int_var(builder, lhs_br_false, phi_blk);
-      set_int_var(builder, rhs_br, phi_blk);
-      int phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
-      use_range_end(builder, range);
-      
-      *rv = ref_simple(phi_slot);
+      if (builder) {
+        int rhs_slot = ref_access(builder, rhs_expr);
+        use_range_start(builder, range);
+        rhs_blk = get_block(builder); // update because parse_expr
+        int rhs_br;
+        addinstr_branch(builder, &rhs_br);
+        
+        // }
+        int phi_blk = new_block(builder);
+        set_int_var(builder, lhs_br_false, phi_blk);
+        set_int_var(builder, rhs_br, phi_blk);
+        int phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
+        use_range_end(builder, range);
+        
+        *rv = ref_simple(phi_slot);
+      } else {
+        *rv = ref_simple(0);
+      }
       continue;
     }
     free(range);
@@ -886,34 +893,41 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
        */
       record_end(text, range);
       
-      // short-circuiting evaluation
-      int lhs_slot = ref_access(builder, *rv);
-      // if (!lhs) {
-      int lhs_blk = get_block(builder);
-      int lhs_br_true, lhs_br_false;
-      use_range_start(builder, range);
-      addinstr_test_branch(builder, lhs_slot, &lhs_br_true, &lhs_br_false);
-      
-      int rhs_blk = new_block(builder);
-      set_int_var(builder, lhs_br_false, rhs_blk);
-      use_range_end(builder, range);
+      int rhs_blk, lhs_br_true, lhs_blk, lhs_slot;
+      if (builder) {
+        // short-circuiting evaluation
+        lhs_slot = ref_access(builder, *rv);
+        // if (!lhs) {
+        lhs_blk = get_block(builder);
+        int lhs_br_false;
+        use_range_start(builder, range);
+        addinstr_test_branch(builder, lhs_slot, &lhs_br_true, &lhs_br_false);
+        
+        rhs_blk = new_block(builder);
+        set_int_var(builder, lhs_br_false, rhs_blk);
+        use_range_end(builder, range);
+      }
       res = parse_expr(&text, builder, 1, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
-      int rhs_slot = ref_access(builder, rhs_expr);
-      use_range_start(builder, range);
-      rhs_blk = get_block(builder); // parse_expr may have changed block
-      int rhs_br;
-      addinstr_branch(builder, &rhs_br);
-      
-      // }
-      int phi_blk = new_block(builder);
-      set_int_var(builder, lhs_br_true, phi_blk);
-      set_int_var(builder, rhs_br, phi_blk);
-      int phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
-      use_range_end(builder, range);
-      
-      *rv = ref_simple(phi_slot);
+      if (builder) {
+        int rhs_slot = ref_access(builder, rhs_expr);
+        use_range_start(builder, range);
+        rhs_blk = get_block(builder); // parse_expr may have changed block
+        int rhs_br;
+        addinstr_branch(builder, &rhs_br);
+        
+        // }
+        int phi_blk = new_block(builder);
+        set_int_var(builder, lhs_br_true, phi_blk);
+        set_int_var(builder, rhs_br, phi_blk);
+        int phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
+        use_range_end(builder, range);
+        
+        *rv = ref_simple(phi_slot);
+      } else {
+        *rv = ref_simple(0);
+      }
       continue;
     }
     free(range);
