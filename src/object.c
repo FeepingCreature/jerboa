@@ -160,11 +160,12 @@ bool obj_is_truthy(VMState *state, Object *obj) {
 // change a property in-place
 // returns an error string or NULL
 char *object_set_existing(Object *obj, const char *key, Object *value) {
+  int len = strlen(key);
   assert(obj != NULL);
   Object *current = obj;
   if (current->flags & OBJ_PRIMITIVE) current = current->parent; // primitive entails noinherit
   while (current) {
-    TableEntry *entry = table_lookup(&current->tbl, key, strlen(key));
+    TableEntry *entry = table_lookup(&current->tbl, key, len);
     if (entry != NULL) {
       if (current->flags & OBJ_FROZEN) {
         char *error = NULL;
@@ -187,11 +188,12 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
 // change a property but only if it exists somewhere in the prototype chain
 // returns error or null on success
 char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *value_set) {
+  int len = strlen(key);
   assert(obj != NULL);
   Object *current = obj;
   if (current->flags & OBJ_PRIMITIVE) current = current->parent; // skip the primitive leaf
   while (current) {
-    TableEntry *entry = table_lookup(&current->tbl, key, strlen(key));
+    TableEntry *entry = table_lookup(&current->tbl, key, len);
     if (entry) {
       if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
         return "type constraint violated on shadowing assignment";
@@ -212,6 +214,7 @@ char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, si
   assert(obj != NULL);
   if (obj->flags & OBJ_PRIMITIVE) { fprintf(stderr, "internal error\n"); abort(); }
   TableEntry *entry = table_lookup(&obj->tbl, key_ptr, key_len);
+  if (!constraint) return "tried to set constraint that was null";
   if (!entry) return "tried to set constraint on a key that was not yet defined!";
   if (entry->value_aux) return "tried to set constraint, but key already had a constraint!";
   Object *existing_value = entry->value;
@@ -226,11 +229,25 @@ char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, si
 
 // returns error or null
 char *object_set(Object *obj, const char *key, Object *value) {
+  int len = strlen(key);
   assert(obj != NULL);
   if (obj->flags & OBJ_PRIMITIVE) { fprintf(stderr, "set key on primitive - bad!\n"); abort(); }
+  
+  // check constraints in parents
+  Object *current = obj->parent;
+  while (current) {
+    TableEntry *entry = table_lookup(&current->tbl, key, len);
+    if (entry) {
+      if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+        return "type constraint in parent violated on assignment";
+      }
+    }
+    current = current->parent;
+  }
+  
   // TODO check flags beforehand to avoid clobbering tables that are frozen
   TableEntry *freeptr;
-  TableEntry *entry = table_lookup_alloc(&obj->tbl, key, strlen(key), &freeptr);
+  TableEntry *entry = table_lookup_alloc(&obj->tbl, key, len, &freeptr);
   if (entry) {
     assert(!(obj->flags & OBJ_FROZEN));
     if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {

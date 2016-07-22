@@ -1,0 +1,4 @@
+const Obj = {
+  a: int = 0;
+};
+var obj = new Obj { a = "foo"; };

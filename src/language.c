@@ -81,6 +81,7 @@ static void end_lex_scope(FunctionBuilder *builder, int backup) {
 */
 
 static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv);
+static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
   if (!builder) return (RefValue) {0, -1, REFMODE_VARIABLE, NULL};
@@ -92,6 +93,7 @@ static RefValue get_scope(FunctionBuilder *builder, char *name) {
 static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *builder, int obj_slot) {
   char *text = *textp;
   while (!eat_string(&text, "}")) {
+    
     FileRange *add_entry_range = alloc_and_record_start(text);
     char *key_name = parse_identifier(&text);
     if (!key_name) {
@@ -104,15 +106,30 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     }
     record_end(text, add_entry_range);
     
-    if (!eat_string(&text, "=")) {
-      log_parser_error(text, "object literal expects 'name = value;'");
-      return PARSE_ERROR;
+    FileRange *define_constraint = alloc_and_record_start(text);
+    int constraint_slot = -1;
+    if (eat_string(&text, ":")) {
+      RefValue rv;
+      record_end(text, define_constraint);
+      ParseResult res = parse_expr_base(&text, builder, &rv);
+      if (res == PARSE_ERROR) return PARSE_ERROR;
+      if (res == PARSE_NONE) {
+        log_parser_error(text, "missing type constraint");
+        return PARSE_ERROR;
+      }
+      assert(res == PARSE_OK);
+      constraint_slot = ref_access(builder, rv);
     }
     
     RefValue value;
-    ParseResult res = parse_expr(&text, builder, 0, &value);
-    if (res == PARSE_ERROR) return res;
-    assert(res == PARSE_OK);
+    if (eat_string(&text, "=")) {
+      ParseResult res = parse_expr(&text, builder, 0, &value);
+      if (res == PARSE_ERROR) return res;
+      assert(res == PARSE_OK);
+    } else {
+      value = ref_simple(0); // init to null
+    }
+    
     
     if (!eat_string(&text, ";")) {
       log_parser_error(text, "object literal entry requires terminating semicolon");
@@ -126,6 +143,12 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
       int key_slot = addinstr_alloc_string_object(builder, key_name);
       addinstr_assign(builder, obj_slot, key_slot, value_slot, ASSIGN_PLAIN);
       use_range_end(builder, add_entry_range);
+      
+      if (constraint_slot != -1) {
+        use_range_start(builder, define_constraint);
+        addinstr_set_constraint(builder, obj_slot, key_slot, constraint_slot);
+        use_range_end(builder, define_constraint);
+      }
     }
   }
   *textp = text;
@@ -1015,18 +1038,16 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
   FileRange *define_constraint = alloc_and_record_start(text);
   int constraint_slot = -1;
   if (eat_string(&text, ":")) {
-    char *constraint = parse_identifier(&text);
-    if (!constraint) {
-      log_parser_error(text, "invalid type constraint");
+    RefValue rv;
+    record_end(text, define_constraint);
+    ParseResult res = parse_expr_base(&text, builder, &rv);
+    if (res == PARSE_ERROR) return PARSE_ERROR;
+    if (res == PARSE_NONE) {
+      log_parser_error(text, "missing type constraint");
       return PARSE_ERROR;
     }
-    record_end(text, define_constraint);
-    if (builder) {
-      use_range_start(builder, define_constraint);
-      int constraint_name_slot = addinstr_alloc_string_object(builder, constraint);
-      constraint_slot = addinstr_access(builder, builder->scope, constraint_name_slot);
-      use_range_end(builder, define_constraint);
-    }
+    assert(res == PARSE_OK);
+    constraint_slot = ref_access(builder, rv);
   }
   
   // allocate the new scope upfront, so that the variable
@@ -1425,18 +1446,21 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
       free(fnframe_range);
       return PARSE_ERROR;
     }
-    char *constraint = NULL;
+    char *textpos = NULL;
     if (eat_string(&text, ":")) {
-      constraint = parse_identifier(&text);
-      if (!constraint) {
-        log_parser_error(text, "type constraint identifier expected");
-        free(fnframe_range);
+      textpos = text;
+      RefValue constraint;
+      ParseResult res = parse_expr_base(&text, NULL, &constraint);
+      if (res == PARSE_ERROR) return PARSE_ERROR;
+      if (res == PARSE_NONE) {
+        log_parser_error(text, "missing type constraint");
         return PARSE_ERROR;
       }
+      assert(res == PARSE_OK);
     }
     arg_list_ptr = realloc(arg_list_ptr, sizeof(char*) * ++arg_list_len);
     type_constraints_ptr = realloc(type_constraints_ptr, sizeof(char*) * arg_list_len);
-    type_constraints_ptr[arg_list_len - 1] = constraint;
+    type_constraints_ptr[arg_list_len - 1] = textpos;
     arg_list_ptr[arg_list_len - 1] = arg;
   }
   record_end(text, fnframe_range);
@@ -1453,7 +1477,6 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   
   // generate lexical scope, initialize with parameters
   new_block(builder);
-  use_range_start(builder, fnframe_range);
   builder->scope = 1;
   
   // look up constraints upfront (simplifies IR)
@@ -1461,11 +1484,15 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   for (int i = 0; i < arg_list_len; ++i) {
     constraint_slots[i] = -1;
     if (type_constraints_ptr[i]) {
-      int type_name = addinstr_alloc_string_object(builder, type_constraints_ptr[i]);
-      constraint_slots[i] = addinstr_access(builder, builder->scope, type_name);
+      RefValue constraint;
+      char *text2 = type_constraints_ptr[i];
+      ParseResult res = parse_expr_base(&text2, builder, &constraint);
+      assert(res == PARSE_OK);
+      constraint_slots[i] = ref_access(builder, constraint);
     }
   }
   
+  use_range_start(builder, fnframe_range);
   int *argname_slots = malloc(sizeof(int) * arg_list_len);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
   for (int i = 0; i < arg_list_len; ++i) {

@@ -992,6 +992,7 @@ static void obj_instanceof_fn(VMState *state, Object *thisptr, Object *fn, Objec
   VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
   Object *obj = args_ptr[0];
   Object *parent_obj = args_ptr[1];
+  VM_ASSERT(parent_obj, "bad argument: instanceof null");
   bool res = !!obj_instance_of(obj, parent_obj);
   state->result_value = alloc_bool(state, res);
 }

@@ -1,0 +1,4 @@
+const Obj = {
+  a = 5;
+  b: int = 5;
+};

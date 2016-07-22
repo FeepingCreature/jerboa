@@ -485,8 +485,11 @@ static FnWrap vm_instr_assign(FastVMState *state) {
   VM_ASSERT2(obj, "assignment to null object");
   switch (assign_type) {
     case ASSIGN_PLAIN:
-      object_set(obj, key, value_obj);
+    {
+      char *error = object_set(obj, key, value_obj);
+      VM_ASSERT2(!error, error);
       break;
+    }
     case ASSIGN_EXISTING:
     {
       char *error = object_set_existing(obj, key, value_obj);
@@ -563,8 +566,11 @@ static FnWrap vm_instr_assign_string_key(FastVMState *state) {
   VM_ASSERT2(obj, "assignment to null object");
   switch (assign_type) {
     case ASSIGN_PLAIN:
-      object_set(obj, key, value_obj);
+    {
+      char *error = object_set(obj, key, value_obj);
+      VM_ASSERT2(!error, error);
       break;
+    }
     case ASSIGN_EXISTING:
     {
       char *error = object_set_existing(obj, key, value_obj);
