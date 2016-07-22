@@ -60,6 +60,7 @@ size_t utf8_strnlen(const char *ptr, size_t length) {
   size_t utf8_len = 0;
   const char *end = ptr + length;
   for (; ptr != end; ++ptr) {
+    // see https://en.wikipedia.org/wiki/UTF-8#Description
     if ((*ptr & 0xC0) != 0x80) utf8_len++;
   }
   return utf8_len;
@@ -75,9 +76,12 @@ size_t utf8_strlen(const char *ptr) {
 
 void utf8_step(const char **ptr, int num, const char **error_p) {
   const char *cur = *ptr;
-  while (num) {
+  if (num) while (true) {
+    if ((*cur & 0xC0) != 0x80) {
+      // meaning cur is pointing at the start of a new codepoint
+      if (num-- == 0) break;
+    }
     if (!*cur) { *error_p = "ran out of utf8 string"; return; }
-    if ((*cur & 0xC0) != 0x80) num--;
     cur++;
   }
   *ptr = cur;
