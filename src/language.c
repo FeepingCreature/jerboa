@@ -513,12 +513,63 @@ static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefV
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv) {
   char *text = *textp;
   
-  bool negate = false;
   FileRange *neg_range = alloc_and_record_start(text);
   if (eat_string(&text, "-")) {
     record_end(text, neg_range);
-    negate = true;
+    ParseResult res = parse_expr_base(&text, builder, rv);
+    if (res == PARSE_ERROR) return res;
+    if (res != PARSE_OK) {
+      log_parser_error(text, "expression to negate expected");
+      return PARSE_ERROR;
+    }
+    *textp = text;
+    
+    use_range_start(builder, neg_range);
+    int zero_slot = 0;
+    if (builder) zero_slot = addinstr_alloc_int_object(builder, 0);
+    use_range_end(builder, neg_range);
+    RefValue zref = ref_simple(zero_slot);
+    build_op(builder, "-", rv, zref, *rv, neg_range);
+    return PARSE_OK;
   } else free(neg_range);
+  
+  FileRange *not_range = alloc_and_record_start(text);
+  if (eat_string(&text, "!")) {
+    record_end(text, not_range);
+    ParseResult res = parse_expr_base(&text, builder, rv);
+    if (res == PARSE_ERROR) return res;
+    if (res != PARSE_OK) {
+      log_parser_error(text, "expression to negate expected");
+      return PARSE_ERROR;
+    }
+    *textp = text;
+    
+    int end_res_slot = 0;
+    if (builder) {
+      use_range_start(builder, not_range);
+      
+      int start_slot_t = addinstr_alloc_bool_object(builder, true);
+      int start_rv_slot = ref_access(builder, *rv);
+      int start_blk = get_block(builder);
+      int start_br_true, start_br_false;
+      addinstr_test_branch(builder, start_rv_slot, &start_br_true, &start_br_false);
+      
+      int true_blk = new_block(builder);
+      set_int_var(builder, start_br_true, true_blk);
+      int true_slot_f = addinstr_alloc_bool_object(builder, false);
+      int true_br;
+      addinstr_branch(builder, &true_br);
+      
+      int end_blk = new_block(builder);
+      set_int_var(builder, start_br_false, end_blk);
+      set_int_var(builder, true_br, end_blk);
+      end_res_slot = addinstr_phi(builder, start_blk, start_slot_t, true_blk, true_slot_f);
+      use_range_end(builder, not_range);
+    }
+    
+    *rv = ref_simple(end_res_slot);
+    return PARSE_OK;
+  } else free(not_range);
   
   FileRange *expr_range = alloc_and_record_start(text);
   ParseResult res = parse_expr_stem(&text, builder, rv);
@@ -539,15 +590,6 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
     if ((res = parse_postincdec(&text, builder, rv)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
     break;
-  }
-  
-  if (negate) {
-    use_range_start(builder, neg_range);
-    int zero_slot = 0;
-    if (builder) zero_slot = addinstr_alloc_int_object(builder, 0);
-    use_range_end(builder, neg_range);
-    RefValue zref = ref_simple(zero_slot);
-    build_op(builder, "-", rv, zref, *rv, neg_range);
   }
   
   *textp = text;

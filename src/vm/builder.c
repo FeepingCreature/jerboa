@@ -49,6 +49,10 @@ int new_block(FunctionBuilder *builder) {
   return body->blocks_len - 1;
 }
 
+int get_block(FunctionBuilder *builder) {
+  return builder->body.blocks_len - 1;
+}
+
 void terminate(FunctionBuilder *builder) {
   // terminate with "return null"
   addinstr_return(builder, 0);

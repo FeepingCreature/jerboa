@@ -698,7 +698,8 @@ static FnWrap vm_instr_phi(FastVMState *state) {
     state->slots[target_slot] = state->slots[slot1];
   } else if (state->cf->prev_block == phi->block2) {
     state->slots[target_slot] = state->slots[slot2];
-  } else VM_ASSERT2(false, "phi block error: arrived here from block not in list");
+  } else VM_ASSERT2(false, "phi block error: arrived here from block not in list: [%i, %i], but came from %i",
+                    phi->block1, phi->block2, state->cf->prev_block);
   
   state->instr = (Instr*)(phi + 1);
   return (FnWrap) { instr_fns[state->instr->type] };

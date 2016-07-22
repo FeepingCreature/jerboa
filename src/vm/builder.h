@@ -35,6 +35,8 @@ FileRange *alloc_and_record_start(char *text);
 
 int new_block(FunctionBuilder *builder);
 
+int get_block(FunctionBuilder *builder);
+
 void terminate(FunctionBuilder *builder);
 
 void addinstr(FunctionBuilder *builder, int size, Instr *instr);

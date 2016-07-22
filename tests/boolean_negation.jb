@@ -1,0 +1,5 @@
+if (!true) assert(false);
+if (null) assert(false);
+if (!null) { } else assert(false);
+assert(!!5 == true);
+assert(!!null == false);
