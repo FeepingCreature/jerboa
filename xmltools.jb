@@ -112,7 +112,7 @@ function getAttr(node, name) {
   var attrs = children[i].children;
   for (var i = 0; i < attrs.length; i++) {
     var attr = attrs[i];
-    if (attr.nodeName == "attribute") {
+    if (attr.nodeType == 1 && attr.nodeName == "attribute") {
       if (attr.attr["name"] == name) {
         return attr.attr["value"];
       }

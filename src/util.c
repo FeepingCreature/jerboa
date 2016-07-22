@@ -70,8 +70,8 @@ static bool find_text_pos_from_to(char *text, FileRecord *record, char *text_to,
   TextRange line = *line_p;
   while (line.start < text_to) {
     while (line.end < text_to && *line.end != '\n') line.end ++; // scan to newline
-    if (line.end < text_to) line.end ++; // scan past newline
-    if (text >= line.start && text <= line.end) {
+    line.end ++; // scan past newline (even if there isn't a newline - since a pointer to text_to should also be captured)
+    if (text >= line.start && text < line.end) {
       last_line = line;
       last_record = record;
       last_row_nr = row_nr;

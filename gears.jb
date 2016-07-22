@@ -250,6 +250,7 @@ glInit();
 
 print("loop start");
 for (var frame = 0; frame < 1000; frame++) {
+  // print(": ", frame);
 // while (glfw.WindowShouldClose(window) == 0) {
   drawGL();
   angle += 2;

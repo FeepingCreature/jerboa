@@ -785,9 +785,9 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       record_end(text, range);
       
       // short-circuiting evaluation
-      int test1_blk = builder->body.blocks_len - 1;
       int test1_slot = ref_access(builder, *rv);
       // if (lhs) {
+      int test1_blk = get_block(builder);
       int test1_br_true, test1_br_false;
       use_range_start(builder, range);
       int test1_slot_n = addinstr_alloc_bool_object(builder, false);
@@ -802,6 +802,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       
+      test2_blk = get_block(builder); // update because parse_expr
       int test2_slot = ref_access(builder, rhs_expr);
       int test2_br_true, test2_br_false;
       use_range_start(builder, range);
@@ -855,9 +856,9 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       record_end(text, range);
       
       // short-circuiting evaluation
-      int test1_blk = builder->body.blocks_len - 1;
       int test1_slot = ref_access(builder, *rv);
       // if (!lhs) {
+      int test1_blk = get_block(builder);
       int test1_br_true, test1_br_false;
       use_range_start(builder, range);
       int test1_slot_y = addinstr_alloc_bool_object(builder, true);
@@ -872,6 +873,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       
+      test2_blk = get_block(builder); // parse_expr may have changed block
       int test2_slot = ref_access(builder, rhs_expr);
       int test2_br_true, test2_br_false;
       use_range_start(builder, range);

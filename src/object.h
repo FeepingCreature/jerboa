@@ -22,18 +22,22 @@ typedef enum {
   OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
   OBJ_PRIMITIVE = 0x10,// no table, no mark_fn
   OBJ_PRIMITIVE_VALUE = OBJ_FROZEN | OBJ_CLOSED | OBJ_PRIMITIVE | OBJ_NOINHERIT // primitive must entail noinherit!
-} ObjectFlagsBase;
-
-typedef short int ObjectFlags;
+} ObjectFlags;
 
 struct _VMState;
 typedef struct _VMState VMState;
 
+// for debugging specific objects
+#define COUNT_OBJECTS 0
+
 struct _Object {
   Object *parent;
-  short int size;
+  int size;
   ObjectFlags flags;
   Object *prev; // for gc
+#if COUNT_OBJECTS
+  int alloc_id;
+#endif
   
   union {
     struct {
@@ -70,6 +74,9 @@ typedef struct {
   
   Object *last_obj_allocated;
   int num_obj_allocated, next_gc_run;
+#if COUNT_OBJECTS
+  int num_obj_allocated_total;
+#endif
   
   GCRootSet permanents; // objects that never get freed, globals, instr-cached objects, etc.
   int disabledness;

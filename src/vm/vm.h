@@ -5,6 +5,12 @@
 
 #define VM_ASSERT(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return
 
+#ifndef NDEBUG
+#define VM_ASSERT_DEBUG(cond, ...) VM_ASSERT(cond, __VA_ARGS__)
+#else
+#define VM_ASSERT_DEBUG(cond, ...) (void) 0
+#endif
+
 void *vm_stack_alloc(VMState *state, int size);
 
 void *vm_stack_alloc_uninitialized(VMState *state, int size);

@@ -775,9 +775,16 @@ static void xml_node_find_array_fn(VMState *state, Object *thisptr, Object *fn, 
 
 static void xml_node_find_by_name_recurse(VMState *state, Object *node, char *name, Object ***array_p_p, int *array_l_p)
 {
+  Object *int_base = state->shared->vcache.int_base;
   Object *string_base = state->shared->vcache.string_base;
   Object *array_base = state->shared->vcache.array_base;
+  Object *node_type = OBJECT_LOOKUP_STRING(node, "nodeType", NULL);
+  VM_ASSERT(node_type && node_type->parent == int_base, "invalid xml node");
+  if (node_type->int_value == 3) return; // text
+  VM_ASSERT(node_type->int_value == 1, "node is not element");
+  
   Object *node_name = OBJECT_LOOKUP_STRING(node, "nodeName", NULL);
+  
   VM_ASSERT(node_name, "missing 'nodeName' property in node");
   StringObject *nodeName_str = (StringObject*) obj_instance_of(node_name, string_base);
   if (strcmp(nodeName_str->value, name) == 0) {
@@ -1100,17 +1107,17 @@ Object *create_root(VMState *state) {
   xml_obj->flags |= OBJ_FROZEN;
   object_set(xml_obj, "node", node_obj);
   
-  Object *text_node_obj = alloc_object(state, node_obj);
-  object_set(text_node_obj, "nodeName", alloc_string_foreign(state, ""));
-  object_set(text_node_obj, "nodeType", alloc_int(state, 3));
-  object_set(text_node_obj, "attr", alloc_object(state, NULL));
-  object_set(text_node_obj, "children", alloc_array(state, NULL, state->shared->vcache.int_zero));
-  object_set(xml_obj, "text_node", node_obj);
-  
   Object *element_node_obj = alloc_object(state, node_obj);
+  object_set(element_node_obj, "nodeName", alloc_string_foreign(state, ""));
   object_set(element_node_obj, "nodeType", alloc_int(state, 1));
-  object_set(element_node_obj, "value", NULL);
-  object_set(xml_obj, "element_node", node_obj);
+  object_set(element_node_obj, "attr", alloc_object(state, NULL));
+  object_set(element_node_obj, "children", alloc_array(state, NULL, state->shared->vcache.int_zero));
+  object_set(xml_obj, "element_node", element_node_obj);
+  
+  Object *text_node_obj = alloc_object(state, node_obj);
+  object_set(text_node_obj, "nodeType", alloc_int(state, 3));
+  object_set(text_node_obj, "value", NULL);
+  object_set(xml_obj, "text_node", text_node_obj);
   
   object_set(root, "xml", xml_obj);
   

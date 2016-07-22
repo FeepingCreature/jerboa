@@ -29,7 +29,7 @@ function short_name(str) {
   for (var i = 0; i < prefixes.length; i++) {
     var rest = str.startsWith(prefixes[i]);
     // don't accidentally turn it into a bad identifier
-    if (rest) if (startswithnum(rest)) {} else { str = rest; }
+    if (rest && !startswithnum(rest)) { str = rest; }
   }
   return str;
 }
@@ -235,9 +235,7 @@ for (var i = 0; i < fndecls.length; i++) {
     for (var k = 0; k < parms.length; k++) {
       var parm = parms[k];
       var typestr = getAttr(parm, "type");
-      var skip = 0;
-      if (parms.length == 1) { if (typestr == "void") { skip = 1; } }
-      if (skip == 0) {
+      if (parms.length != 1 || typestr != "void") {
         var type = xml_type_to_ffi_str(typestr);
         if (type == "null") {
           good = false;

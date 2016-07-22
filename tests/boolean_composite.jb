@@ -2,5 +2,6 @@ function test() {
   if (true && (false || true)) print("okay!");
   if ((true || false) && (false || true)) print("okay!");
   if (false || false || false || false || true) print("okay!");
+  if (true && true && true && true && true) print("okay!");
 }
 test();

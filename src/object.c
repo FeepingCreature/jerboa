@@ -247,6 +247,13 @@ char *object_set(Object *obj, const char *key, Object *value) {
 void vm_record_profile(VMState *state);
 void *alloc_object_internal(VMState *state, int size) {
   Object *res = cache_alloc(size);
+#if COUNT_OBJECTS
+  res->alloc_id = state->shared->gcstate.num_obj_allocated_total++;
+  // for debugging
+  /*if (res->alloc_id == 535818) {
+    __asm__("int $3");
+  }*/
+#endif
   res->prev = state->shared->gcstate.last_obj_allocated;
   res->size = size;
   state->shared->gcstate.last_obj_allocated = res;
@@ -326,8 +333,7 @@ Object *alloc_string_foreign(VMState *state, char *value) {
 }
 
 static void array_mark_fn(VMState *state, Object *obj) {
-  Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(obj, array_base);
+  ArrayObject *arr_obj = (ArrayObject*) obj;
   if (arr_obj) { // else it's obj == array_base
     for (int i = 0; i < arr_obj->length; ++i) {
       obj_mark(state, arr_obj->ptr[i]);

@@ -104,6 +104,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
         else fprintf(fh, ", ");
         fprintf(fh, "'%.*s': ", (int) entry->name_len, entry->name_ptr);
         print_recursive_indent(state, fh, entry->value, allow_tostring, indent+1);
+        if (state->runstate == VM_ERRORED) return;
       }
     }
   }
@@ -112,6 +113,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Object *obj, bool a
     for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
     fprintf(fh, "<- ");
     print_recursive_indent(state, fh, obj->parent, allow_tostring, indent+1);
+    if (state->runstate == VM_ERRORED) return;
   }
   fprintf(fh, "]");
   // vm_error(state, "don't know how to print %p", obj);
