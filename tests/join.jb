@@ -1,0 +1,2 @@
+var s = ["Hello", " World"].join(",");
+assert(s == "Hello, World");

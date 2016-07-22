@@ -504,12 +504,15 @@ static void array_join_fn(VMState *state, Object *thisptr, Object *fn, Object **
   
   int joiner_len = strlen(str_arg->value);
   int res_len = 0;
+  int *lens = alloca(sizeof(int) * arr_obj->length);
   for (int i = 0; i < arr_obj->length; i++) {
     if (i > 0) res_len += joiner_len;
     Object *entry = arr_obj->ptr[i];
     StringObject *entry_str = (StringObject*) obj_instance_of(entry, string_base);
     VM_ASSERT(entry_str, "contents of array must be strings");
-    res_len += strlen(entry_str->value);
+    int len = strlen(entry_str->value);
+    res_len += len;
+    lens[i] = len;
   }
   char *res = malloc(res_len + 1);
   char *res_cur = res;
@@ -522,7 +525,8 @@ static void array_join_fn(VMState *state, Object *thisptr, Object *fn, Object **
     StringObject *entry_str = (StringObject*) obj_instance_of(entry, string_base);
     // this is safe - we counted up the length above
     // (assuming nobody changes entry_str under us)
-    res_cur = strcpy(res_cur, entry_str->value);
+    memcpy(res_cur, entry_str->value, lens[i]);
+    res_cur += lens[i];
   }
   res_cur[0] = 0;
   // TODO make string constructor that takes ownership of the pointer instead
