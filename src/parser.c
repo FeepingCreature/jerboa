@@ -130,11 +130,12 @@ ParseResult parse_string(char **textp, char **outp) {
   char *text = *textp;
   eat_filler(&text);
   char *start = text;
-  if (text[0] != '"') return PARSE_NONE;
+  if (text[0] != '"' && text[0] != '\'') return PARSE_NONE;
+  char marker = text[0];
   text++;
   int len_escaped = 0;
-  while (text[0] && text[0] != '"') {
-    if (text[0] == '\\') {
+  while (text[0] && text[0] != marker) {
+    if (marker == '"' && text[0] == '\\') {
       text++;
       if (!text[0]) {
         log_parser_error(text, "unterminated escape");
@@ -153,7 +154,7 @@ ParseResult parse_string(char **textp, char **outp) {
   char *scan = start + 1;
   char *res = malloc(len_escaped + 1);
   for (int i = 0; i < len_escaped; scan++, i++) {
-    if (scan[0] == '\\') {
+    if (marker == '"' && scan[0] == '\\') {
       scan++;
       switch (scan[0]) {
         case '"': res[i] = '"'; break;
