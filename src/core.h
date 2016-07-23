@@ -1,6 +1,7 @@
 #ifndef CORE_H
 #define CORE_H
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
@@ -48,16 +49,16 @@ typedef enum {
   INSTR_ACCESS_STRING_KEY,
   INSTR_ASSIGN_STRING_KEY,
   INSTR_SET_CONSTRAINT_STRING_KEY,
-  INSTR_SET_SLOT,
   INSTR_DEFINE_REFSLOT,
-  INSTR_READ_REFSLOT,
-  INSTR_WRITE_REFSLOT,
+  INSTR_MOVE,
   // object is allocated, some fields are defined, object is closed, and refslots are created for its fields
   // this is a very common pattern due to scopes
   INSTR_ALLOC_STATIC_OBJECT,
   
   INSTR_LAST
 } InstrType;
+
+#define UNLIKELY(X) __builtin_expect(X, 0)
 
 struct _HashTable {
   TableEntry *entries_ptr;
@@ -95,11 +96,12 @@ struct _Object {
 };
 
 typedef enum {
-  TYPE_NULL, // all object references must be non-null
-  TYPE_INT,
-  TYPE_FLOAT,
-  TYPE_BOOL,
-  TYPE_OBJECT
+  // DO NOT CHANGE ORDER (see object.c: closest_obj)
+  TYPE_NULL = 0, // all object references must be non-null
+  TYPE_INT = 1,
+  TYPE_FLOAT = 2,
+  TYPE_BOOL = 3,
+  TYPE_OBJECT = 4
 } TypeTag;
 
 typedef struct {
@@ -127,7 +129,16 @@ typedef struct {
   };
 } Arg;
 
+typedef struct {
+  ArgKind kind;
+  union {
+    int slot;
+    int refslot;
+  };
+} WriteArg;
+
 char *get_arg_info(Arg arg);
+char *get_write_arg_info(WriteArg warg);
 
 typedef struct {
   Arg fn;
@@ -292,11 +303,20 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
     return frame->slots_ptr[arg.slot];
   }
   if (arg.kind == ARG_REFSLOT) {
-    assert(arg.slot < frame->refslots_len);
+    assert(arg.refslot < frame->refslots_len);
     return *frame->refslots_ptr[arg.refslot];
   }
   assert(arg.kind == ARG_VALUE);
   return arg.value;
+}
+
+static inline Value *ref_arg(Callframe *frame, WriteArg warg) {
+  if (warg.kind == ARG_REFSLOT) {
+    assert(warg.refslot < frame->refslots_len);
+    return frame->refslots_ptr[warg.refslot];
+  }
+  assert(warg.kind == ARG_SLOT);
+  return &frame->slots_ptr[warg.slot];
 }
 
 struct _VMState {

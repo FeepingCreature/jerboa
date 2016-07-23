@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include "core.h"
 
-#define UNLIKELY(X) __builtin_expect(X, 0)
-
 TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) __attribute__ ((pure));
 
 TableEntry *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash) __attribute__ ((pure));

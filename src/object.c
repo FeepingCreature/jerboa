@@ -88,18 +88,26 @@ Value object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, 
 }
 
 Object *closest_obj(VMState *state, Value val) {
-  if (IS_NULL(val)) return NULL;
-  if (IS_INT(val)) return state->shared->vcache.int_base;
-  if (IS_BOOL(val)) return state->shared->vcache.bool_base;
-  if (IS_FLOAT(val)) return state->shared->vcache.float_base;
-  return AS_OBJ(val);
+  assert(IS_NULL(val) || IS_INT(val) || IS_BOOL(val) || IS_FLOAT(val) || IS_OBJ(val));
+  Object *options[] = {
+    NULL,
+    state->shared->vcache.int_base,
+    state->shared->vcache.float_base,
+    state->shared->vcache.bool_base,
+    val.obj
+  };
+  return options[val.type];
 }
 
 Object *proto_obj(VMState *state, Value val) {
-  if (IS_INT(val)) return state->shared->vcache.int_base;
-  if (IS_BOOL(val)) return state->shared->vcache.bool_base;
-  if (IS_FLOAT(val)) return state->shared->vcache.float_base;
-  return AS_OBJ(val)->parent;
+  if (IS_OBJ(val)) return AS_OBJ(val)->parent;
+  Object *options[] = {
+    NULL,
+    state->shared->vcache.int_base,
+    state->shared->vcache.float_base,
+    state->shared->vcache.bool_base
+  };
+  return options[val.type];
 }
 
 Value object_lookup(Object *obj, const char *key_ptr, bool *key_found_p) {
@@ -209,9 +217,7 @@ char *object_set_existing(VMState *state, Object *obj, const char *key, Value va
     TableEntry *entry = table_lookup(&current->tbl, key, len);
     if (entry != NULL) {
       if (current->flags & OBJ_FROZEN) {
-        char *error = NULL;
-        if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was frozen.", key, (void*) current)) abort();
-        return error;
+        return my_asprintf("Tried to set existing key '%s', but object %p was frozen.", key, (void*) current);
       }
       if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint violated on assignment";
@@ -221,9 +227,7 @@ char *object_set_existing(VMState *state, Object *obj, const char *key, Value va
     }
     current = current->parent;
   }
-  char *error = NULL;
-  if (-1 == asprintf(&error, "Key '%s' not found in object %p.", key, (void*) obj)) abort();
-  return error;
+  return my_asprintf("Key '%s' not found in object %p.", key, (void*) obj);
 }
 
 // change a property but only if it exists somewhere in the prototype chain

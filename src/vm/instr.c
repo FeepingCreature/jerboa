@@ -12,6 +12,12 @@ char *get_arg_info(Arg arg) {
   return get_val_info(arg.value);
 }
 
+char *get_write_arg_info(WriteArg warg) {
+  if (warg.kind == ARG_SLOT) return my_asprintf("%%%i", warg.slot);
+  if (warg.kind == ARG_REFSLOT) return my_asprintf("&%i", warg.refslot);
+  abort();
+}
+
 int instr_size(Instr *instr) {
   switch (instr->type) {
 #define CASE(EN, TY) case EN: return sizeof(TY)
@@ -37,10 +43,8 @@ int instr_size(Instr *instr) {
     CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr);
     CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr);
     CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr);
-    CASE(INSTR_SET_SLOT, SetSlotInstr);
     CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
-    CASE(INSTR_READ_REFSLOT, ReadRefslotInstr);
-    CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr);
+    CASE(INSTR_MOVE, MoveInstr);
 #undef CASE
     case INSTR_ALLOC_STATIC_OBJECT: return sizeof(AllocStaticObjectInstr) + sizeof(Object);
     case INSTR_CALL: return sizeof(CallInstr) + sizeof(Arg) * ((CallInstr*)instr)->info.args_len;

@@ -83,13 +83,14 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot, key_slot;
-  int target_slot;
+  Arg obj, key;
+  WriteArg target;
 } AccessInstr;
 
 typedef struct {
   Instr base;
-  int obj_slot, value_slot, key_slot, target_slot /* scratch space for calls */;
+  Arg obj, value, key;
+  int target_slot /* scratch space for calls */;
   AssignType type;
 } AssignInstr;
 
@@ -100,23 +101,23 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot, proto_slot, target_slot;
+  Arg obj, proto; WriteArg target;
 } InstanceofInstr;
 
 typedef struct {
   Instr base;
-  int obj_slot, key_slot, constraint_slot;
+  Arg obj, key, constraint;
 } SetConstraintInstr;
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
   CallInfo info;
 } CallInstr;
 
 typedef struct {
   Instr base;
-  int ret_slot;
+  Arg ret;
 } ReturnInstr;
 
 typedef struct {
@@ -144,30 +145,24 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot, key_slot; // fallback slot in case we need to call an overload
-  char *key_ptr; int key_len;
-  size_t key_hash;
-  int target_slot;
+  int key_slot, key_len; // fallback slot in case we need to call an overload
+  char *key_ptr; size_t key_hash;
+  Arg obj;
+  WriteArg target;
 } AccessStringKeyInstr;
 
 typedef struct {
   Instr base;
-  int obj_slot, value_slot; char *key;
+  char *key;
+  Arg obj, value;
   AssignType type;
 } AssignStringKeyInstr;
 
 typedef struct {
   Instr base;
-  int obj_slot, constraint_slot;
+  Arg obj, constraint;
   char *key_ptr; int key_len;
 } SetConstraintStringKeyInstr;
-
-typedef struct {
-  Instr base;
-  int target_slot;
-  Value value;
-  char *opt_info;
-} SetSlotInstr;
 
 typedef struct {
   Instr base;
@@ -179,15 +174,10 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int source_refslot, target_slot;
+  Arg source;
+  WriteArg target;
   char *opt_info;
-} ReadRefslotInstr;
-
-typedef struct {
-  Instr base;
-  int source_slot, target_refslot;
-  char *opt_info;
-} WriteRefslotInstr;
+} MoveInstr;
 
 typedef struct {
   char *name_ptr;

@@ -33,16 +33,19 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr)
           CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
           CASE(INSTR_ACCESS, AccessInstr)
-            slots[instr->obj_slot] = false;
+            if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
           CASE(INSTR_ASSIGN, AssignInstr)
-            slots[instr->obj_slot] = slots[instr->value_slot] = false;
+            if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
+            if (instr->value.kind == ARG_SLOT) slots[instr->value.slot] = false;
           // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             slots[instr->key_slot] = slots[instr->obj_slot] = false;
           CASE(INSTR_INSTANCEOF, InstanceofInstr)
-            slots[instr->obj_slot] = slots[instr->proto_slot] = false;
+            if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
+            if (instr->proto.kind == ARG_SLOT) slots[instr->proto.slot] = false;
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
-            slots[instr->obj_slot] = slots[instr->constraint_slot] = false;
+            if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
+            if (instr->constraint.kind == ARG_SLOT) slots[instr->constraint.slot] = false;
           CASE(INSTR_CALL, CallInstr)
             if (instr->info.fn.kind == ARG_SLOT) slots[instr->info.fn.slot] = false;
             if (instr->info.this_arg.kind == ARG_SLOT) slots[instr->info.this_arg.slot] = false;
@@ -51,7 +54,7 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
               if (arg.kind == ARG_SLOT) slots[arg.slot] = false;
             }
           CASE(INSTR_RETURN, ReturnInstr)
-            slots[instr->ret_slot] = false;
+            if (instr->ret.kind == ARG_SLOT) slots[instr->ret.slot] = false;
           CASE(INSTR_BR, BranchInstr)
           CASE(INSTR_TESTBR, TestBranchInstr)
             slots[instr->test_slot] = false;
@@ -67,16 +70,16 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   }
 }
 
-static Value *find_constant_slots(UserFunction *uf, char ***info_p) {
+static Value *find_constant_slots(UserFunction *uf) {
   Value *slots = calloc(sizeof(Value), uf->slots);
-  if (info_p) *info_p = (char**) calloc(sizeof(char*), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
-      if (instr->type == INSTR_SET_SLOT) {
-        SetSlotInstr *ssi = (SetSlotInstr*) instr;
-        slots[ssi->target_slot] = ssi->value;
-        if (info_p) (*info_p)[ssi->target_slot] = ssi->opt_info;
+      if (instr->type == INSTR_MOVE) {
+        MoveInstr *mi = (MoveInstr*) instr;
+        if (mi->source.kind == ARG_VALUE && mi->target.kind == ARG_SLOT) {
+          slots[mi->target.slot] = mi->source.value;
+        }
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
@@ -90,9 +93,11 @@ static int *find_refslots(UserFunction *uf) {
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
-      if (instr->type == INSTR_READ_REFSLOT) {
-        ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
-        slots[rri->target_slot] = rri->source_refslot;
+      if (instr->type == INSTR_MOVE) {
+        MoveInstr *mi = (MoveInstr*) instr;
+        if (mi->source.kind == ARG_REFSLOT && mi->target.kind == ARG_SLOT) {
+          slots[mi->target.slot] = mi->source.refslot;
+        }
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
@@ -138,7 +143,7 @@ int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_pt
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
   
-  Value *constant_slots = find_constant_slots(uf, NULL);
+  Value *constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
@@ -152,7 +157,8 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
           if (instr->type == INSTR_ASSIGN_STRING_KEY) {
             AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
             if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
-            if (aski->obj_slot != alobi->target_slot) { failed = true; break; }
+            if (aski->obj.kind != ARG_SLOT) { failed = true; break; }
+            if (aski->obj.slot != alobi->target_slot) { failed = true; break; }
             
             instr = (Instr*) (aski + 1);
             names_ptr = realloc(names_ptr, sizeof(char*) * ++fields_len);
@@ -192,20 +198,26 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
     while (instr != instr_end) {
       if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
         SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
-        Object *constraint = OBJ_OR_NULL(constant_slots[scski->constraint_slot]);
-        SlotIsStaticObjInfo *rec = &(*slots_p)[scski->obj_slot];
-        
-        if (constraint && rec->static_object) {
-          int field = static_info_find_field(rec, scski->key_len, scski->key_ptr);
-          assert(field != -1); // wat, object was closed and we set a constraint on a field that doesn't exist??
-          ConstraintInfo *info = &rec->constraints_ptr[field];
-          info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
-          info->constraint_ptr[info->constraint_len - 1] = constraint;
-          info->constraint_imposed_here_ptr = realloc(info->constraint_imposed_here_ptr, sizeof(Instr*) * info->constraint_len);
-          info->constraint_imposed_here_ptr[info->constraint_len - 1] = instr;
+        if ((scski->constraint.kind == ARG_VALUE || scski->constraint.kind == ARG_SLOT)
+          && scski->obj.kind == ARG_SLOT)
+        {
+          Object *constraint;
+          if (scski->constraint.kind == ARG_VALUE) constraint = OBJ_OR_NULL(scski->constraint.value);
+          else constraint = OBJ_OR_NULL(constant_slots[scski->constraint.slot]);
+          SlotIsStaticObjInfo *rec = &(*slots_p)[scski->obj.slot];
+          
+          if (constraint && rec->static_object) {
+            int field = static_info_find_field(rec, scski->key_len, scski->key_ptr);
+            assert(field != -1); // wat, object was closed and we set a constraint on a field that doesn't exist??
+            ConstraintInfo *info = &rec->constraints_ptr[field];
+            info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
+            info->constraint_ptr[info->constraint_len - 1] = constraint;
+            info->constraint_imposed_here_ptr = realloc(info->constraint_imposed_here_ptr, sizeof(Instr*) * info->constraint_len);
+            info->constraint_imposed_here_ptr[info->constraint_len - 1] = instr;
+          }
+          instr = (Instr*) (scski + 1);
+          continue;
         }
-        instr = (Instr*) (scski + 1);
-        continue;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
@@ -237,7 +249,8 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         AccessStringKeyInstr aski_new = *aski;
         while (true) {
-          int obj_slot = aski_new.obj_slot;
+          if (aski_new.obj.kind != ARG_SLOT) break;
+          int obj_slot = aski_new.obj.slot;
           if (!info[obj_slot].static_object) break;
           int field = static_info_find_field(&info[obj_slot], aski->key_len, aski->key_ptr);
           if (field != -1) break;
@@ -246,7 +259,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           // not succeed at runtime either
           // (since the object is closed, its keys are statically known)
           // so instead look up in the (known) parent object from the start
-          aski_new.obj_slot = info[obj_slot].parent_slot;
+          aski_new.obj = (Arg) { .kind = ARG_SLOT, .slot = info[obj_slot].parent_slot };
         }
         addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
         instr = (Instr*) (aski + 1);
@@ -257,16 +270,18 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
         AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
         if (aski->type == ASSIGN_EXISTING) {
           AssignStringKeyInstr aski_new = *aski;
-          while (true) {
-            int obj_slot = aski_new.obj_slot;
-            if (!info[obj_slot].static_object) break;
-            int field = static_info_find_field(&info[obj_slot], strlen(aski->key), aski->key);
-            if (field != -1) break; // key was found, we're at the right object
-            aski_new.obj_slot = info[obj_slot].parent_slot;
+          if (aski_new.obj.kind == ARG_SLOT) {
+            while (true) {
+              int obj_slot = aski_new.obj.slot;
+              if (!info[obj_slot].static_object) break;
+              int field = static_info_find_field(&info[obj_slot], strlen(aski->key), aski->key);
+              if (field != -1) break; // key was found, we're at the right object
+              aski_new.obj.slot = info[obj_slot].parent_slot;
+            }
+            addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
+            instr = (Instr*) (aski + 1);
+            continue;
           }
-          addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
-          instr = (Instr*) (aski + 1);
-          continue;
         }
       }
       
@@ -326,47 +341,53 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
       
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
-        int obj_slot = aski->obj_slot;
-        char *key = aski->key_ptr;
-        if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
-          bool continue_outer = false;
-          for (int k = 0; k < info[obj_slot].fields_len; ++k) {
-            char *name = info[obj_slot].names_ptr[k];
-            if (strcmp(key, name) == 0) {
-              int refslot = ref_slots_ptr[obj_slot][k];
-              use_range_start(builder, instr->belongs_to);
-              builder->scope = instr->context_slot;
-              addinstr_read_refslot(builder, refslot, aski->target_slot, my_asprintf("refslot reading '%s'", name));
-              use_range_end(builder, instr->belongs_to);
-              instr = (Instr*) (aski + 1);
-              continue_outer = true;
-              break;
+        if (aski->obj.kind == ARG_SLOT && aski->target.kind == ARG_SLOT) {
+          int obj_slot = aski->obj.slot;
+          char *key = aski->key_ptr;
+          if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
+            bool continue_outer = false;
+            for (int k = 0; k < info[obj_slot].fields_len; ++k) {
+              char *name = info[obj_slot].names_ptr[k];
+              if (strcmp(key, name) == 0) {
+                int refslot = ref_slots_ptr[obj_slot][k];
+                use_range_start(builder, instr->belongs_to);
+                builder->scope = instr->context_slot;
+                addinstr_move(builder,
+                              (Arg){.kind=ARG_REFSLOT,.refslot=refslot},
+                              aski->target);
+                use_range_end(builder, instr->belongs_to);
+                instr = (Instr*) (aski + 1);
+                continue_outer = true;
+                break;
+              }
             }
+            if (continue_outer) continue;
           }
-          if (continue_outer) continue;
         }
       }
       
       if (instr->type == INSTR_ASSIGN_STRING_KEY) {
         AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
-        int obj_slot = aski->obj_slot;
-        char *key = aski->key;
-        if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
-          bool continue_outer = false;
-          for (int k = 0; k < info[obj_slot].fields_len; ++k) {
-            char *name = info[obj_slot].names_ptr[k];
-            if (strcmp(key, name) == 0) {
-              int refslot = ref_slots_ptr[obj_slot][k];
-              use_range_start(builder, instr->belongs_to);
-              builder->scope = instr->context_slot;
-              addinstr_write_refslot(builder, aski->value_slot, refslot, my_asprintf("refslot writing '%s'", name));
-              use_range_end(builder, instr->belongs_to);
-              instr = (Instr*) (aski + 1);
-              continue_outer = true;
-              break;
+        if (aski->obj.kind == ARG_SLOT) {
+          int obj_slot = aski->obj.slot;
+          char *key = aski->key;
+          if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
+            bool continue_outer = false;
+            for (int k = 0; k < info[obj_slot].fields_len; ++k) {
+              char *name = info[obj_slot].names_ptr[k];
+              if (strcmp(key, name) == 0) {
+                int refslot = ref_slots_ptr[obj_slot][k];
+                use_range_start(builder, instr->belongs_to);
+                builder->scope = instr->context_slot;
+                addinstr_move(builder, aski->value, (WriteArg){.kind=ARG_REFSLOT,.refslot=refslot});
+                use_range_end(builder, instr->belongs_to);
+                instr = (Instr*) (aski + 1);
+                continue_outer = true;
+                break;
+              }
             }
+            if (continue_outer) continue;
           }
-          if (continue_outer) continue;
         }
       }
       
@@ -420,15 +441,16 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         continue; // no need to add, we're fully inlining this
       }
       if (instr->type == INSTR_ACCESS
-        && acci->key_slot < slot_table_len && slot_table_ptr[acci->key_slot] != NULL)
+        && acci->key.kind == ARG_SLOT
+        && acci->key.slot < slot_table_len && slot_table_ptr[acci->key.slot] != NULL)
       {
-        char *key_ptr = slot_table_ptr[acci->key_slot];
+        char *key_ptr = slot_table_ptr[acci->key.slot];
         int key_len = strlen(key_ptr);
         AccessStringKeyInstr aski = {
           .base = { .type = INSTR_ACCESS_STRING_KEY },
-          .obj_slot = acci->obj_slot,
-          .key_slot = acci->key_slot,
-          .target_slot = acci->target_slot,
+          .obj = acci->obj,
+          .key_slot = acci->key.slot,
+          .target = acci->target,
           .key_ptr = key_ptr,
           .key_len = key_len,
           .key_hash = hash(key_ptr, key_len)
@@ -438,27 +460,28 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         continue;
       }
       if (instr->type == INSTR_ASSIGN
-        && assi->key_slot < slot_table_len && slot_table_ptr[assi->key_slot] != NULL)
+        && assi->key.kind == ARG_SLOT
+        && assi->key.slot < slot_table_len && slot_table_ptr[assi->key.slot] != NULL)
       {
         AssignStringKeyInstr aski = {
           .base = { .type = INSTR_ASSIGN_STRING_KEY },
-          .obj_slot = assi->obj_slot,
-          .value_slot = assi->value_slot,
-          .key = slot_table_ptr[assi->key_slot],
+          .obj = assi->obj,
+          .value = assi->value,
+          .key = slot_table_ptr[assi->key.slot],
           .type = assi->type
         };
         addinstr_like(builder, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(assi + 1);
         continue;
       }
-      if (instr->type == INSTR_SET_CONSTRAINT
-        && sci->key_slot < slot_table_len && slot_table_ptr[sci->key_slot] != NULL)
-      {
-        char *key_ptr = slot_table_ptr[sci->key_slot];
+      if (instr->type == INSTR_SET_CONSTRAINT && sci->key.kind == ARG_SLOT
+        && sci->key.slot < slot_table_len && slot_table_ptr[sci->key.slot] != NULL
+      ) {
+        char *key_ptr = slot_table_ptr[sci->key.slot];
         SetConstraintStringKeyInstr scski = {
           .base = { .type = INSTR_SET_CONSTRAINT_STRING_KEY },
-          .obj_slot = sci->obj_slot,
-          .constraint_slot = sci->constraint_slot,
+          .obj = sci->obj,
+          .constraint = sci->constraint,
           .key_ptr = key_ptr,
           .key_len = strlen(key_ptr)
         };
@@ -537,19 +560,23 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
             slot_live[instr->slot] = true;
           CASE(INSTR_ACCESS, AccessInstr)
-            slot_live[instr->obj_slot] = slot_live[instr->key_slot]
-              = slot_live[instr->target_slot] = true;
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
+            if (instr->target.kind == ARG_SLOT) slot_live[instr->target.slot] = true;
           CASE(INSTR_ASSIGN, AssignInstr)
-            slot_live[instr->obj_slot] = slot_live[instr->key_slot]
-              = slot_live[instr->value_slot] = true;
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
+            if (instr->value.kind == ARG_SLOT) slot_live[instr->value.slot] = true;
           // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             slot_live[instr->key_slot] = slot_live[instr->obj_slot]
               = slot_live[instr->target_slot] = true;
           CASE(INSTR_INSTANCEOF, InstanceofInstr)
-            slot_live[instr->obj_slot] = slot_live[instr->proto_slot] = true;
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->proto.kind == ARG_SLOT) slot_live[instr->proto.slot] = true;
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
-            slot_live[instr->obj_slot] = slot_live[instr->constraint_slot] = true;
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->constraint.kind == ARG_SLOT) slot_live[instr->constraint.slot] = true;
           CASE(INSTR_CALL, CallInstr)
             if (instr->info.fn.kind == ARG_SLOT) slot_live[instr->info.fn.slot] = true;
             if (instr->info.this_arg.kind == ARG_SLOT) slot_live[instr->info.this_arg.slot] = true;
@@ -558,24 +585,25 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
               if (arg.kind == ARG_SLOT) slot_live[arg.slot] = true;
             }
           CASE(INSTR_RETURN, ReturnInstr)
-            slot_live[instr->ret_slot] = true;
+            if (instr->ret.kind == ARG_SLOT) slot_live[instr->ret.slot] = true;
           CASE(INSTR_BR, BranchInstr)
           CASE(INSTR_TESTBR, TestBranchInstr)
             slot_live[instr->test_slot] = true;
           CASE(INSTR_PHI, PhiInstr)
             slot_live[instr->slot1] = slot_live[instr->slot2] = true;
           CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
-            slot_live[instr->obj_slot] = slot_live[instr->target_slot] = true;
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->target.kind == ARG_SLOT) slot_live[instr->target.slot] = true;
           CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
-            slot_live[instr->obj_slot] = slot_live[instr->value_slot] = true;
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->value.kind == ARG_SLOT) slot_live[instr->value.slot] = true;
           CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)
-            slot_live[instr->constraint_slot] = slot_live[instr->obj_slot] = true;
-          CASE(INSTR_SET_SLOT, SetSlotInstr)
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->constraint.kind == ARG_SLOT) slot_live[instr->constraint.slot] = true;
+          CASE(INSTR_MOVE, MoveInstr)
+            if (instr->source.kind == ARG_SLOT) slot_live[instr->source.slot] = true;
           CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr)
             slot_live[instr->obj_slot] = true;
-          CASE(INSTR_READ_REFSLOT, ReadRefslotInstr)
-          CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr)
-            slot_live[instr->source_slot] = true;
           CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
             for (int k = 0; k < instr->info_len; ++k)
               slot_live[instr->info_ptr[k].slot] = true;
@@ -596,17 +624,10 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       bool add = true;
-      if (instr->type == INSTR_READ_REFSLOT) {
-        ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
-        if (!slot_live[rri->target_slot]) {
+      if (instr->type == INSTR_MOVE) {
+        MoveInstr *mi = (MoveInstr*) instr;
+        if (mi->target.kind == ARG_SLOT && !slot_live[mi->target.slot]) {
           add = false;
-        }
-      }
-      if (instr->type == INSTR_SET_SLOT) {
-        SetSlotInstr *ssi = (SetSlotInstr*) instr;
-        if (!slot_live[ssi->target_slot]) {
-          add = false;
-          // fprintf(stderr, "skip set %s\n", ssi->opt_info);
         }
       }
       if (add) addinstr_like(builder, instr, instr_size(instr), instr);
@@ -644,54 +665,58 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
-      if (instr->type == INSTR_SET_SLOT) {
-        SetSlotInstr *ssi = (SetSlotInstr*) instr;
-        object_known[ssi->target_slot] = true;
-        known_values_table[ssi->target_slot] = ssi->value;
+      if (instr->type == INSTR_MOVE) {
+        MoveInstr *mi = (MoveInstr*) instr;
+        if (mi->target.kind == ARG_SLOT && mi->source.kind == ARG_VALUE) {
+          object_known[mi->target.slot] = true;
+          known_values_table[mi->target.slot] = mi->source.value;
+        }
       }
       
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
-        if (object_known[aski->obj_slot]) {
-          Value known_val = known_values_table[aski->obj_slot];
-          bool key_found;
-          Value static_lookup = lookup_statically(closest_obj(state, known_val),
-                                                    aski->key_ptr, aski->key_len, aski->key_hash,
-                                                    &key_found);
-          if (key_found) {
-            object_known[aski->target_slot] = true;
-            known_values_table[aski->target_slot] = static_lookup;
-          }
-        }
-        
-        SlotIsStaticObjInfo *rec = &static_info[aski->obj_slot];
-        if (rec->static_object) {
-          int field = static_info_find_field(rec, aski->key_len, aski->key_ptr);
-          assert(field != -1);
-          slot_constraints[aski->target_slot] = &rec->constraints_ptr[field];
-        }
-        
-        if (slot_constraints[aski->obj_slot]) {
-          ConstraintInfo *constraints = slot_constraints[aski->obj_slot];
-          int num_dominant = 0;
-          // fprintf(stderr, "typed object go! %i constraints\n", constraints->constraint_len);
-          for (int k = 0; k < constraints->constraint_len; ++k) {
-            Object *constraint = constraints->constraint_ptr[k];
-            Instr *location = constraints->constraint_imposed_here_ptr[k];
-            if (constraint == int_base || constraint == float_base) { // primitives, always closed
-              if (dominates(uf, node2rpost, sfidoms_ptr, location, instr)) {
-                object_known[aski->target_slot] = true;
-                bool key_found = false;
-                known_values_table[aski->target_slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
-                if (!key_found) {
-                  fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", aski->key_len, aski->key_ptr);
-                  abort();
-                }
-                num_dominant ++;
-              }
+        if (aski->obj.kind == ARG_SLOT && aski->target.kind == ARG_SLOT) {
+          if (object_known[aski->obj.slot]) {
+            Value known_val = known_values_table[aski->obj.slot];
+            bool key_found;
+            Value static_lookup = lookup_statically(closest_obj(state, known_val),
+                                                      aski->key_ptr, aski->key_len, aski->key_hash,
+                                                      &key_found);
+            if (key_found) {
+              object_known[aski->target.slot] = true;
+              known_values_table[aski->target.slot] = static_lookup;
             }
           }
-          assert(num_dominant <= 1);
+          
+          SlotIsStaticObjInfo *rec = &static_info[aski->obj.slot];
+          if (rec->static_object) {
+            int field = static_info_find_field(rec, aski->key_len, aski->key_ptr);
+            assert(field != -1);
+            slot_constraints[aski->target.slot] = &rec->constraints_ptr[field];
+          }
+          
+          if (slot_constraints[aski->obj.slot]) {
+            ConstraintInfo *constraints = slot_constraints[aski->obj.slot];
+            int num_dominant = 0;
+            // fprintf(stderr, "typed object go! %i constraints\n", constraints->constraint_len);
+            for (int k = 0; k < constraints->constraint_len; ++k) {
+              Object *constraint = constraints->constraint_ptr[k];
+              Instr *location = constraints->constraint_imposed_here_ptr[k];
+              if (constraint == int_base || constraint == float_base) { // primitives, always closed
+                if (dominates(uf, node2rpost, sfidoms_ptr, location, instr)) {
+                  object_known[aski->target.slot] = true;
+                  bool key_found = false;
+                  known_values_table[aski->target.slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
+                  if (!key_found) {
+                    fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", aski->key_len, aski->key_ptr);
+                    abort();
+                  }
+                  num_dominant ++;
+                }
+              }
+            }
+            assert(num_dominant <= 1);
+          }
         }
       }
       instr = (Instr*) ((char*) instr + instr_size(instr));
@@ -710,24 +735,24 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
-      bool replace_with_ssi = false;
+      bool replace_with_mv = false;
       Value val = VNULL; char *opt_info = NULL; int target_slot = 0;
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
-        if (object_known[aski->target_slot]) {
-          replace_with_ssi = true;
+        if (aski->target.kind == ARG_SLOT && object_known[aski->target.slot]) {
+          replace_with_mv = true;
           // Note: there's no need to gc-pin this, since it's
           // clearly a value that we can see anyways
           // (ie. it's covered via the gc link via context)
-          val = known_values_table[aski->target_slot];
+          val = known_values_table[aski->target.slot];
           opt_info = my_asprintf("inlined lookup to '%.*s'", aski->key_len, aski->key_ptr);
-          target_slot = aski->target_slot;
+          target_slot = aski->target.slot;
         }
       }
       
       if (instr->type == INSTR_ALLOC_INT_OBJECT) {
         AllocIntObjectInstr *aioi = (AllocIntObjectInstr*) instr;
-        replace_with_ssi = true;
+        replace_with_mv = true;
         val = INT2VAL(aioi->value);
         opt_info = my_asprintf("inlined alloc_int %i", aioi->value);
         target_slot = aioi->target_slot;
@@ -735,7 +760,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       
       if (instr->type == INSTR_ALLOC_FLOAT_OBJECT) {
         AllocFloatObjectInstr *afoi = (AllocFloatObjectInstr*) instr;
-        replace_with_ssi = true;
+        replace_with_mv = true;
         val = FLOAT2VAL(afoi->value);
         opt_info = my_asprintf("inlined alloc_float %f", afoi->value);
         target_slot = afoi->target_slot;
@@ -743,7 +768,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       
       if (instr->type == INSTR_ALLOC_STRING_OBJECT) {
         AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
-        replace_with_ssi = true;
+        replace_with_mv = true;
         int len = strlen(asoi->value);
         Object *obj = AS_OBJ(make_string(state, asoi->value, len));
         obj->flags |= OBJ_IMMORTAL;
@@ -752,14 +777,14 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         target_slot = asoi->target_slot;
       }
       
-      if (replace_with_ssi) {
-        SetSlotInstr ssi = {
-          .base = { .type = INSTR_SET_SLOT },
-          .target_slot = target_slot,
-          .value = val,
+      if (replace_with_mv) {
+        MoveInstr mi = {
+          .base = { .type = INSTR_MOVE },
+          .source = (Arg) { .kind = ARG_VALUE, .value = val },
+          .target = (WriteArg) { .kind = ARG_SLOT, .slot = target_slot },
           .opt_info = opt_info
         };
-        addinstr_like(builder, instr, sizeof(ssi), (Instr*) &ssi);
+        addinstr_like(builder, instr, sizeof(mi), (Instr*) &mi);
       } else {
         addinstr_like(builder, instr, instr_size(instr), instr);
       }
@@ -829,11 +854,10 @@ bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr 
   return current == blk_earlier;
 }
 
-static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
+static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
-  char **slot_info;
-  Value *constant_slots = find_constant_slots(uf, &slot_info);
+  Value *constant_slots = find_constant_slots(uf);
   int *refslots = find_refslots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
@@ -859,9 +883,19 @@ static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
             this_arg = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[this_arg.slot] };
           }
         }
+        WriteArg target = instr->target;
+        if (target.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[target.slot])) {
+            fprintf(stderr, "bad bytecode - call and store in .. value??\n");
+            abort();
+          } else if (refslots[target.slot] != -1) {
+            target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[target.slot] };
+          }
+        }
         int size = sizeof(CallInstr) + sizeof(Arg) * instr->info.args_len;
         CallInstr *ci = alloca(size);
         *ci = *instr;
+        ci->target = target;
         ci->info.this_arg = this_arg;
         ci->info.fn = fn;
         for (int k = 0; k < instr->info.args_len; ++k) {
@@ -880,6 +914,184 @@ static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
         continue;
       }
       
+      if (instr_cur->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr instr = *(AccessStringKeyInstr*) instr_cur;
+        if (instr.obj.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.obj.slot])) {
+            instr.obj = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.obj.slot] };
+          } else if (refslots[instr.obj.slot] != -1) {
+            instr.obj = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.obj.slot] };
+          }
+        }
+        if (instr.target.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.target.slot])) {
+            fprintf(stderr, "bad bytecode - access key and store in .. value??\n");
+            abort();
+          } else if (refslots[instr.target.slot] != -1) {
+            instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_MOVE) {
+        MoveInstr instr = *(MoveInstr*) instr_cur;
+        if (instr.source.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.source.slot])) {
+            instr.source = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.source.slot] };
+          } else if (refslots[instr.source.slot] != -1) {
+            instr.source = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.source.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_RETURN) {
+        ReturnInstr instr = *(ReturnInstr*) instr_cur;
+        if (instr.ret.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.ret.slot])) {
+            instr.ret = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.ret.slot] };
+          } else if (refslots[instr.ret.slot] != -1) {
+            instr.ret = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.ret.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
+        SetConstraintStringKeyInstr instr = *(SetConstraintStringKeyInstr*) instr_cur;
+        if (instr.obj.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.obj.slot])) {
+            instr.obj = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.obj.slot] };
+          } else if (refslots[instr.obj.slot] != -1) {
+            instr.obj = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.obj.slot] };
+          }
+        }
+        if (instr.constraint.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.constraint.slot])) {
+            instr.constraint = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.constraint.slot] };
+          } else if (refslots[instr.constraint.slot] != -1) {
+            instr.constraint = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.constraint.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_ACCESS) {
+        AccessInstr instr = *(AccessInstr*) instr_cur;
+        if (instr.obj.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.obj.slot])) {
+            instr.obj = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.obj.slot] };
+          } else if (refslots[instr.obj.slot] != -1) {
+            instr.obj = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.obj.slot] };
+          }
+        }
+        if (instr.target.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.target.slot])) {
+            fprintf(stderr, "bad bytecode - access key and store in .. value??\n");
+            abort();
+          } else if (refslots[instr.target.slot] != -1) {
+            instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
+          }
+        }
+        if (instr.key.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.key.slot])) {
+            instr.key = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.key.slot] };
+          } else if (refslots[instr.key.slot] != -1) {
+            instr.key = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.key.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_INSTANCEOF) {
+        InstanceofInstr instr = *(InstanceofInstr*) instr_cur;
+        if (instr.obj.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.obj.slot])) {
+            instr.obj = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.obj.slot] };
+          } else if (refslots[instr.obj.slot] != -1) {
+            instr.obj = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.obj.slot] };
+          }
+        }
+        if (instr.proto.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.proto.slot])) {
+            instr.proto = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.proto.slot] };
+          } else if (refslots[instr.proto.slot] != -1) {
+            instr.proto = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.proto.slot] };
+          }
+        }
+        if (instr.target.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.target.slot])) {
+            fprintf(stderr, "bad bytecode - instanceof and store in .. value??\n");
+            abort();
+          } else if (refslots[instr.target.slot] != -1) {
+            instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_ASSIGN) {
+        AssignInstr instr = *(AssignInstr*) instr_cur;
+        if (instr.obj.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.obj.slot])) {
+            instr.obj = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.obj.slot] };
+          } else if (refslots[instr.obj.slot] != -1) {
+            instr.obj = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.obj.slot] };
+          }
+        }
+        if (instr.value.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.value.slot])) {
+            instr.value = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.value.slot] };
+          } else if (refslots[instr.value.slot] != -1) {
+            instr.value = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.value.slot] };
+          }
+        }
+        if (instr.key.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.key.slot])) {
+            instr.key = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.key.slot] };
+          } else if (refslots[instr.key.slot] != -1) {
+            instr.key = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.key.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
+      if (instr_cur->type == INSTR_ASSIGN_STRING_KEY) {
+        AssignStringKeyInstr instr = *(AssignStringKeyInstr*) instr_cur;
+        if (instr.obj.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.obj.slot])) {
+            instr.obj = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.obj.slot] };
+          } else if (refslots[instr.obj.slot] != -1) {
+            instr.obj = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.obj.slot] };
+          }
+        }
+        if (instr.value.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[instr.value.slot])) {
+            instr.value = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.value.slot] };
+          } else if (refslots[instr.value.slot] != -1) {
+            instr.value = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.value.slot] };
+          }
+        }
+        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
+        continue;
+      }
+      
       addinstr_like(builder, instr_cur, instr_size(instr_cur), instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
@@ -893,7 +1105,7 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
   
-  Value *constant_slots = find_constant_slots(uf, NULL);
+  Value *constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(builder);
@@ -913,7 +1125,9 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
             if (closed) { failed = true; break; }
             AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr_reading;
             if (aski->type != ASSIGN_PLAIN) { failed = true; break; }
-            if (aski->obj_slot != alobi->target_slot) { failed = true; break; }
+            if (aski->obj.kind != ARG_SLOT) { failed = true; break; }
+            if (aski->value.kind != ARG_SLOT) { failed = true; break; }
+            if (aski->obj.slot != alobi->target_slot) { failed = true; break; }
             
             info_ptr = realloc(info_ptr, sizeof(StaticFieldInfo) * ++info_len);
             info_ptr[info_len - 1] = (StaticFieldInfo) {0};
@@ -921,7 +1135,7 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
             info->name_ptr = aski->key;
             info->name_len = strlen(aski->key);
             info->name_hash = hash(info->name_ptr, info->name_len);
-            info->slot = aski->value_slot;
+            info->slot = aski->value.slot;
             info->refslot = -1;
             
             instr_reading = (Instr*) (aski + 1);
@@ -952,17 +1166,20 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
           }
         }
         if (!failed) {
-          while (instr_reading != instr_end && instr_reading->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
+          while (instr_reading != instr_end && instr_reading->type == INSTR_SET_CONSTRAINT_STRING_KEY
+            && ((SetConstraintStringKeyInstr*)instr_reading)->obj.kind == ARG_SLOT)
+          {
             SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr_reading;
             
-            if (scski->obj_slot != alobi->target_slot) break;
-            if (!IS_OBJ(constant_slots[scski->constraint_slot])) break; // wat wat
+            if (scski->obj.slot != alobi->target_slot) break;
+            if (scski->constraint.kind != ARG_SLOT) break;
+            if (!IS_OBJ(constant_slots[scski->constraint.slot])) break; // wat wat
             
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
               if (info->name_len == scski->key_len && strncmp(info->name_ptr, scski->key_ptr, info->name_len) == 0) {
                 if (info->constraint) abort(); // wat wat wat
-                info->constraint = AS_OBJ(constant_slots[scski->constraint_slot]);
+                info->constraint = AS_OBJ(constant_slots[scski->constraint.slot]);
               }
             }
             
@@ -1157,7 +1374,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     cfg_destroy(&cfg);
   }
   
-  uf = inline_constant_calls(state, uf);
+  uf = inline_constant_slots(state, uf);
   
   // must be late!
   uf = fuse_static_object_alloc(state, uf);

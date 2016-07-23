@@ -118,12 +118,12 @@ int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
       .type = INSTR_ACCESS,
       .belongs_to = NULL
     },
-    .obj_slot = obj_slot,
-    .key_slot = key_slot,
-    .target_slot = builder->slot_base++
+    .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
+    .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type) {
@@ -132,9 +132,9 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
       .type = INSTR_ASSIGN,
       .belongs_to = NULL
     },
-    .obj_slot = obj,
-    .value_slot = slot,
-    .key_slot = key_slot,
+    .obj = (Arg) { .kind = ARG_SLOT, .slot = obj },
+    .value = (Arg) { .kind = ARG_SLOT, .slot = slot },
+    .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
     .target_slot = builder->slot_base++,
     .type = type
   };
@@ -161,12 +161,12 @@ int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot) 
       .type = INSTR_INSTANCEOF,
       .belongs_to = NULL
     },
-    .obj_slot = obj_slot,
-    .proto_slot = proto_slot,
-    .target_slot = builder->slot_base++
+    .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
+    .proto = (Arg) { .kind = ARG_SLOT, .slot = proto_slot },
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slot, int cons_slot) {
@@ -175,9 +175,9 @@ void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slo
       .type = INSTR_SET_CONSTRAINT,
       .belongs_to = NULL
     },
-    .obj_slot = obj_slot,
-    .key_slot = key_slot,
-    .constraint_slot = cons_slot
+    .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
+    .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
+    .constraint = (Arg) { .kind = ARG_SLOT, .slot = cons_slot }
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
 }
@@ -301,12 +301,12 @@ int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr
   instr->info.fn = (Arg) { .kind = ARG_SLOT, .slot = fn };
   instr->info.this_arg = (Arg) { .kind = ARG_SLOT, .slot = this_slot };
   instr->info.args_len = args_len;
-  instr->target_slot = builder->slot_base++;
+  instr->target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ };
   for (int i = 0; i < args_len; ++i) {
     ((Arg*)(&instr->info + 1))[i] = (Arg) { .kind = ARG_SLOT, .slot = args_ptr[i] };
   }
   addinstr(builder, sizeof(*instr) + sizeof(Arg) * args_len, (Instr*) instr);
-  return instr->target_slot;
+  return instr->target.slot;
 }
 
 int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot) {
@@ -375,7 +375,7 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
       .type = INSTR_RETURN,
       .belongs_to = NULL
     },
-    .ret_slot = slot
+    .ret = (Arg) { .kind = ARG_SLOT, .slot = slot }
   };
   
   addinstr(builder, sizeof(instr), (Instr*) &instr);
@@ -399,29 +399,14 @@ int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key) {
   return instr.target_refslot;
 }
 
-void addinstr_read_refslot(FunctionBuilder *builder, int source_refslot, int target_slot, char *opt_info) {
-  ReadRefslotInstr instr = {
+void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target) {
+  MoveInstr instr = {
     .base = {
-      .type = INSTR_READ_REFSLOT,
+      .type = INSTR_MOVE,
       .belongs_to = NULL
     },
-    .source_refslot = source_refslot,
-    .target_slot = target_slot,
-    .opt_info = opt_info
-  };
-  
-  addinstr(builder, sizeof(instr), (Instr*) &instr);
-}
-
-void addinstr_write_refslot(FunctionBuilder *builder, int source_slot, int target_refslot, char *opt_info) {
-  WriteRefslotInstr instr = {
-    .base = {
-      .type = INSTR_WRITE_REFSLOT,
-      .belongs_to = NULL
-    },
-    .source_slot = source_slot,
-    .target_refslot = target_refslot,
-    .opt_info = opt_info
+    .source = source,
+    .target = target
   };
   
   addinstr(builder, sizeof(instr), (Instr*) &instr);

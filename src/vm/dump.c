@@ -59,8 +59,10 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((FreezeObjectInstr*) instr + 1);
       break;
     case INSTR_ACCESS:
-      fprintf(stderr, "access: %%%i = %%%i . %%%i\n",
-              ((AccessInstr*) instr)->target_slot, ((AccessInstr*) instr)->obj_slot, ((AccessInstr*) instr)->key_slot);
+      fprintf(stderr, "access: %s = %s . %s\n",
+              get_write_arg_info(((AccessInstr*) instr)->target),
+              get_arg_info(((AccessInstr*) instr)->obj),
+              get_arg_info(((AccessInstr*) instr)->key));
       *instr_p = (Instr*) ((AccessInstr*) instr + 1);
       break;
     case INSTR_ASSIGN:
@@ -68,9 +70,11 @@ void dump_instr(VMState *state, Instr **instr_p) {
       char *mode = "(plain)";
       if (((AssignInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
-      fprintf(stderr, "assign%s: (%%%i=) %%%i . %%%i = %%%i\n",
-              mode, ((AssignInstr*) instr)->target_slot, ((AssignInstr*) instr)->obj_slot,
-              ((AssignInstr*) instr)->key_slot, ((AssignInstr*) instr)->value_slot);
+      fprintf(stderr, "assign%s: (%%%i=) %s . %s = %s\n",
+              mode, ((AssignInstr*) instr)->target_slot,
+              get_arg_info(((AssignInstr*) instr)->obj),
+              get_arg_info(((AssignInstr*) instr)->key),
+              get_arg_info(((AssignInstr*) instr)->value));
       *instr_p = (Instr*) ((AssignInstr*) instr + 1);
       break;
     }
@@ -80,23 +84,27 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((KeyInObjInstr*) instr + 1);
       break;
     case INSTR_INSTANCEOF:
-      fprintf(stderr, "instance of: %%%i = %%%i instanceof %%%i\n",
-              ((InstanceofInstr*) instr)->target_slot, ((InstanceofInstr*) instr)->obj_slot, ((InstanceofInstr*) instr)->proto_slot);
+      fprintf(stderr, "instance of: %s = %s instanceof %s\n",
+              get_write_arg_info(((InstanceofInstr*) instr)->target),
+              get_arg_info(((InstanceofInstr*) instr)->obj),
+              get_arg_info(((InstanceofInstr*) instr)->proto));
       *instr_p = (Instr*) ((InstanceofInstr*) instr + 1);
       break;
     case INSTR_SET_CONSTRAINT:
     {
       SetConstraintInstr *sci = (SetConstraintInstr*) instr;
-      fprintf(stderr, "set constraint: %%%i . %%%i : %%%i\n",
-              sci->obj_slot, sci->key_slot, sci->constraint_slot);
+      fprintf(stderr, "set constraint: %s . %s : %s\n",
+              get_arg_info(sci->obj),
+              get_arg_info(sci->key),
+              get_arg_info(sci->constraint));
       *instr_p = (Instr*) (sci + 1);
       break;
     }
     case INSTR_CALL:
     {
       CallInstr *ci = (CallInstr*) instr;
-      fprintf(stderr, "call: %%%i = %s . %s ( ",
-              ci->target_slot, get_arg_info(ci->info.this_arg), get_arg_info(ci->info.fn));
+      fprintf(stderr, "call: %s = %s . %s ( ",
+              get_write_arg_info(ci->target), get_arg_info(ci->info.this_arg), get_arg_info(ci->info.fn));
       for (int i = 0; i < ci->info.args_len; ++i) {
         if (i) fprintf(stderr, ", ");
         fprintf(stderr, "%s", get_arg_info(((Arg*)(ci + 1))[i]));
@@ -106,7 +114,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     }
     case INSTR_RETURN:
-      fprintf(stderr, "return: %%%i\n", ((ReturnInstr*) instr)->ret_slot);
+      fprintf(stderr, "return: %s\n", get_arg_info(((ReturnInstr*) instr)->ret));
       *instr_p = (Instr*) ((ReturnInstr*) instr + 1);
       break;
     case INSTR_BR:
@@ -127,8 +135,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     }
     case INSTR_ACCESS_STRING_KEY:
-      fprintf(stderr, "access: %%%i = %%%i . '%.*s' \t\t(opt: string key, scratch %%%i)\n",
-              ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot,
+      fprintf(stderr, "access: %s = %s . '%.*s' \t\t(opt: string key, scratch %%%i)\n",
+              get_write_arg_info(((AccessStringKeyInstr*) instr)->target),
+              get_arg_info(((AccessStringKeyInstr*) instr)->obj),
               ((AccessStringKeyInstr*) instr)->key_len, ((AccessStringKeyInstr*) instr)->key_ptr,
               ((AccessStringKeyInstr*) instr)->key_slot);
       *instr_p = (Instr*) ((AccessStringKeyInstr*) instr + 1);
@@ -138,25 +147,22 @@ void dump_instr(VMState *state, Instr **instr_p) {
       char *mode = "(plain)";
       if (((AssignStringKeyInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignStringKeyInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
-      fprintf(stderr, "assign%s: %%%i . '%s' = %%%i \t\t(opt: string key)\n",
-              mode, ((AssignStringKeyInstr*) instr)->obj_slot, ((AssignStringKeyInstr*) instr)->key, ((AssignStringKeyInstr*) instr)->value_slot);
+      fprintf(stderr, "assign%s: %s . '%s' = %s \t\t(opt: string key)\n",
+              mode,
+              get_arg_info(((AssignStringKeyInstr*) instr)->obj),
+              ((AssignStringKeyInstr*) instr)->key,
+              get_arg_info(((AssignStringKeyInstr*) instr)->value));
       *instr_p = (Instr*) ((AssignStringKeyInstr*) instr + 1);
       break;
     }
     case INSTR_SET_CONSTRAINT_STRING_KEY:
     {
       SetConstraintStringKeyInstr *sci = (SetConstraintStringKeyInstr*) instr;
-      fprintf(stderr, "set constraint: %%%i . '%.*s' : %%%i \t\t(opt: string key)\n",
-              sci->obj_slot, sci->key_len, sci->key_ptr, sci->constraint_slot);
+      fprintf(stderr, "set constraint: %s . '%.*s' : %s \t\t(opt: string key)\n",
+              get_arg_info(sci->obj),
+              sci->key_len, sci->key_ptr,
+              get_arg_info(sci->constraint));;
       *instr_p = (Instr*) (sci + 1);
-      break;
-    }
-    case INSTR_SET_SLOT:
-    {
-      SetSlotInstr *ssi = (SetSlotInstr*) instr;
-      fprintf(stderr, "set slot: %%%i = %s", ssi->target_slot, get_val_info(ssi->value));
-      fprintf(stderr, " \t\t (opt: %s)\n", ssi->opt_info);
-      *instr_p = (Instr*) (ssi + 1);
       break;
     }
     case INSTR_DEFINE_REFSLOT:
@@ -167,20 +173,12 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) (dri + 1);
       break;
     }
-    case INSTR_READ_REFSLOT:
+    case INSTR_MOVE:
     {
-      ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
-      fprintf(stderr, "read refslot: %%%i = &%i \t\t (opt: %s)\n",
-              rri->target_slot, rri->source_refslot, rri->opt_info);
-      *instr_p = (Instr*) (rri + 1);
-      break;
-    }
-    case INSTR_WRITE_REFSLOT:
-    {
-      WriteRefslotInstr *wri = (WriteRefslotInstr*) instr;
-      fprintf(stderr, "write refslot: &%i = %%%i \t\t (opt: %s)\n",
-              wri->target_refslot, wri->source_slot, wri->opt_info);
-      *instr_p = (Instr*) (wri + 1);
+      MoveInstr *mi = (MoveInstr*) instr;
+      fprintf(stderr, "move: %s = %s \t %s\n",
+              get_write_arg_info(mi->target), get_arg_info(mi->source), mi->opt_info);
+      *instr_p = (Instr*) (mi + 1);
       break;
     }
     case INSTR_ALLOC_STATIC_OBJECT:
