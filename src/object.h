@@ -7,62 +7,17 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#include "core.h"
 #include "hash.h"
 #include "util.h"
 #include "vm/instr.h"
-
-typedef enum {
-  OBJ_NONE = 0,
-  OBJ_CLOSED = 0x1, // no entries can be added or removed
-  OBJ_FROZEN = 0x2, // no entries' values can be changed, no entries can be removed
-  OBJ_NOINHERIT = 0x4, // don't allow the user to use this as a prototype
-                       // used for prototypes of objects with payload,
-                       // like int or float, that have their own alloc functions.
-                       // you can still prototype the objects themselves though.
-  OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
-  OBJ_PRIMITIVE = 0x10,// no table, no mark_fn
-  OBJ_PRIMITIVE_VALUE = OBJ_FROZEN | OBJ_CLOSED | OBJ_PRIMITIVE | OBJ_NOINHERIT, // primitive must entail noinherit!
-  OBJ_IMMORTAL = 0x20, // will never be freed
-} ObjectFlags;
-
-struct _VMState;
-typedef struct _VMState VMState;
-
-// for debugging specific objects
-#define COUNT_OBJECTS 0
-
-struct _Object {
-  Object *parent;
-  int size;
-  ObjectFlags flags;
-  Object *prev; // for gc
-#if COUNT_OBJECTS
-  int alloc_id;
-#endif
-  
-  union {
-    struct {
-      HashTable tbl;
-      void (*mark_fn)(VMState *state, Object *obj); // for gc
-    };
-    int int_value;
-    float float_value;
-    bool bool_value;
-    struct {
-      union { int _int; float _float; bool _bool; };
-      int _primitive_end_marker;
-    };
-  };
-};
-
-#define PRIMITIVE_OBJ_SIZE offsetof(Object, _primitive_end_marker)
 
 struct _GCRootSet;
 typedef struct _GCRootSet GCRootSet;
 
 struct _GCRootSet {
-  Object **objects;
-  int num_objects;
+  Value *values;
+  int num_values;
   GCRootSet *prev, *next;
 };
 
@@ -86,14 +41,14 @@ typedef struct {
 typedef struct _Callframe Callframe;
 struct _Callframe {
   UserFunction *uf;
-  Object **slots_ptr; int slots_len;
-  Object ***refslots_ptr; int refslots_len; // references to values in closed objects
+  Value *slots_ptr; int slots_len;
+  Value **refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots; // gc entries
   Instr *instr_ptr;
   // overrides instr_ptr->belongs_to, used when in a call
   // double pointer due to Dark Magic
   FileRange **backtrace_belongs_to_p;
-  Object **target_slot; // when returning to this frame, assign result value to this slot
+  Value *target_slot; // when returning to this frame, assign result value to this slot
   int block, prev_block; // required for phi nodes
   Callframe *above;
 };
@@ -114,10 +69,6 @@ typedef struct {
 void save_profile_output(char *file, TextRange source, VMProfileState *profile_state);
 
 typedef struct {
-  Object *bool_false, *bool_true;
-  // I could speed up int math a lot with an array here, but that wouldn't do anything for floats.
-  // TODO maybe later.
-  Object *int_zero;
   Object *int_base, *bool_base, *float_base;
   Object *closure_base, *function_base;
   Object *array_base, *string_base, *pointer_base;
@@ -148,31 +99,35 @@ struct _VMState {
   Callframe *frame;
   
   Object *root;
-  Object *exit_value; // set when the last stackframe returns
+  Value exit_value; // set when the last stackframe returns
   
   VMRunState runstate;
   char *error;
   char *backtrace; int backtrace_depth;
 };
 
-Object **object_lookup_ref(Object *obj, const char *key);
+Value *object_lookup_ref(Object *obj, const char *key);
 
-Object **object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash);
+Value *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash);
 
-Object *object_lookup(Object *obj, const char *key, bool *key_found);
+Value object_lookup(Object *obj, const char *key, bool *key_found);
 
-Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash, bool *key_found);
+Value object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash, bool *key_found_p);
+
+Object *closest_obj(VMState *state, Value val);
+
+Object *proto_obj(VMState *state, Value val);
 
 #define OBJECT_LOOKUP_STRING(obj, key, key_found) object_lookup_with_hash(obj, key, strlen(key), hash(key, strlen(key)), key_found)
 
 // returns NULL on success, error string otherwise
-char *object_set_existing(Object *obj, const char *key, Object *value);
+char *object_set_existing(VMState *state, Object *obj, const char *key, Value value);
 
-char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *value_set);
+char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value value, bool *value_set);
 
 char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint);
 
-char *object_set(Object *obj, const char *key, Object *value);
+char *object_set(VMState *state, Object *obj, const char *key, Value value);
 
 void obj_mark(VMState *state, Object *obj);
 
@@ -183,11 +138,13 @@ Object *obj_instance_of(Object *obj, Object *proto);
 
 Object *obj_instance_of_or_equal(Object *obj, Object *proto);
 
-bool obj_is_truthy(VMState *state, Object *obj);
+bool value_instance_of(VMState *state, Value val, Object *proto);
 
-char *get_type_info(VMState*, Object*);
+bool value_is_truthy(Value value);
 
-typedef void (*VMFunctionPointer)(VMState *state, Object *thisptr, Object *fn, Object **args_ptr, int args_len);
+char *get_type_info(VMState*, Value);
+
+typedef void (*VMFunctionPointer)(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len);
 
 typedef struct {
   Object base;
@@ -209,7 +166,7 @@ typedef struct {
 
 typedef struct {
   Object base;
-  Object **ptr;
+  Value *ptr;
   int length;
 } ArrayObject;
 
@@ -221,31 +178,27 @@ typedef struct {
 
 void *alloc_object_internal(VMState *state, int size);
 
-Object *alloc_object(VMState *state, Object *parent);
+Value make_object(VMState *state, Object *parent);
 
-Object *alloc_int(VMState *state, int value);
+Value make_int(VMState *state, int value);
 
-Object *alloc_float(VMState *state, float value);
+Value make_float(VMState *state, float value);
 
-Object *alloc_string(VMState *state, const char *ptr, int len);
+Value make_string(VMState *state, const char *ptr, int len);
 
-Object *alloc_string_foreign(VMState *state, char *value);
+Value make_string_foreign(VMState *state, char *value);
 
-// returns bool object from value cache
-Object *alloc_bool(VMState *state, bool value);
+Value make_bool(VMState *state, bool value);
 
-// returns newly allocated bool object (used to initialize value_cache)
-Object *alloc_bool_uncached(VMState *state, bool value);
+Value make_array(VMState *state, Value *ptr, int length);
 
-Object *alloc_array(VMState *state, Object **ptr, Object *length);
+Value make_ptr(VMState *state, void *ptr);
 
-Object *alloc_ptr(VMState *state, void *ptr);
+Value make_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom);
 
-Object *alloc_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom);
+Value make_fn(VMState *state, VMFunctionPointer fn);
 
-Object *alloc_fn(VMState *state, VMFunctionPointer fn);
-
-Object *alloc_custom_gc(VMState *state);
+Value make_custom_gc(VMState *state);
 
 // here so that object.c can use it
 void gc_enable(VMState *state);

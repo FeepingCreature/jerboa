@@ -54,43 +54,55 @@ void cache_free(int size, void *ptr) {
   free(ptr);
 }
 
-Object **object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
-  if (obj->flags & OBJ_PRIMITIVE) obj = obj->parent; // parent can't be primitive
+Value *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
   while (obj) {
-    Object **value_p = (Object**) &table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv)->value;
-    if (value_p) return value_p;
+    TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
+    if (entry) return &entry->value;
     obj = obj->parent;
   }
   return NULL;
 }
 
-Object **object_lookup_ref(Object *obj, const char *key_ptr) {
+Value *object_lookup_ref(Object *obj, const char *key_ptr) {
   size_t len = strlen(key_ptr);
   size_t hashv = hash(key_ptr, len);
   return object_lookup_ref_with_hash(obj, key_ptr, len, hashv);
 }
 
-Object *object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
+Value object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
   if (!key_found_p) {
-    if (obj->flags & OBJ_PRIMITIVE) obj = obj->parent; // only the leaf can be primitive
     while (obj) {
       TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
       if (entry) return entry->value;
       obj = obj->parent;
     }
-    return NULL;
+    return VNULL;
   }
-  if (obj->flags & OBJ_PRIMITIVE) obj = obj->parent; // we know parents aren't primitive
   while (obj) {
     TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
     if (entry) { *key_found_p = true; return entry->value; }
     obj = obj->parent;
   }
   *key_found_p = false;
-  return NULL;
+  return VNULL;
 }
 
-Object *object_lookup(Object *obj, const char *key_ptr, bool *key_found_p) {
+Object *closest_obj(VMState *state, Value val) {
+  if (IS_NULL(val)) return NULL;
+  if (IS_INT(val)) return state->shared->vcache.int_base;
+  if (IS_BOOL(val)) return state->shared->vcache.bool_base;
+  if (IS_FLOAT(val)) return state->shared->vcache.float_base;
+  return AS_OBJ(val);
+}
+
+Object *proto_obj(VMState *state, Value val) {
+  if (IS_INT(val)) return state->shared->vcache.int_base;
+  if (IS_BOOL(val)) return state->shared->vcache.bool_base;
+  if (IS_FLOAT(val)) return state->shared->vcache.float_base;
+  return AS_OBJ(val)->parent;
+}
+
+Value object_lookup(Object *obj, const char *key_ptr, bool *key_found_p) {
   size_t len = strlen(key_ptr);
   size_t hashv = hash(key_ptr, len);
   return object_lookup_with_hash(obj, key_ptr, len, hashv, key_found_p);
@@ -105,13 +117,11 @@ void obj_mark(VMState *state, Object *obj) {
   
   obj_mark(state, obj->parent);
   
-  if (obj->flags & OBJ_PRIMITIVE) return;
-  
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr) {
-      obj_mark(state, entry->value);
+    if (entry->name_ptr && IS_OBJ(entry->value)) {
+      obj_mark(state, AS_OBJ(entry->value));
     }
   }
   
@@ -121,9 +131,7 @@ void obj_mark(VMState *state, Object *obj) {
 }
 
 void obj_free(Object *obj) {
-  if (!(obj->flags & OBJ_PRIMITIVE)) {
-    cache_free(sizeof(TableEntry) * obj->tbl.entries_num, obj->tbl.entries_ptr);
-  }
+  cache_free(sizeof(TableEntry) * obj->tbl.entries_num, obj->tbl.entries_ptr);
   cache_free(obj->size, obj);
 }
 
@@ -144,44 +152,59 @@ Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
   return obj_instance_of(obj, proto);
 }
 
-bool obj_is_truthy(VMState *state, Object *obj) {
-  if (!obj) return false;
-  Object *int_base = state->shared->vcache.int_base;
-  Object *bool_base = state->shared->vcache.bool_base;
-  if (obj->parent == bool_base) {
-    return obj->bool_value;
+bool value_instance_of(VMState *state, Value val, Object *proto) {
+  if (proto == NULL) {
+    fprintf(stderr, "vacuous case\n");
+    abort();
   }
-  if (obj->parent == int_base) {
-    return obj->int_value != 0;
+  if (IS_NULL(val)) return false;
+  Object *obj = proto_obj(state, val);
+  while (obj) {
+    if (obj == proto) return true;
+    obj = obj->parent;
   }
+  return false;
+}
+
+bool value_is_truthy(Value value) {
+  if (IS_NULL(value)) return false;
+  if (IS_BOOL(value)) return AS_BOOL(value);
+  if (IS_INT(value)) return AS_INT(value) != 0;
   return true;
+}
+
+static bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constraint) {
+  if (!constraint) return true;
+  if (IS_NULL(value)) return false;
+  if (IS_INT(value)) return constraint == sstate->vcache.int_base;
+  if (IS_BOOL(value)) return constraint == sstate->vcache.bool_base;
+  if (IS_FLOAT(value)) return constraint == sstate->vcache.float_base;
+  return AS_OBJ(value)->parent == constraint;
 }
 
 // returns error or null
 char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint) {
   assert(obj != NULL);
-  if (obj->flags & OBJ_PRIMITIVE) { fprintf(stderr, "internal error\n"); abort(); }
   TableEntry *entry = table_lookup(&obj->tbl, key_ptr, key_len);
   if (!constraint) return "tried to set constraint that was null";
   if (!entry) return "tried to set constraint on a key that was not yet defined!";
-  if (entry->value_aux) return "tried to set constraint, but key already had a constraint!";
-  Object *existing_value = entry->value;
-  if (!existing_value || existing_value->parent != constraint) {
+  if (entry->constraint) return "tried to set constraint, but key already had a constraint!";
+  Value existing_value = entry->value;
+  if (!value_fits_constraint(state->shared, existing_value, constraint)) {
     return my_asprintf("value failed type constraint: constraint was %s, but value was %s",
-                       get_type_info(state, constraint), get_type_info(state, existing_value));
+                       get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, existing_value));
   }
   // There is no need to check flags here - constraints cannot be changed and don't modify existing data.
-  entry->value_aux = (void*) constraint;
+  entry->constraint = constraint;
   return NULL;
 }
 
 // change a property in-place
 // returns an error string or NULL
-char *object_set_existing(Object *obj, const char *key, Object *value) {
+char *object_set_existing(VMState *state, Object *obj, const char *key, Value value) {
   int len = strlen(key);
   assert(obj != NULL);
   Object *current = obj;
-  if (current->flags & OBJ_PRIMITIVE) current = current->parent; // primitive entails noinherit
   while (current) {
     TableEntry *entry = table_lookup(&current->tbl, key, len);
     if (entry != NULL) {
@@ -190,7 +213,7 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
         if (-1 == asprintf(&error, "Tried to set existing key '%s', but object %p was frozen.", key, (void*) current)) abort();
         return error;
       }
-      if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+      if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint violated on assignment";
       }
       entry->value = value;
@@ -205,22 +228,21 @@ char *object_set_existing(Object *obj, const char *key, Object *value) {
 
 // change a property but only if it exists somewhere in the prototype chain
 // returns error or null on success
-char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *value_set) {
+char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value value, bool *value_set) {
   int len = strlen(key);
   assert(obj != NULL);
   Object *current = obj;
-  if (current->flags & OBJ_PRIMITIVE) current = current->parent; // skip the primitive leaf
   while (current) {
     TableEntry *entry = table_lookup(&current->tbl, key, len);
     if (entry) {
-      if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+      if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint violated on shadowing assignment";
       }
       // so create it in obj (not current!)
-      object_set(obj, key, value);
-      if (entry->value_aux) {
+      object_set(state, obj, key, value);
+      if (entry->constraint) {
         // propagate constraint
-        char *error = object_set_constraint(NULL, obj, key, len, (Object*) entry->value_aux);
+        char *error = object_set_constraint(state, obj, key, len, entry->constraint);
         if (error) return error;
       }
       *value_set = true;
@@ -233,17 +255,16 @@ char *object_set_shadowing(Object *obj, const char *key, Object *value, bool *va
 }
 
 // returns error or null
-char *object_set(Object *obj, const char *key, Object *value) {
+char *object_set(VMState *state, Object *obj, const char *key, Value value) {
   int len = strlen(key);
   assert(obj != NULL);
-  if (obj->flags & OBJ_PRIMITIVE) { fprintf(stderr, "set key on primitive - bad!\n"); abort(); }
   
   // check constraints in parents
   Object *current = obj->parent;
   while (current) {
     TableEntry *entry = table_lookup(&current->tbl, key, len);
     if (entry) {
-      if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+      if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint in parent violated on assignment";
       }
     }
@@ -255,13 +276,13 @@ char *object_set(Object *obj, const char *key, Object *value) {
   TableEntry *entry = table_lookup_alloc(&obj->tbl, key, len, &freeptr);
   if (entry) {
     assert(!(obj->flags & OBJ_FROZEN));
-    if (entry->value_aux && (!value || value->parent != (Object*) entry->value_aux)) {
+    if (!value_fits_constraint(state->shared, value, entry->constraint)) {
       return "type constraint violated on assignment";
     }
-    entry->value = (void*) value;
+    entry->value = value;
   } else {
     assert(!(obj->flags & OBJ_CLOSED));
-    freeptr->value = (void*) value;
+    freeptr->value = value;
   }
   return NULL;
 }
@@ -290,52 +311,25 @@ void *alloc_object_internal(VMState *state, int size) {
   return res;
 }
 
-Object *alloc_object(VMState *state, Object *parent) {
+Value make_object(VMState *state, Object *parent) {
   Object *obj = alloc_object_internal(state, sizeof(Object));
   obj->parent = parent;
-  return obj;
+  return OBJ2VAL(obj);
 }
 
-Object *alloc_int(VMState *state, int value) {
-  Object *obj = alloc_object_internal(state, PRIMITIVE_OBJ_SIZE);
-  obj->parent = state->shared->vcache.int_base;
-  // let us replace obj_instance_of with a simple "parent =="
-  // also prevent variations and modifications
-  // this is important to allow the optimizer to treat all ints interchangeably
-  // which permits type specialization
-  obj->flags = OBJ_PRIMITIVE_VALUE;
-  
-  obj->int_value = value;
-  return (Object*) obj;
+Value make_int(VMState *state, int value) {
+  return INT2VAL(value);
 }
 
-Object *alloc_bool_uncached(VMState *state, bool value) {
-  Object *obj = alloc_object_internal(state, PRIMITIVE_OBJ_SIZE);
-  obj->parent = state->shared->vcache.bool_base;
-  // see alloc_int
-  obj->flags = OBJ_PRIMITIVE_VALUE;
-  obj->bool_value = value;
-  return (Object*) obj;
+Value make_bool(VMState *state, bool value) {
+  return BOOL2VAL(value);
 }
 
-Object *alloc_bool(VMState *state, bool value) {
-  if (value == true) {
-    return state->shared->vcache.bool_true;
-  } else {
-    return state->shared->vcache.bool_false;
-  }
+Value make_float(VMState *state, float value) {
+  return FLOAT2VAL(value);
 }
 
-Object *alloc_float(VMState *state, float value) {
-  Object *obj = alloc_object_internal(state, PRIMITIVE_OBJ_SIZE);
-  obj->parent = state->shared->vcache.float_base;
-  // see alloc_int
-  obj->flags = OBJ_PRIMITIVE_VALUE;
-  obj->float_value = value;
-  return (Object*) obj;
-}
-
-Object *alloc_string(VMState *state, const char *ptr, int len) {
+Value make_string(VMState *state, const char *ptr, int len) {
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
   obj->base.parent = state->shared->vcache.string_base;
@@ -343,56 +337,57 @@ Object *alloc_string(VMState *state, const char *ptr, int len) {
   obj->value = ((char*) obj) + sizeof(StringObject);
   strncpy(obj->value, ptr, len);
   obj->value[len] = 0;
-  return (Object*) obj;
+  return OBJ2VAL((Object*) obj);
 }
 
-Object *alloc_string_foreign(VMState *state, char *value) {
+Value make_string_foreign(VMState *state, char *value) {
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->value = value;
-  return (Object*) obj;
+  return OBJ2VAL((Object*) obj);
 }
 
 static void array_mark_fn(VMState *state, Object *obj) {
   ArrayObject *arr_obj = (ArrayObject*) obj;
   if (arr_obj) { // else it's obj == array_base
     for (int i = 0; i < arr_obj->length; ++i) {
-      obj_mark(state, arr_obj->ptr[i]);
+      Value v = arr_obj->ptr[i];
+      if (IS_OBJ(v)) obj_mark(state, AS_OBJ(v));
     }
   }
 }
 
-Object *alloc_array(VMState *state, Object **ptr, Object *length) {
+Value make_array(VMState *state, Value *ptr, int length) {
   ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
   obj->base.parent = state->shared->vcache.array_base;
   obj->base.mark_fn = array_mark_fn;
   obj->ptr = ptr;
-  obj->length = length->int_value;
-  object_set((Object*) obj, "length", (Object*) length);
-  return (Object*) obj;
+  obj->length = length;
+  object_set(state, (Object*) obj, "length", INT2VAL(length));
+  return OBJ2VAL((Object*) obj);
 }
 
-Object *alloc_ptr(VMState *state, void *ptr) {
+Value make_ptr(VMState *state, void *ptr) {
   PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject));
   obj->base.parent = state->shared->vcache.pointer_base;
   // see alloc_int
   obj->base.flags = OBJ_NOINHERIT;
   obj->ptr = ptr;
-  return (Object*) obj;
+  return OBJ2VAL((Object*) obj);
 }
 
 // used to allocate "special functions" like ffi functions, that need to store more data
-Object *alloc_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom) {
+Value make_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom) {
   assert(size_custom >= sizeof(FunctionObject));
   FunctionObject *obj = alloc_object_internal(state, size_custom);
   obj->base.parent = state->shared->vcache.function_base;
   obj->fn_ptr = fn;
-  return (Object*) obj;
+  return OBJ2VAL((Object*) obj);
 }
 
-Object *alloc_fn(VMState *state, VMFunctionPointer fn) {
-  return alloc_fn_custom(state, fn, sizeof(FunctionObject));
+Value make_fn(VMState *state, VMFunctionPointer fn) {
+  return make_fn_custom(state, fn, sizeof(FunctionObject));
 }
 
 // TODO move elsewhere
@@ -456,7 +451,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
     TableEntry *entry = &direct_table->entries_ptr[i];
     if (entry->name_ptr) {
       FileRange *range = *(FileRange**) entry->name_ptr; // This hurts my soul.
-      int samples = (intptr_t) entry->value;
+      int samples = entry->value.i;
       // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_direct) max_samples_direct = samples;
       sum_samples_direct += samples;
@@ -467,7 +462,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
     TableEntry *entry = &indirect_table->entries_ptr[i];
     if (entry->name_ptr) {
       FileRange *range = *(FileRange**) entry->name_ptr;
-      int samples = (intptr_t) entry->value;
+      int samples = entry->value.i;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_indirect) max_samples_indirect = samples;
       sum_samples_indirect += samples;

@@ -3,28 +3,9 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include "core.h"
 
 #define UNLIKELY(X) __builtin_expect(X, 0)
-
-struct _TableEntry;
-typedef struct _TableEntry TableEntry;
-
-struct _TableEntry {
-  const char *name_ptr;
-  size_t name_len;
-  void *value;
-  void *value_aux;
-};
-
-// TODO actually use
-#define TBL_GRAVESTONE = ((const char*) -1);
-
-typedef struct {
-  TableEntry *entries_ptr;
-  int entries_num;
-  int entries_stored;
-  size_t bloom;
-} HashTable;
 
 TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) __attribute__ ((pure));
 
@@ -35,6 +16,9 @@ TableEntry *table_lookup_alloc(HashTable *tbl, const char *key_ptr, size_t key_l
 
 // added in case you've already precomputed the hash for other reasons, and wanna avoid double computing it
 TableEntry *table_lookup_alloc_with_hash(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, TableEntry** first_free_ptr);
+
+// fastpath: for creation of {"this"} object
+void create_table_with_single_entry(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, Value value);
 
 // thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
 static inline size_t hash(const char *ptr, int len) {

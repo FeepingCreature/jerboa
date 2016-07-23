@@ -38,12 +38,13 @@ int main(int argc, char **argv) {
   
   init_instr_fn_table();
   
-  vm_alloc_frame(&vmstate, 0, 0);
+  // vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);
-  vm_remove_frame(&vmstate);
+  Value rootval = OBJ2VAL(root);
+  // vm_remove_frame(&vmstate);
   
   GCRootSet set;
-  gc_add_roots(&vmstate, &root, 1, &set);
+  gc_add_roots(&vmstate, &rootval, 1, &set);
   
   TextRange source = readfile(argv[1]);
   register_file(source, argv[1], 0, 0);
@@ -57,13 +58,13 @@ int main(int argc, char **argv) {
   assert(res == PARSE_OK);
   
   int args_len = argc - 2;
-  Object **args_ptr = malloc(sizeof(Object*) * args_len);
+  Value *args_ptr = malloc(sizeof(Value) * args_len);
   for (int i = 2; i < argc; ++i) {
-    args_ptr[i - 2] = alloc_string(&vmstate, argv[i], strlen(argv[i]));
+    args_ptr[i - 2] = make_string(&vmstate, argv[i], strlen(argv[i]));
   }
   
-  Object *args = alloc_array(&vmstate, args_ptr, alloc_int(&vmstate, args_len));
-  object_set(root, "arguments", args);
+  Value args = make_array(&vmstate, args_ptr, args_len);
+  object_set(&vmstate, root, "arguments", args);
   
   if (vmstate.shared->verbose) {
     dump_fn(&vmstate, module);

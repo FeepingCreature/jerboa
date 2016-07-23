@@ -66,6 +66,20 @@ TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) {
   return table_lookup_with_hash_internal(tbl, key_ptr, key_len, hashv);
 }
 
+void create_table_with_single_entry(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, Value value) {
+  assert(tbl->entries_num == 0);
+  tbl->entries_ptr = cache_alloc(sizeof(TableEntry) * 1);
+  tbl->entries_num = 1;
+  tbl->entries_stored = 1;
+  tbl->bloom = key_hash;
+  tbl->entries_ptr[0] = (TableEntry) {
+    .name_ptr = key_ptr,
+    .name_len = key_len,
+    .value = value,
+    .constraint = NULL
+  };
+}
+
 static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, TableEntry** first_free_ptr) {
   assert(key_ptr != NULL);
   *first_free_ptr = NULL;
@@ -119,7 +133,7 @@ static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const c
         TableEntry *nope = table_lookup_alloc(&newtable, entry->name_ptr, entry->name_len, &freeptr);
         (void) nope; assert(nope == NULL); // double entry??
         freeptr->value = entry->value;
-        freeptr->value_aux = entry->value_aux;
+        freeptr->constraint = entry->constraint;
       }
     }
   }

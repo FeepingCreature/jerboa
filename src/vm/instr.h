@@ -1,6 +1,8 @@
 #ifndef VM_INSTR_H
 #define VM_INSTR_H
 
+#include "core.h"
+
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -237,7 +239,7 @@ typedef struct {
 typedef struct {
   Instr base;
   int target_slot;
-  Object *value;
+  Value value;
   char *opt_info;
 } SetSlotInstr;
 
@@ -265,6 +267,7 @@ typedef struct {
   char *name_ptr;
   int name_len;
   size_t name_hash;
+  int tbl_offset;
   
   Object *constraint;
   

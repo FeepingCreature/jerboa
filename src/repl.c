@@ -23,11 +23,12 @@ int main(int argc, char **argv) {
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
   vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);
+  Value rootval = OBJ2VAL(root);
   vm_remove_frame(&vmstate);
   vmstate.root = root;
   
   GCRootSet set;
-  gc_add_roots(&vmstate, &root, 1, &set);
+  gc_add_roots(&vmstate, &rootval, 1, &set);
   
   if (!isatty(1)) { fprintf(stderr, "repl must be running in a terminal!\n"); return 1; }
   while (true) {
@@ -48,7 +49,7 @@ int main(int argc, char **argv) {
     if (vmstate.runstate == VM_ERRORED) {
       fprintf(stderr, "vm errored: %s\n", vmstate.error);
     } else {
-      root = vmstate.exit_value;
+      root = AS_OBJ(vmstate.exit_value);
     }
   }
   

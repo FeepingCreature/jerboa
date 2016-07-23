@@ -47,16 +47,16 @@ void vm_alloc_frame(VMState *state, int slots, int refslots) {
   if (!cf) return; // stack overflow
   cf->above = state->frame;
   cf->slots_len = slots;
-  cf->slots_ptr = vm_stack_alloc(state, sizeof(Object*) * slots);
+  cf->slots_ptr = vm_stack_alloc(state, sizeof(Value) * slots);
   if (!cf->slots_ptr) { // stack overflow
     vm_stack_free(state, cf, sizeof(Callframe));
     return;
   }
   
   cf->refslots_len = refslots;
-  cf->refslots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Object**) * refslots);
+  cf->refslots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value*) * refslots);
   if (!cf->refslots_ptr) { // stack overflow
-    vm_stack_free(state, cf->slots_ptr, sizeof(Object*) * slots);
+    vm_stack_free(state, cf->slots_ptr, sizeof(Value) * slots);
     vm_stack_free(state, cf, sizeof(Callframe));
     return;
   }
@@ -79,8 +79,8 @@ void vm_error(VMState *state, const char *fmt, ...) {
 
 void vm_remove_frame(VMState *state) {
   Callframe *cf = state->frame;
-  vm_stack_free(state, cf->refslots_ptr, sizeof(Object**)*cf->refslots_len);
-  vm_stack_free(state, cf->slots_ptr, sizeof(Object*)*cf->slots_len);
+  vm_stack_free(state, cf->refslots_ptr, sizeof(Value*)*cf->refslots_len);
+  vm_stack_free(state, cf->slots_ptr, sizeof(Value)*cf->slots_len);
   state->frame = cf->above;
   if (state->frame) state->frame->backtrace_belongs_to_p = NULL; // we're the head frame again, use instr_ptr again
   vm_stack_free(state, cf, sizeof(Callframe));
@@ -172,8 +172,8 @@ void vm_record_profile(VMState *state) {
       if (k == 0) {
         TableEntry *freeptr;
         TableEntry *entry_p = table_lookup_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
-        if (entry_p) entry_p->value = (void*) ((size_t) entry_p->value + 1);
-        else freeptr->value = (void*) 1;
+        if (entry_p) entry_p->value.i ++;
+        else freeptr->value = INT2VAL(1);
       } else {
         // don't double-count ranges in case of recursion
         bool range_already_counted = (*belongs_to_p)->last_cycle_seen == cyclecount;
@@ -181,8 +181,8 @@ void vm_record_profile(VMState *state) {
         if (!range_already_counted) {
           TableEntry *freeptr;
           TableEntry *entry_p = table_lookup_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
-          if (entry_p) entry_p->value = (void*) ((size_t) entry_p->value + 1);
-          else freeptr->value = (void*) 1;
+          if (entry_p) entry_p->value.i ++;
+          else freeptr->value = INT2VAL(1);
         }
       }
       (*belongs_to_p)->last_cycle_seen = cyclecount;
@@ -193,7 +193,7 @@ void vm_record_profile(VMState *state) {
 
 int num_msg_printed = 0;
 
-static void vm_maybe_record_profile(VMState *state) {
+void vm_maybe_record_profile(VMState *state) {
   struct timespec prof_time;
   long long ns_diff = get_clock_and_difference(&prof_time, &state->shared->profstate.last_prof_time);
   if (ns_diff > sample_stepsize) {
@@ -214,7 +214,7 @@ typedef struct {
   Object *root;
   Callframe *cf;
   Instr *instr;
-  Object **slots;
+  Value *slots;
   
   VMState *reststate;
 } FastVMState;
@@ -249,7 +249,7 @@ static FnWrap vm_instr_get_root(FastVMState *state) {
   GetRootInstr *get_root_instr = (GetRootInstr*) state->instr;
   int slot = get_root_instr->slot;
   VM_ASSERT2_SLOT(slot < state->cf->slots_len, "internal slot error");
-  state->slots[slot] = state->root;
+  state->slots[slot] = OBJ2VAL(state->root);
   state->instr = (Instr*)(get_root_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -259,9 +259,9 @@ static FnWrap vm_instr_alloc_object(FastVMState *state) {
   int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(parent_slot < state->cf->slots_len, "slot numbering error");
-  Object *parent_obj = state->slots[parent_slot];
+  Object *parent_obj = OBJ_OR_NULL(state->slots[parent_slot]);
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
-  state->slots[target_slot] = alloc_object(state->reststate, state->slots[parent_slot]);
+  state->slots[target_slot] = make_object(state->reststate, parent_obj);
   state->instr = (Instr*)(alloc_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -270,7 +270,7 @@ static FnWrap vm_instr_alloc_int_object(FastVMState *state) {
   AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) state->instr;
   int target_slot = alloc_int_obj_instr->target_slot, value = alloc_int_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  state->slots[target_slot] = alloc_int(state->reststate, value);
+  state->slots[target_slot] = INT2VAL(value);
   state->instr = (Instr*)(alloc_int_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -280,7 +280,7 @@ static FnWrap vm_instr_alloc_bool_object(FastVMState *state) {
   int target_slot = alloc_bool_obj_instr->target_slot;
   bool value = alloc_bool_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  state->slots[target_slot] = alloc_bool(state->reststate, value);
+  state->slots[target_slot] = BOOL2VAL(value);
   state->instr = (Instr*)(alloc_bool_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -289,7 +289,7 @@ static FnWrap vm_instr_alloc_float_object(FastVMState *state) {
   AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) state->instr;
   int target_slot = alloc_float_obj_instr->target_slot; float value = alloc_float_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  state->slots[target_slot] = alloc_float(state->reststate, value);
+  state->slots[target_slot] = FLOAT2VAL(value);
   state->instr = (Instr*)(alloc_float_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -298,8 +298,7 @@ static FnWrap vm_instr_alloc_array_object(FastVMState *state) {
   AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) state->instr;
   int target_slot = alloc_array_obj_instr->target_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = alloc_array(state->reststate, NULL, state->reststate->shared->vcache.int_zero);
-  state->slots[target_slot] = obj;
+  state->slots[target_slot] = make_array(state->reststate, NULL, 0);
   state->instr = (Instr*)(alloc_array_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -308,7 +307,7 @@ static FnWrap vm_instr_alloc_string_object(FastVMState *state) {
   AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) state->instr;
   int target_slot = alloc_string_obj_instr->target_slot; char *value = alloc_string_obj_instr->value;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  state->slots[target_slot] = alloc_string(state->reststate, value, strlen(value));
+  state->slots[target_slot] = make_string(state->reststate, value, strlen(value));
   state->instr = (Instr*)(alloc_string_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -319,8 +318,10 @@ static FnWrap vm_instr_alloc_closure_object(FastVMState *state) {
   int context_slot = alloc_closure_obj_instr->base.context_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(context_slot < state->cf->slots_len, "slot numbering error");
-  Object *context = state->slots[context_slot];
-  state->slots[target_slot] = alloc_closure_fn(state->reststate, context, alloc_closure_obj_instr->fn);
+  Value context = state->slots[context_slot];
+  VM_ASSERT2(IS_OBJ(context), "bad slot type");
+  Object *context_obj = AS_OBJ(context);
+  state->slots[target_slot] = make_closure_fn(state->reststate, context_obj, alloc_closure_obj_instr->fn);
   state->instr = (Instr*)(alloc_closure_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -329,9 +330,10 @@ static FnWrap vm_instr_close_object(FastVMState *state) {
   CloseObjectInstr *close_object_instr = (CloseObjectInstr*) state->instr;
   int slot = close_object_instr->slot;
   VM_ASSERT2_SLOT(slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = state->slots[slot];
-  VM_ASSERT2(!(obj->flags & OBJ_CLOSED), "object is already closed!");
-  obj->flags |= OBJ_CLOSED;
+  Value val = state->slots[slot];
+  // non-object values are always OBJ_CLOSED
+  VM_ASSERT2(IS_OBJ(val) && !(AS_OBJ(val)->flags & OBJ_CLOSED), "object is already closed!");
+  AS_OBJ(val)->flags |= OBJ_CLOSED;
   state->instr = (Instr*)(close_object_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -340,20 +342,22 @@ static FnWrap vm_instr_freeze_object(FastVMState *state) {
   FreezeObjectInstr *freeze_object_instr = (FreezeObjectInstr*) state->instr;
   int slot = freeze_object_instr->slot;
   VM_ASSERT2_SLOT(slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = state->slots[slot];
-  VM_ASSERT2(!(obj->flags & OBJ_FROZEN), "object is already frozen!");
-  obj->flags |= OBJ_FROZEN;
+  Value val = state->slots[slot];
+  // non-object values are always OBJ_FROZEN
+  VM_ASSERT2(IS_OBJ(val) && !(AS_OBJ(val)->flags & OBJ_FROZEN), "object is already frozen!");
+  AS_OBJ(val)->flags |= OBJ_FROZEN;
   state->instr = (Instr*)(freeze_object_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static FnWrap call_internal(FastVMState *state, int target_slot, Object *this_obj, Object *fn_obj, Object **args_ptr, int args_len, FileRange **prev_instr) {
+static FnWrap call_internal(FastVMState *state, int target_slot, Value this_val, Value fn_val, Value *args_ptr, int args_len, FileRange **prev_instr) {
+  VM_ASSERT2(IS_OBJ(fn_val), "wrong type for function");
   // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
   // solve explicitly
   state->cf->backtrace_belongs_to_p = prev_instr;
   state->cf->target_slot = &state->cf->slots_ptr[target_slot];
   state->cf->instr_ptr = state->instr;
-  if (!setup_call(state->reststate, this_obj, fn_obj, args_ptr, args_len)) return (FnWrap) { vm_halt };
+  if (!setup_call(state->reststate, this_val, fn_val, args_ptr, args_len)) return (FnWrap) { vm_halt };
   
   // intrinsic may have errored.
   if (state->reststate->runstate == VM_ERRORED) return (FnWrap) { vm_halt };
@@ -370,17 +374,19 @@ static FnWrap vm_instr_access(FastVMState *state) {
   
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "internal slot error");
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "internal slot error");
-  Object *obj = state->slots[obj_slot];
+  Value val = state->slots[obj_slot];
+  Object *obj = closest_obj(state->reststate, val);
   
   char *key;
   bool has_char_key = false;
       
   int key_slot = access_instr->key_slot;
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "internal slot error");
-  VM_ASSERT2(state->slots[key_slot], "key slot null"); // TODO "slot_assigned"
+  VM_ASSERT2(NOT_NULL(state->slots[key_slot]), "key slot null"); // TODO "slot_assigned"
   Object *string_base = state->reststate->shared->vcache.string_base;
-  Object *key_obj = state->slots[key_slot];
-  VM_ASSERT2(key_obj, "key is null");
+  Value key_val = state->slots[key_slot];
+  VM_ASSERT2(NOT_NULL(key_val), "key is null");
+  Object *key_obj = OBJ_OR_NULL(key_val);
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   bool object_found = false;
   if (skey) {
@@ -389,13 +395,11 @@ static FnWrap vm_instr_access(FastVMState *state) {
     state->slots[target_slot] = object_lookup(obj, key, &object_found);
   }
   if (!object_found) {
-    Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
-    if (index_op) {
-      Object *key_obj = state->slots[access_instr->key_slot];
-      
+    Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
+    if (NOT_NULL(index_op)) {
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(access_instr + 1);
-      return call_internal(state, target_slot, obj, index_op, &key_obj, 1, prev_instr);
+      return call_internal(state, target_slot, val, index_op, &key_val, 1, prev_instr);
     }
   }
   if (!object_found) {
@@ -411,14 +415,15 @@ static FnWrap vm_instr_access(FastVMState *state) {
 
 static FnWrap vm_instr_access_string_key_index_fallback(FastVMState *state) {
   AccessStringKeyInstr *aski = (AccessStringKeyInstr*) state->instr;
-  Object *obj = state->slots[aski->obj_slot];
-  Object *index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
-  if (index_op) {
-    Object *key_obj = alloc_string(state->reststate, aski->key_ptr, aski->key_len);
+  Value val = state->slots[aski->obj_slot];
+  Object *obj = closest_obj(state->reststate, val);
+  Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
+  if (NOT_NULL(index_op)) {
+    Value key = make_string(state->reststate, aski->key_ptr, aski->key_len);
     
     FileRange **prev_instr = &state->instr->belongs_to;
     state->instr = (Instr*)(aski + 1);
-    return call_internal(state, aski->target_slot, obj, index_op, &key_obj, 1, prev_instr);
+    return call_internal(state, aski->target_slot, val, index_op, &key, 1, prev_instr);
   } else {
     VM_ASSERT2(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr);
   }
@@ -432,7 +437,7 @@ static FnWrap vm_instr_access_string_key(FastVMState *state) {
   
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "internal slot error");
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "internal slot error");
-  Object *obj = state->slots[obj_slot];
+  Object *obj = closest_obj(state->reststate, state->slots[obj_slot]);
   
   char *key_ptr = aski->key_ptr;
   int key_len = aski->key_len;
@@ -456,21 +461,22 @@ static FnWrap vm_instr_assign(FastVMState *state) {
   VM_ASSERT2_SLOT(value_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  VM_ASSERT2(state->slots[key_slot], "key slot null"); // TODO see above
-  Object *obj = state->slots[obj_slot];
-  Object *value_obj = state->slots[value_slot];
+  VM_ASSERT2(NOT_NULL(state->slots[key_slot]), "key slot null"); // TODO see above
+  Value val = state->slots[obj_slot];
+  Object *obj = closest_obj(state->reststate, val);
+  Value value_val = state->slots[value_slot];
   Object *string_base = state->reststate->shared->vcache.string_base;
-  Object *key_obj = state->slots[key_slot];
-  StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+  Value key_val = state->slots[key_slot];
+  StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
   if (!skey) {
     // non-string key, goes to []=
-    Object *index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
-    if (index_assign_op) {
-      Object *key_value_pair[] = {state->slots[assign_instr->key_slot], value_obj};
+    Value index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
+    if (NOT_NULL(index_assign_op)) {
+      Value key_value_pair[] = {state->slots[assign_instr->key_slot], value_val};
       
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
-      return call_internal(state, target_slot, obj, index_assign_op, key_value_pair, 2, prev_instr);
+      return call_internal(state, target_slot, val, index_assign_op, key_value_pair, 2, prev_instr);
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -481,20 +487,20 @@ static FnWrap vm_instr_assign(FastVMState *state) {
   switch (assign_type) {
     case ASSIGN_PLAIN:
     {
-      char *error = object_set(obj, key, value_obj);
+      char *error = object_set(state->reststate, obj, key, value_val);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_EXISTING:
     {
-      char *error = object_set_existing(obj, key, value_obj);
+      char *error = object_set_existing(state->reststate, obj, key, val);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_SHADOWING:
     {
       bool key_set;
-      char *error = object_set_shadowing(obj, key, value_obj, &key_set);
+      char *error = object_set_shadowing(state->reststate, obj, key, val, &key_set);
       VM_ASSERT2(error == NULL, "while assigning: %s", error);
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
@@ -511,18 +517,18 @@ static FnWrap vm_instr_key_in_obj(FastVMState *state) {
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = state->slots[obj_slot];
+  Object *obj = closest_obj(state->reststate, state->slots[obj_slot]);
   Object *string_base = state->reststate->shared->vcache.string_base;
-  Object *key_obj = state->slots[key_slot];
-  VM_ASSERT2(key_obj, "key is null");
-  StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+  Value key_val = state->slots[key_slot];
+  VM_ASSERT2(NOT_NULL(key_val), "key is null");
+  StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
   if (!skey) {
     VM_ASSERT2(false, "'in' key is not string! todo overload?");
   }
   char *key = skey->value;
   bool object_found = false;
   object_lookup(obj, key, &object_found);
-  state->slots[target_slot] = alloc_bool(state->reststate, object_found);
+  state->slots[target_slot] = BOOL2VAL(object_found);
   
   state->instr = (Instr*)(key_in_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -536,10 +542,12 @@ static FnWrap vm_instr_instanceof(FastVMState *state) {
   VM_ASSERT2_SLOT(proto_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   
-  Object *proto_obj = state->slots[proto_slot];
-  VM_ASSERT2(proto_obj, "bad argument: instanceof null");
-  bool res = !!obj_instance_of(state->slots[obj_slot], proto_obj);
-  state->slots[target_slot] = alloc_bool(state->reststate, res);
+  Value proto_val = state->slots[proto_slot];
+  VM_ASSERT2(NOT_NULL(proto_val), "bad argument: instanceof null");
+  bool res;
+  if (!IS_OBJ(proto_val)) res = false; // nothing is instanceof 5
+  else res = value_instance_of(state->reststate, state->slots[obj_slot], AS_OBJ(proto_val));
+  state->slots[target_slot] = BOOL2VAL(res);
   
   state->instr = (Instr*)(instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -552,11 +560,16 @@ static FnWrap vm_instr_set_constraint(FastVMState *state) {
   VM_ASSERT2_SLOT(key_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(cons_slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = state->slots[obj_slot];
-  Object *constraint = state->slots[cons_slot];
+  Value val = state->slots[obj_slot];
+  VM_ASSERT2(NOT_NULL(val), "can't set constraint on null");
+  VM_ASSERT2(IS_OBJ(val), "can't set constraint on primitive");
+  Object *obj = AS_OBJ(val);
+  Value constraint_val = state->slots[cons_slot];
+  VM_ASSERT2(IS_OBJ(constraint_val), "constraint must not be primitive!");
+  Object *constraint = AS_OBJ(constraint_val);
   Object *string_base = state->reststate->shared->vcache.string_base;
-  Object *key_obj = state->slots[key_slot];
-  StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
+  Value key_val = state->slots[key_slot];
+  StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
   VM_ASSERT2(skey, "constraint key must be string");
   char *key = skey->value;
   
@@ -572,28 +585,31 @@ static FnWrap vm_instr_assign_string_key(FastVMState *state) {
   int obj_slot = aski->obj_slot, value_slot = aski->value_slot;
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(value_slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = state->slots[obj_slot];
-  Object *value_obj = state->slots[value_slot];
+  Value obj_val = state->slots[obj_slot];
+  Value value = state->slots[value_slot];
   char *key = aski->key;
   AssignType assign_type = aski->type;
-  VM_ASSERT2(obj, "assignment to null object");
+  VM_ASSERT2(NOT_NULL(obj_val), "assignment to null");
   switch (assign_type) {
     case ASSIGN_PLAIN:
     {
-      char *error = object_set(obj, key, value_obj);
+      VM_ASSERT2(IS_OBJ(obj_val), "can't assign to primitive");
+      char *error = object_set(state->reststate, AS_OBJ(obj_val), key, value);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_EXISTING:
     {
-      char *error = object_set_existing(obj, key, value_obj);
+      Object *obj = closest_obj(state->reststate, obj_val);
+      char *error = object_set_existing(state->reststate, obj, key, value);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_SHADOWING:
     {
+      VM_ASSERT2(IS_OBJ(obj_val), "can't assign to primitive");
       bool key_set;
-      char *error = object_set_shadowing(obj, key, value_obj, &key_set);
+      char *error = object_set_shadowing(state->reststate, AS_OBJ(obj_val), key, value, &key_set);
       VM_ASSERT2(error == NULL, "while assigning '%s': %s", key, error);
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
@@ -608,8 +624,13 @@ static FnWrap vm_instr_set_constraint_string_key(FastVMState *state) {
   int obj_slot = scski->obj_slot, cons_slot = scski->constraint_slot;
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(cons_slot < state->cf->slots_len, "slot numbering error");
-  Object *obj = state->slots[obj_slot];
-  Object *constraint = state->slots[cons_slot];
+  Value val = state->slots[obj_slot];
+  VM_ASSERT2(NOT_NULL(val), "can't set constraint on null");
+  VM_ASSERT2(IS_OBJ(val), "can't set constraint on primitive");
+  Object *obj = AS_OBJ(val);
+  Value constraint_val = state->slots[cons_slot];
+  VM_ASSERT2(IS_OBJ(constraint_val), "constraint must not be primitive!");
+  Object *constraint = AS_OBJ(constraint_val);
   
   char *error = object_set_constraint(state->reststate, obj, scski->key_ptr, scski->key_len, constraint);
   VM_ASSERT2(!error, error);
@@ -625,11 +646,11 @@ static FnWrap vm_instr_call(FastVMState *state) {
   VM_ASSERT2_SLOT(function_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(this_slot < state->cf->slots_len, "slot numbering error");
-  Object *this_obj = state->slots[this_slot];
-  Object *fn_obj = state->slots[function_slot];
-  // form args array from slots
+  Value this_val = state->slots[this_slot];
+  Value fn_val = state->slots[function_slot];
   
-  Object **args = alloca(sizeof(Object*) * args_length);
+  // form args array from slots
+  Value *args = alloca(sizeof(Value) * args_length);
   
   for (int i = 0; i < args_length; ++i) {
     int argslot = ((int*)(call_instr + 1))[i];
@@ -639,7 +660,7 @@ static FnWrap vm_instr_call(FastVMState *state) {
   
   FileRange **prev_instr = &state->instr->belongs_to;
   state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
-  return call_internal(state, target_slot, this_obj, fn_obj, args, args_length, prev_instr);
+  return call_internal(state, target_slot, this_val, fn_val, args, args_length, prev_instr);
 }
 
 static FnWrap vm_halt(FastVMState *state) {
@@ -651,7 +672,7 @@ static FnWrap vm_instr_return(FastVMState *state) {
   ReturnInstr *ret_instr = (ReturnInstr*) state->instr;
   int ret_slot = ret_instr->ret_slot;
   VM_ASSERT2_SLOT(ret_slot < state->cf->slots_len, "slot numbering error");
-  Object *res = state->slots[ret_slot];
+  Value res = state->slots[ret_slot];
   gc_remove_roots(state->reststate, &state->cf->frameroot_slots);
   vm_remove_frame(state->reststate);
   
@@ -681,9 +702,9 @@ static FnWrap vm_instr_testbr(FastVMState *state) {
   int test_slot = tbr_instr->test_slot;
   int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
   VM_ASSERT2_SLOT(test_slot < state->cf->slots_len, "slot numbering error");
-  Object *test_value = state->slots[test_slot];
+  Value test_value = state->slots[test_slot];
   
-  bool test = obj_is_truthy(state->reststate, test_value);
+  bool test = value_is_truthy(test_value);
   
   int target_blk = test ? true_blk : false_blk;
   state->instr = (Instr*) ((char*) state->cf->uf->body.instrs_ptr + state->cf->uf->body.blocks_ptr[target_blk].offset);
@@ -726,9 +747,10 @@ static FnWrap vm_instr_define_refslot(FastVMState *state) {
   int obj_slot = dri->obj_slot;
   VM_ASSERT2_SLOT(obj_slot < state->cf->slots_len, "slot numbering error");
   
-  Object *obj = state->slots[obj_slot];
+  Object *obj = closest_obj(state->reststate, state->slots[obj_slot]);
+  VM_ASSERT2(obj, "cannot define refslot for null obj");
   
-  Object **pp = object_lookup_ref_with_hash(obj, dri->key_ptr, dri->key_len, dri->key_hash);
+  Value *pp = object_lookup_ref_with_hash(obj, dri->key_ptr, dri->key_len, dri->key_hash);
   VM_ASSERT2(pp, "key not in object");
   state->cf->refslots_ptr[target_refslot] = pp;
   
@@ -770,9 +792,9 @@ static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
   int target_slot = asoi->target_slot, parent_slot = asoi->parent_slot;
   VM_ASSERT2_SLOT(target_slot < state->cf->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(parent_slot < state->cf->slots_len, "slot numbering error");
-  Object *parent_obj = state->slots[parent_slot];
+  Object *parent_obj = OBJ_OR_NULL(state->slots[parent_slot]);
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
-  Object *obj = alloc_object(state->reststate, state->slots[parent_slot]);
+  Object *obj = AS_OBJ(make_object(state->reststate, parent_obj));
   
   // TODO table_clone
   obj->tbl = ((Object*)(asoi+1))->tbl;
@@ -783,23 +805,21 @@ static FnWrap vm_instr_alloc_static_object(FastVMState *state) {
   for (int i = 0; i < asoi->info_len; ++i) {
     StaticFieldInfo *info = &asoi->info_ptr[i];
     VM_ASSERT2_SLOT(info->slot < state->cf->slots_len, "slot numbering error");
-    TableEntry *freeptr;
-    TableEntry *entry = table_lookup_alloc_with_hash(&obj->tbl, info->name_ptr, info->name_len, info->name_hash, &freeptr);
+    TableEntry *entry = &obj->tbl.entries_ptr[info->tbl_offset];
     // copied from sample, should be no need to allocate
-    assert(entry && !freeptr);
     entry->value = state->slots[info->slot];
     if (info->constraint) {
-      entry->value_aux = info->constraint;
-      if (!entry->value || ((Object*) entry->value)->parent != info->constraint) {
+      entry->constraint = info->constraint;
+      if (!value_instance_of(state->reststate, entry->value, info->constraint)) {
         VM_ASSERT2(false, "type constraint violated on variable");
       }
     }
-    state->cf->refslots_ptr[info->refslot] = (Object**) &entry->value;
+    state->cf->refslots_ptr[info->refslot] = &entry->value;
   }
   
   obj->flags = OBJ_CLOSED;
   
-  state->slots[target_slot] = obj;
+  state->slots[target_slot] = OBJ2VAL(obj);
   
   state->instr = (Instr*)((char*) asoi + sizeof(AllocStaticObjectInstr) + sizeof(Object));
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -877,8 +897,8 @@ void vm_run(VMState *state) {
     if (state->shared->gcstate.num_obj_allocated > state->shared->gcstate.next_gc_run) {
       // fprintf(stderr, "allocated %i, next_gc_run %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
       gc_run(state);
-      // run gc after 50% growth or 10000 allocated or thereabouts
-      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + (10000000/64); // don't even get out of bed for less than 10MB
+      // run gc after 50% growth or 10000000 allocated or thereabouts
+      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + (10000000/32); // don't even get out of bed for less than 10MB
       // fprintf(stderr, "left over %i, set next to %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
     }
   }

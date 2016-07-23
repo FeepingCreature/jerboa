@@ -2,6 +2,13 @@
 
 #include <stdio.h>
 
+static void dump_val(FILE *file, Value val) {
+  if (IS_INT(val)) fprintf(file, "<int: %i>", AS_INT(val));
+  else if (IS_BOOL(val)) fprintf(file, "<bool: %s>", AS_BOOL(val)?"true":"false");
+  else if (IS_FLOAT(val)) fprintf(file, "<float: %f>", AS_FLOAT(val));
+  else fprintf(file, "<obj: %p>", (void*) AS_OBJ(val));
+}
+
 void dump_instr(VMState *state, Instr **instr_p) {
   Instr *instr = *instr_p;
   // fprintf(stderr, "%p", (void*) instr);
@@ -153,8 +160,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_SET_SLOT:
     {
       SetSlotInstr *ssi = (SetSlotInstr*) instr;
-      fprintf(stderr, "set slot: %%%i = %p \t\t (opt: %s)\n",
-              ssi->target_slot, (void*) ssi->value, ssi->opt_info);
+      fprintf(stderr, "set slot: %%%i = ", ssi->target_slot);
+      dump_val(stderr, ssi->value);
+      fprintf(stderr, " \t\t (opt: %s)\n", ssi->opt_info);
       *instr_p = (Instr*) (ssi + 1);
       break;
     }
@@ -189,7 +197,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
       for (int i = 0; i < asoi->info_len; ++i) {
         StaticFieldInfo *info = &asoi->info_ptr[i];
         char *infostr = "";
-        if (info->constraint) infostr = get_type_info(state, info->constraint);
+        if (info->constraint) infostr = get_type_info(state, OBJ2VAL(info->constraint));
         fprintf(stderr, "%.*s%s%s = %%%i (&%i); ",
                 info->name_len, info->name_ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }

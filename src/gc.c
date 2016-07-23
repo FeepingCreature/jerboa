@@ -1,13 +1,13 @@
 #include "gc.h"
 
-void gc_add_roots(VMState *state, Object **objects, int num_objects, GCRootSet *set) {
+void gc_add_roots(VMState *state, Value *values, int num_values, GCRootSet *set) {
   GCRootSet *prevTail = state->shared->gcstate.tail;
   state->shared->gcstate.tail = set;
   if (prevTail) prevTail->next = state->shared->gcstate.tail;
   state->shared->gcstate.tail->prev = prevTail;
   state->shared->gcstate.tail->next = NULL;
-  state->shared->gcstate.tail->objects = objects;
-  state->shared->gcstate.tail->num_objects = num_objects;
+  state->shared->gcstate.tail->values = values;
+  state->shared->gcstate.tail->num_values = num_values;
   return;
 }
 
@@ -26,8 +26,9 @@ void gc_remove_roots(VMState *state, GCRootSet *entry) {
 static void gc_mark(VMState *state) {
   GCRootSet *set = state->shared->gcstate.tail;
   while (set) {
-    for (int i = 0; i < set->num_objects; ++i) {
-      obj_mark(state, set->objects[i]);
+    for (int i = 0; i < set->num_values; ++i) {
+      Value v = set->values[i];
+      if (IS_OBJ(v)) obj_mark(state, AS_OBJ(v));
     }
     set = set->prev;
   }

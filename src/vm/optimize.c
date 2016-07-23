@@ -65,8 +65,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   }
 }
 
-static Object **find_constant_slots(UserFunction *uf) {
-  Object **slots = calloc(sizeof(Object*), uf->slots);
+static Value *find_constant_slots(UserFunction *uf) {
+  Value *slots = calloc(sizeof(Value), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -118,7 +118,7 @@ int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_pt
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
   
-  Object **constant_slots = find_constant_slots(uf);
+  Value *constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
@@ -172,7 +172,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
     while (instr != instr_end) {
       if (instr->type == INSTR_SET_CONSTRAINT_STRING_KEY) {
         SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr;
-        Object *constraint = constant_slots[scski->constraint_slot];
+        Object *constraint = OBJ_OR_NULL(constant_slots[scski->constraint_slot]);
         SlotIsStaticObjInfo *rec = &(*slots_p)[scski->obj_slot];
         
         if (constraint && rec->static_object) {
@@ -458,20 +458,18 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
 #include "print.h"
 
 // if lookup for "key" in "context" will always return the same value, return it.
-Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv, bool *key_found_p) {
+Value lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv, bool *key_found_p) {
   *key_found_p = false;
   while (obj) {
-    if (!(obj->flags & OBJ_PRIMITIVE)) {
-      TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
-      if (entry) {
-        // hit, but the value might change later! bad!
-        if (!(obj->flags & OBJ_FROZEN)) {
-          // printf("hit for %.*s, but object wasn't frozen\n", key_len, key_ptr);
-          return NULL;
-        }
-        *key_found_p = true;
-        return entry->value;
+    TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
+    if (entry) {
+      // hit, but the value might change later! bad!
+      if (!(obj->flags & OBJ_FROZEN)) {
+        // printf("hit for %.*s, but object wasn't frozen\n", key_len, key_ptr);
+        return VNULL;
       }
+      *key_found_p = true;
+      return entry->value;
     }
     // no hit, but ... 
     // if the object is not closed, somebody might
@@ -480,11 +478,11 @@ Object *lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv,
     // because if it gets a hit, we won't be able to overwrite it.
     if (!(obj->flags & OBJ_CLOSED)) {
       // printf("hit for %.*s, but object wasn't closed\n", key_len, key_ptr);
-      return NULL;
+      return VNULL;
     }
     obj = obj->parent;
   }
-  return NULL; // no hits.
+  return VNULL; // no hits.
 }
 
 static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
@@ -609,9 +607,9 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   Object *float_base = state->shared->vcache.float_base;
   
   bool *object_known = calloc(sizeof(bool), uf->slots);
-  Object **known_objects_table = calloc(sizeof(Object*), uf->slots);
+  Value *known_values_table = calloc(sizeof(Value), uf->slots);
   object_known[1] = true;
-  known_objects_table[1] = context;
+  known_values_table[1] = OBJ2VAL(context);
   
   ConstraintInfo **slot_constraints = calloc(sizeof(ConstraintInfo*), uf->slots);
   
@@ -621,20 +619,20 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       if (instr->type == INSTR_SET_SLOT) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
         object_known[ssi->target_slot] = true;
-        known_objects_table[ssi->target_slot] = ssi->value;
+        known_values_table[ssi->target_slot] = ssi->value;
       }
       
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         if (object_known[aski->obj_slot]) {
-          Object *known_obj = known_objects_table[aski->obj_slot];
+          Value known_val = known_values_table[aski->obj_slot];
           bool key_found;
-          Object *static_lookup = lookup_statically(known_obj,
+          Value static_lookup = lookup_statically(closest_obj(state, known_val),
                                                     aski->key_ptr, aski->key_len, aski->key_hash,
                                                     &key_found);
           if (key_found) {
             object_known[aski->target_slot] = true;
-            known_objects_table[aski->target_slot] = static_lookup;
+            known_values_table[aski->target_slot] = static_lookup;
           }
         }
         
@@ -656,7 +654,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
               if (dominates(uf, node2rpost, sfidoms_ptr, location, instr)) {
                 object_known[aski->target_slot] = true;
                 bool key_found = false;
-                known_objects_table[aski->target_slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
+                known_values_table[aski->target_slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
                 if (!key_found) {
                   fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", aski->key_len, aski->key_ptr);
                   abort();
@@ -685,7 +683,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       bool replace_with_ssi = false;
-      Object *obj = NULL; char *opt_info = NULL; int target_slot = 0;
+      Value val = VNULL; char *opt_info = NULL; int target_slot = 0;
       if (instr->type == INSTR_ACCESS_STRING_KEY) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         if (object_known[aski->target_slot]) {
@@ -693,7 +691,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
           // Note: there's no need to gc-pin this, since it's
           // clearly a value that we can see anyways
           // (ie. it's covered via the gc link via context)
-          obj = known_objects_table[aski->target_slot];
+          val = known_values_table[aski->target_slot];
           opt_info = my_asprintf("inlined lookup to '%.*s'", aski->key_len, aski->key_ptr);
           target_slot = aski->target_slot;
         }
@@ -702,8 +700,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       if (instr->type == INSTR_ALLOC_INT_OBJECT) {
         AllocIntObjectInstr *aioi = (AllocIntObjectInstr*) instr;
         replace_with_ssi = true;
-        obj = alloc_int(state, aioi->value);
-        obj->flags |= OBJ_IMMORTAL;
+        val = INT2VAL(aioi->value);
         opt_info = my_asprintf("inlined alloc_int %i", aioi->value);
         target_slot = aioi->target_slot;
       }
@@ -711,8 +708,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       if (instr->type == INSTR_ALLOC_FLOAT_OBJECT) {
         AllocFloatObjectInstr *afoi = (AllocFloatObjectInstr*) instr;
         replace_with_ssi = true;
-        obj = alloc_float(state, afoi->value);
-        obj->flags |= OBJ_IMMORTAL;
+        val = FLOAT2VAL(afoi->value);
         opt_info = my_asprintf("inlined alloc_float %f", afoi->value);
         target_slot = afoi->target_slot;
       }
@@ -721,8 +717,9 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
         replace_with_ssi = true;
         int len = strlen(asoi->value);
-        obj = alloc_string(state, asoi->value, len);
+        Object *obj = AS_OBJ(make_string(state, asoi->value, len));
         obj->flags |= OBJ_IMMORTAL;
+        val = OBJ2VAL(obj);
         opt_info = my_asprintf("inlined alloc_string %.*s", len, asoi->value);
         target_slot = asoi->target_slot;
       }
@@ -731,7 +728,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         SetSlotInstr ssi = {
           .base = { .type = INSTR_SET_SLOT },
           .target_slot = target_slot,
-          .value = obj,
+          .value = val,
           .opt_info = opt_info
         };
         addinstr_like(builder, instr, sizeof(ssi), (Instr*) &ssi);
@@ -804,11 +801,11 @@ bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr 
   return current == blk_earlier;
 }
 
-UserFunction *fuse_static_object_alloc(UserFunction *uf) {
+static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
   
-  Object **constant_slots = find_constant_slots(uf);
+  Value *constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(builder);
@@ -871,13 +868,13 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
             SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr_reading;
             
             if (scski->obj_slot != alobi->target_slot) break;
-            if (!constant_slots[scski->constraint_slot]) break;
+            if (!IS_OBJ(constant_slots[scski->constraint_slot])) break; // wat wat
             
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
               if (info->name_len == scski->key_len && strncmp(info->name_ptr, scski->key_ptr, info->name_len) == 0) {
                 if (info->constraint) abort(); // wat wat wat
-                info->constraint = constant_slots[scski->constraint_slot];
+                info->constraint = AS_OBJ(constant_slots[scski->constraint_slot]);
                 refslots_set ++;
               }
             }
@@ -887,8 +884,14 @@ UserFunction *fuse_static_object_alloc(UserFunction *uf) {
           Object sample_obj = {0};
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
-            char *error = object_set(&sample_obj, info->name_ptr, NULL);
+            char *error = object_set(state, &sample_obj, info->name_ptr, VNULL);
             if (error) { fprintf(stderr, "INTERNAL LOGIC ERROR: %s\n", error); abort(); }
+          }
+          for (int k = 0; k < info_len; ++k) {
+            StaticFieldInfo *info = &info_ptr[k];
+            TableEntry *entry = table_lookup_with_hash(&sample_obj.tbl, info->name_ptr, info->name_len, info->name_hash);
+            if (!entry) { fprintf(stderr, "where has it gone??\n"); abort(); }
+            info->tbl_offset = entry - sample_obj.tbl.entries_ptr;
           }
           
           AllocStaticObjectInstr *asoi = alloca(sizeof(AllocStaticObjectInstr) + sizeof(Object));
@@ -1068,7 +1071,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   }
   
   // must be late!
-  uf = fuse_static_object_alloc(uf);
+  uf = fuse_static_object_alloc(state, uf);
   uf = remove_dead_slot_writes(uf);
   
   // must be very very *very* last!
