@@ -92,18 +92,19 @@ typedef struct {
 } VMSharedState;
 
 struct _VMState {
-  VMState *parent;
+  Callframe *frame;
+  Instr *instr;
   
   VMSharedState *shared;
   
-  Callframe *frame;
+  VMRunState runstate;
   
   Object *root;
   Value exit_value; // set when the last stackframe returns
   
-  VMRunState runstate;
   char *error;
   char *backtrace; int backtrace_depth;
+  VMState *parent;
 };
 
 Value *object_lookup_ref(Object *obj, const char *key);
@@ -144,7 +145,16 @@ bool value_is_truthy(Value value);
 
 char *get_type_info(VMState*, Value);
 
-typedef void (*VMFunctionPointer)(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len);
+typedef struct {
+  Value *slots_ptr;
+  int this_slot;
+  int fn_slot;
+  int *args_ptr;
+  int args_len;
+} CallInfo;
+
+// args_ptr's entries are guaranteed to lie inside slots_ptr.
+typedef void (*VMFunctionPointer)(VMState *state, CallInfo *info);
 
 typedef struct {
   Object base;

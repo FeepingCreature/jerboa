@@ -13,29 +13,44 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-static void fn_apply_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void fn_apply_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *args_array = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), array_base);
+  ArrayObject *args_array = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), array_base);
   VM_ASSERT(args_array, "argument to apply() must be array!");
-  Value call_fn = thisval;
+  int len = args_array->length;
+  int *slot_nums = alloca(sizeof(int) * len);
+  Value *args_sub = alloca(sizeof(Value) * len + 2);
+  
+  for (int i = 0; i < len; ++i) {
+    slot_nums[i] = i;
+    args_sub[i] = args_array->ptr[i];
+  }
+  args_sub[len] = VNULL; // this
+  args_sub[len+1] = info->slots_ptr[info->this_slot]; // fn
+  CallInfo info2 = {0};
+  info2.args_len = len;
+  info2.args_ptr = slot_nums;
+  info2.this_slot = len;
+  info2.fn_slot = len+1;
+  info2.slots_ptr = args_sub;
   // passthrough call to actual function
   // note: may set its own errors
-  setup_call(state, VNULL, call_fn, args_array->ptr, args_array->length);
+  setup_call(state, &info2);
 }
 
 // TODO add "IS_TRUTHY" instr so we can promote, say, null, to bool before calling this
-static void bool_not_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  VM_ASSERT(IS_BOOL(thisval), "internal error: bool negation called on wrong type of object");
+static void bool_not_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  VM_ASSERT(IS_BOOL(info->slots_ptr[info->this_slot]), "internal error: bool negation called on wrong type of object");
   
-  *state->frame->target_slot = make_bool(state, !AS_BOOL(thisval));
+  *state->frame->target_slot = make_bool(state, !AS_BOOL(info->slots_ptr[info->this_slot]));
 }
 
-static void bool_eq_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void bool_eq_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  Value val1 = thisval, val2 = args_ptr[0];
+  Value val1 = info->slots_ptr[info->this_slot], val2 = info->slots_ptr[info->args_ptr[0]];
   
   VM_ASSERT(IS_BOOL(val1), "internal error: bool compare function called on wrong type of object");
   VM_ASSERT(IS_BOOL(val2), "can't compare bool with this value");
@@ -51,14 +66,14 @@ typedef enum {
   MATH_BIT_AND
 } MathOp;
 
-static void int_math_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len, MathOp mop) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  VM_ASSERT(IS_INT(thisval), "internal error: int math function called on wrong type of object"); // otherwise how are we called on it??
-  Value val2 = args_ptr[0];
+  VM_ASSERT(IS_INT(info->slots_ptr[info->this_slot]), "internal error: int math function called on wrong type of object"); // otherwise how are we called on it??
+  Value val2 = info->slots_ptr[info->args_ptr[0]];
   
   if (IS_INT(val2)) {
-    int i1 = AS_INT(thisval), i2 = AS_INT(val2);
+    int i1 = AS_INT(info->slots_ptr[info->this_slot]), i2 = AS_INT(val2);
     int res;
     switch (mop) {
       case MATH_ADD: res = i1 + i2; break;
@@ -77,7 +92,7 @@ static void int_math_fn(VMState *state, Value thisval, Value fn, Value *args_ptr
   }
   
   if (IS_FLOAT(val2)) {
-    float v1 = AS_INT(thisval), v2 = AS_FLOAT(val2);
+    float v1 = AS_INT(info->slots_ptr[info->this_slot]), v2 = AS_FLOAT(val2);
     float res;
     switch (mop) {
       case MATH_ADD: res = v1 + v2; break;
@@ -97,35 +112,35 @@ static void int_math_fn(VMState *state, Value thisval, Value fn, Value *args_ptr
   vm_error(state, "don't know how to perform int math with %s", get_type_info(state, val2));
 }
 
-static void int_add_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_math_fn(state, thisval, fn, args_ptr, args_len, MATH_ADD);
+static void int_add_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_ADD);
 }
 
-static void int_sub_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_math_fn(state, thisval, fn, args_ptr, args_len, MATH_SUB);
+static void int_sub_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_SUB);
 }
 
-static void int_mul_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_math_fn(state, thisval, fn, args_ptr, args_len, MATH_MUL);
+static void int_mul_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_MUL);
 }
 
-static void int_div_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_math_fn(state, thisval, fn, args_ptr, args_len, MATH_DIV);
+static void int_div_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_DIV);
 }
 
-static void int_bit_or_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_math_fn(state, thisval, fn, args_ptr, args_len, MATH_BIT_OR);
+static void int_bit_or_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_BIT_OR);
 }
 
-static void int_bit_and_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_math_fn(state, thisval, fn, args_ptr, args_len, MATH_BIT_AND);
+static void int_bit_and_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_BIT_AND);
 }
 
-static void int_parse_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void int_parse_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
-  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(sobj, "parameter to int.parse() must be string!");
   char *text = sobj->value;
   int base = 10;
@@ -139,17 +154,17 @@ static void int_parse_fn(VMState *state, Value thisval, Value fn, Value *args_pt
   *state->frame->target_slot = INT2VAL(res);
 }
 
-static void float_math_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len, MathOp mop) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  Value obj1 = thisval;
-  Value obj2 = args_ptr[0];
+  Value obj1 = info->slots_ptr[info->this_slot];
+  Value obj2 = info->slots_ptr[info->args_ptr[0]];
   VM_ASSERT(IS_FLOAT(obj1), "internal error: float math function called on wrong type of object");
   
   float v1 = AS_FLOAT(obj1), v2;
   if (IS_FLOAT(obj2)) v2 = AS_FLOAT(obj2);
   else if (IS_INT(obj2)) v2 = AS_INT(obj2);
-  else { vm_error(state, "don't know how to perform float math with %s", get_type_info(state, args_ptr[0])); return; }
+  else { vm_error(state, "don't know how to perform float math with %s", get_type_info(state, obj2)); return; }
   
   float res;
   switch (mop) {
@@ -165,28 +180,28 @@ static void float_math_fn(VMState *state, Value thisval, Value fn, Value *args_p
   return;
 }
 
-static void float_add_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_math_fn(state, thisval, fn, args_ptr, args_len, MATH_ADD);
+static void float_add_fn(VMState *state, CallInfo *info) {
+  float_math_fn(state, info, MATH_ADD);
 }
 
-static void float_sub_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_math_fn(state, thisval, fn, args_ptr, args_len, MATH_SUB);
+static void float_sub_fn(VMState *state, CallInfo *info) {
+  float_math_fn(state, info, MATH_SUB);
 }
 
-static void float_mul_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_math_fn(state, thisval, fn, args_ptr, args_len, MATH_MUL);
+static void float_mul_fn(VMState *state, CallInfo *info) {
+  float_math_fn(state, info, MATH_MUL);
 }
 
-static void float_div_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_math_fn(state, thisval, fn, args_ptr, args_len, MATH_DIV);
+static void float_div_fn(VMState *state, CallInfo *info) {
+  float_math_fn(state, info, MATH_DIV);
 }
 
-static void string_add_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void string_add_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  Value val2 = args_ptr[0];
+  Value val2 = info->slots_ptr[info->args_ptr[0]];
   Object
-    *sobj1 = obj_instance_of(OBJ_OR_NULL(thisval), state->shared->vcache.string_base),
+    *sobj1 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), state->shared->vcache.string_base),
     *sobj2 = obj_instance_of(OBJ_OR_NULL(val2), state->shared->vcache.string_base);
   VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
   
@@ -195,20 +210,20 @@ static void string_add_fn(VMState *state, Value thisval, Value fn, Value *args_p
   else if (IS_FLOAT(val2)) str2 = my_asprintf("%f", AS_FLOAT(val2));
   else if (IS_BOOL(val2)) if (AS_BOOL(val2)) str2 = my_asprintf("%s", "true"); else str2 = my_asprintf("%s", "false");
   else if (IS_INT(val2)) str2 = my_asprintf("%i", AS_INT(val2));
-  else VM_ASSERT(false, "don't know how to format object: %p", args_ptr[0]);
+  else VM_ASSERT(false, "don't know how to format object: %p", info->args_ptr[0]);
   char *str3 = my_asprintf("%s%s", str1, str2);
   free(str2);
   *state->frame->target_slot = make_string(state, str3, strlen(str3));
   free(str3);
 }
 
-static void string_eq_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void string_eq_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
   Object
-    *sobj1 = obj_instance_of(OBJ_OR_NULL(thisval), string_base),
-    *sobj2 = obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+    *sobj1 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), string_base),
+    *sobj2 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(sobj1, "internal error: string compare function called on wrong type of object");
   VM_ASSERT(sobj2, "can only compare strings with strings!");
   
@@ -219,13 +234,13 @@ static void string_eq_fn(VMState *state, Value thisval, Value fn, Value *args_pt
   *state->frame->target_slot = BOOL2VAL(res == 0);
 }
 
-static void string_startswith_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void string_startswith_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
   Object
-    *sobj1 = obj_instance_of(OBJ_OR_NULL(thisval), string_base),
-    *sobj2 = obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+    *sobj1 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), string_base),
+    *sobj2 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(sobj1, "internal error: string.startsWith() called on wrong type of object");
   VM_ASSERT(sobj2, "string.startsWith() expects string as parameter");
   
@@ -244,13 +259,13 @@ static void string_startswith_fn(VMState *state, Value thisval, Value fn, Value 
   }
 }
 
-static void string_endswith_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void string_endswith_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
   Object
-    *sobj1 = obj_instance_of(OBJ_OR_NULL(thisval), string_base),
-    *sobj2 = obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+    *sobj1 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), string_base),
+    *sobj2 = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(sobj1, "internal error: string.endsWith() called on wrong type of object");
   VM_ASSERT(sobj2, "string.endsWith() expects string as parameter");
   
@@ -269,22 +284,22 @@ static void string_endswith_fn(VMState *state, Value thisval, Value fn, Value *a
   }
 }
 
-static void string_slice_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1 || args_len == 2, "wrong arity: expected 1 or 2, got %i", args_len);
+static void string_slice_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
-  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(thisval), string_base);
+  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), string_base);
   VM_ASSERT(sobj, "internal error: string.slice() called on wrong type of object");
   
   char *str = sobj->value;
   int len = utf8_strlen(str);
   int from = 0, to = len;
-  if (args_len == 1) {
-    Value arg1 = args_ptr[0];
+  if (info->args_len == 1) {
+    Value arg1 = info->slots_ptr[info->args_ptr[0]];
     VM_ASSERT(IS_INT(arg1), "string.slice() expected int");
     from = AS_INT(arg1);
   } else {
-    Value arg1 = args_ptr[0], arg2 = args_ptr[1];
+    Value arg1 = info->slots_ptr[info->args_ptr[0]], arg2 = info->slots_ptr[info->args_ptr[1]];
     VM_ASSERT(IS_INT(arg1), "string.slice() expected int as first parameter");
     VM_ASSERT(IS_INT(arg2), "string.slice() expected int as second parameter");
     from = AS_INT(arg1);
@@ -307,13 +322,13 @@ static void string_slice_fn(VMState *state, Value thisval, Value fn, Value *args
   *state->frame->target_slot = make_string(state, start, end - start);
 }
 
-static void string_find_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void string_find_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
-  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(thisval), string_base);
+  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), string_base);
   VM_ASSERT(sobj, "internal error: string.find() called on wrong type of object");
-  StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(sobj2, "internal error: string.find() expects string");
   
   char *str = sobj->value;
@@ -335,11 +350,11 @@ static void string_find_fn(VMState *state, Value thisval, Value fn, Value *args_
   *state->frame->target_slot = INT2VAL(pos_utf8);
 }
 
-static void string_byte_len_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
+static void string_byte_len_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
-  Object *sobj = obj_instance_of(OBJ_OR_NULL(thisval), string_base);
+  Object *sobj = obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), string_base);
   VM_ASSERT(sobj, "internal error: string.endsWith() called on wrong type of object");
   
   char *str = ((StringObject*) sobj)->value;
@@ -354,14 +369,14 @@ typedef enum {
   CMP_GE
 } CompareOp;
 
-static void int_cmp_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len, CompareOp cmp) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  Value val2 = args_ptr[0];
+  Value val2 = info->slots_ptr[info->args_ptr[0]];
   
-  VM_ASSERT(IS_INT(thisval), "internal error: int compare function called on wrong type of object");
+  VM_ASSERT(IS_INT(info->slots_ptr[info->this_slot]), "internal error: int compare function called on wrong type of object");
   if (IS_INT(val2)) {
-    int i1 = AS_INT(thisval), i2 = AS_INT(val2);
+    int i1 = AS_INT(info->slots_ptr[info->this_slot]), i2 = AS_INT(val2);
     bool res;
     switch (cmp) {
       case CMP_EQ: res = i1 == i2; break;
@@ -376,7 +391,7 @@ static void int_cmp_fn(VMState *state, Value thisval, Value fn, Value *args_ptr,
   }
   
   if (AS_FLOAT(val2)) {
-    float v1 = AS_INT(thisval), v2 = AS_FLOAT(val2);
+    float v1 = AS_INT(info->slots_ptr[info->this_slot]), v2 = AS_FLOAT(val2);
     bool res;
     switch (cmp) {
       case CMP_EQ: res = v1 == v2; break;
@@ -389,33 +404,33 @@ static void int_cmp_fn(VMState *state, Value thisval, Value fn, Value *args_ptr,
     *state->frame->target_slot = BOOL2VAL(res);
     return;
   }
-  VM_ASSERT(false, "don't know how to compare int with %s", get_type_info(state, args_ptr[0]));
+  VM_ASSERT(false, "don't know how to compare int with %s", get_type_info(state, info->slots_ptr[info->args_ptr[0]]));
 }
 
-static void int_eq_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_EQ);
+static void int_eq_fn(VMState *state, CallInfo *info) {
+  int_cmp_fn(state, info, CMP_EQ);
 }
 
-static void int_lt_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_LT);
+static void int_lt_fn(VMState *state, CallInfo *info) {
+  int_cmp_fn(state, info, CMP_LT);
 }
 
-static void int_gt_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_GT);
+static void int_gt_fn(VMState *state, CallInfo *info) {
+  int_cmp_fn(state, info, CMP_GT);
 }
 
-static void int_le_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_LE);
+static void int_le_fn(VMState *state, CallInfo *info) {
+  int_cmp_fn(state, info, CMP_LE);
 }
 
-static void int_ge_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  int_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_GE);
+static void int_ge_fn(VMState *state, CallInfo *info) {
+  int_cmp_fn(state, info, CMP_GE);
 }
 
-static void float_cmp_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len, CompareOp cmp) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  Value val1 = thisval, val2 = args_ptr[0];
+  Value val1 = info->slots_ptr[info->this_slot], val2 = info->slots_ptr[info->args_ptr[0]];
   VM_ASSERT(IS_FLOAT(val1), "internal error: float compare function called on wrong type of object");
   
   float v1 = AS_FLOAT(val1), v2;
@@ -435,46 +450,46 @@ static void float_cmp_fn(VMState *state, Value thisval, Value fn, Value *args_pt
   *state->frame->target_slot = BOOL2VAL(res);
 }
 
-static void float_eq_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_EQ);
+static void float_eq_fn(VMState *state, CallInfo *info) {
+  float_cmp_fn(state, info, CMP_EQ);
 }
 
-static void float_lt_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_LT);
+static void float_lt_fn(VMState *state, CallInfo *info) {
+  float_cmp_fn(state, info, CMP_LT);
 }
 
-static void float_gt_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_GT);
+static void float_gt_fn(VMState *state, CallInfo *info) {
+  float_cmp_fn(state, info, CMP_GT);
 }
 
-static void float_le_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_LE);
+static void float_le_fn(VMState *state, CallInfo *info) {
+  float_cmp_fn(state, info, CMP_LE);
 }
 
-static void float_ge_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  float_cmp_fn(state, thisval, fn, args_ptr, args_len, CMP_GE);
+static void float_ge_fn(VMState *state, CallInfo *info) {
+  float_cmp_fn(state, info, CMP_GE);
 }
 
-static void float_toint_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  VM_ASSERT(IS_FLOAT(thisval), "float.toInt called on wrong type of object");
-  *state->frame->target_slot = INT2VAL((int) AS_FLOAT(thisval));
+static void float_toint_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  VM_ASSERT(IS_FLOAT(info->slots_ptr[info->this_slot]), "float.toInt called on wrong type of object");
+  *state->frame->target_slot = INT2VAL((int) AS_FLOAT(info->slots_ptr[info->this_slot]));
 }
 
-static void ptr_is_null_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
-  Object *thisptr = OBJ_OR_NULL(thisval);
+static void ptr_is_null_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  Object *thisptr = OBJ_OR_NULL(info->slots_ptr[info->this_slot]);
   Object *pointer_base = state->shared->vcache.pointer_base;
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "internal error");
   PointerObject *ptr_obj = (PointerObject*) thisptr;
   *state->frame->target_slot = BOOL2VAL(ptr_obj->ptr == NULL);
 }
 
-static void array_resize_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void array_resize_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(thisval), array_base);
-  Value arg = args_ptr[0];
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), array_base);
+  Value arg = info->slots_ptr[info->args_ptr[0]];
   VM_ASSERT(IS_INT(arg), "parameter to resize function must be int");
   VM_ASSERT(arr_obj, "internal error: resize called on object that is not an array");
   int oldsize = arr_obj->length;
@@ -484,25 +499,25 @@ static void array_resize_fn(VMState *state, Value thisval, Value fn, Value *args
   memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
   arr_obj->length = newsize;
   object_set(state, (Object*) arr_obj, "length", INT2VAL(newsize));
-  *state->frame->target_slot = thisval;
+  *state->frame->target_slot = info->slots_ptr[info->this_slot];
 }
 
-static void array_push_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void array_push_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(thisval), array_base);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), array_base);
   VM_ASSERT(arr_obj, "internal error: push called on object that is not an array");
-  Value value = args_ptr[0];
+  Value value = info->slots_ptr[info->args_ptr[0]];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * ++arr_obj->length);
   arr_obj->ptr[arr_obj->length - 1] = value;
   object_set(state, (Object*) arr_obj, "length", INT2VAL(arr_obj->length));
-  *state->frame->target_slot = thisval;
+  *state->frame->target_slot = info->slots_ptr[info->this_slot];
 }
 
-static void array_pop_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
+static void array_pop_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(thisval), array_base);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), array_base);
   VM_ASSERT(arr_obj, "internal error: pop called on object that is not an array");
   Value res = arr_obj->ptr[arr_obj->length - 1];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * --arr_obj->length);
@@ -510,11 +525,11 @@ static void array_pop_fn(VMState *state, Value thisval, Value fn, Value *args_pt
   *state->frame->target_slot = res;
 }
 
-static void array_index_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void array_index_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(thisval), array_base);
-  Value arg = args_ptr[0];
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), array_base);
+  Value arg = info->slots_ptr[info->args_ptr[0]];
   if (!IS_INT(arg)) { *state->frame->target_slot = VNULL; return; }
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = AS_INT(arg);
@@ -524,25 +539,25 @@ static void array_index_fn(VMState *state, Value thisval, Value fn, Value *args_
   else state->exit_value = arr_obj->ptr[index];
 }
 
-static void array_index_assign_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+static void array_index_assign_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(thisval), array_base);
-  Value arg = args_ptr[0];
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), array_base);
+  Value arg = info->slots_ptr[info->args_ptr[0]];
   VM_ASSERT(arr_obj, "internal error: array '[]=' called on object that is not an array");
   VM_ASSERT(IS_INT(arg), "index of array '[]=' must be int");
   int index = AS_INT(arg);
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
-  arr_obj->ptr[index] = args_ptr[1];
+  arr_obj->ptr[index] = info->slots_ptr[info->args_ptr[1]];
   *state->frame->target_slot = VNULL;
 }
 
-static void array_join_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void array_join_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(thisval), array_base);
-  StringObject *str_arg = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), array_base);
+  StringObject *str_arg = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(arr_obj, "internal error: 'join' called on object that is not an array");
   VM_ASSERT(str_arg, "argument to array.join() must be string");
   
@@ -578,19 +593,19 @@ static void array_join_fn(VMState *state, Value thisval, Value fn, Value *args_p
   free(res);
 }
 
-static void file_print_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
+static void file_print_fn(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base;
   Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
   assert(file_base);
   
-  VM_ASSERT(obj_instance_of(OBJ_OR_NULL(thisval), file_base), "print() called on object that is not a file");
-  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(thisval), "_handle", NULL));
+  VM_ASSERT(obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), file_base), "print() called on object that is not a file");
+  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(info->slots_ptr[info->this_slot]), "_handle", NULL));
   VM_ASSERT(hdl_obj, "missing _handle!");
   VM_ASSERT(hdl_obj->parent == pointer_base, "_handle must be a pointer!");
   PointerObject *hdl_ptrobj = (PointerObject*) hdl_obj;
   FILE *file = hdl_ptrobj->ptr;
-  for (int i = 0; i < args_len; ++i) {
-    Value arg = args_ptr[i];
+  for (int i = 0; i < info->args_len; ++i) {
+    Value arg = info->slots_ptr[info->args_ptr[i]];
     print_recursive(state, file, arg, true);
     if (state->runstate == VM_ERRORED) return;
   }
@@ -598,16 +613,16 @@ static void file_print_fn(VMState *state, Value thisval, Value fn, Value *args_p
   *state->frame->target_slot = VNULL;
 }
 
-static void file_open_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+static void file_open_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
   Object *string_base = state->shared->vcache.string_base;
   assert(file_base);
   
-  VM_ASSERT(OBJ_OR_NULL(thisval) == file_base, "open() called on object other than file!");
-  StringObject *fnobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  VM_ASSERT(OBJ_OR_NULL(info->slots_ptr[info->this_slot]) == file_base, "open() called on object other than file!");
+  StringObject *fnobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(fnobj, "first parameter to file.open() must be string!");
-  StringObject *fmobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[1]), string_base);
+  StringObject *fmobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[1]]), string_base);
   VM_ASSERT(fmobj, "second parameter to file.open() must be string!");
   
   gc_disable(state);
@@ -621,27 +636,27 @@ static void file_open_fn(VMState *state, Value thisval, Value fn, Value *args_pt
   gc_enable(state);
 }
 
-static void file_close_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 0, "wrong arity: expected 0, got %i", args_len);
+static void file_close_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
   Object *pointer_base = state->shared->vcache.pointer_base;
   assert(file_base);
   
-  VM_ASSERT(obj_instance_of(OBJ_OR_NULL(thisval), file_base), "close() called on object that is not a file!");
-  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(thisval), "_handle", NULL));
+  VM_ASSERT(obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->this_slot]), file_base), "close() called on object that is not a file!");
+  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(info->slots_ptr[info->this_slot]), "_handle", NULL));
   VM_ASSERT(hdl_obj, "missing _handle!");
   VM_ASSERT(hdl_obj->parent == pointer_base, "_handle must be a pointer!");
   PointerObject *hdl_ptrobj = (PointerObject*) hdl_obj;
   FILE *file = hdl_ptrobj->ptr;
   fclose(file);
-  object_set(state, AS_OBJ(thisval), "_handle", VNULL);
+  object_set(state, AS_OBJ(info->slots_ptr[info->this_slot]), "_handle", VNULL);
   
   *state->frame->target_slot = VNULL;
 }
 
-static void print_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  for (int i = 0; i < args_len; ++i) {
-    Value arg = args_ptr[i];
+static void print_fn(VMState *state, CallInfo *info) {
+  for (int i = 0; i < info->args_len; ++i) {
+    Value arg = info->slots_ptr[info->args_ptr[i]];
     print_recursive(state, stdout, arg, true);
     if (state->runstate == VM_ERRORED) return;
   }
@@ -649,11 +664,11 @@ static void print_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, i
   *state->frame->target_slot = VNULL;
 }
 
-static void keys_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void keys_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   gc_disable(state);
   int res_len = 0;
-  Object *obj = OBJ_OR_NULL(args_ptr[0]);
+  Object *obj = OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]);
   if (obj) {
     HashTable *tbl = &obj->tbl;
     for (int i = 0; i < tbl->entries_num; ++i) {
@@ -716,15 +731,15 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
   return res;
 }
 
-static void xml_load_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void xml_load_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
   Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(root, "xml", NULL));
   Object *text_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "text_node", NULL));
   Object *element_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL));
   
-  StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(str_obj, "parameter to xml.load must be string");
   char *file = str_obj->value;
   
@@ -744,15 +759,15 @@ static void xml_load_fn(VMState *state, Value thisval, Value fn, Value *args_ptr
   xmlCleanupParser();
 }
 
-static void xml_parse_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void xml_parse_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
   Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(root, "xml", NULL));
   Object *text_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "text_node", NULL));
   Object *element_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL));
   
-  StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(str_obj, "parameter to xml.parse must be string");
   char *text = str_obj->value;
   
@@ -779,10 +794,19 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   substate.root = state->root;
   substate.shared = state->shared;
   
-  if (!setup_call(&substate, node, pred, &node, 1)) {
+  Value slots[] = {VNULL, node, pred};
+  int args[] = {1};
+  CallInfo info = {0};
+  info.args_len = 1;
+  info.args_ptr = args;
+  info.fn_slot = 2;
+  info.slots_ptr = slots;
+  info.this_slot = 0;
+  if (!setup_call(&substate, &info)) {
     VM_ASSERT(false, "pred check failure: %s\n", substate.error) false;
   }
   
+  vm_update_frame(&substate);
   vm_run(&substate);
   VM_ASSERT(substate.runstate != VM_ERRORED, "pred check failure: %s\n", substate.error) false;
   
@@ -811,12 +835,12 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, Value 
   }
 }
 
-static void xml_node_find_array_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   Value *array_ptr = NULL; int array_length = 0;
   gc_disable(state);
-  xml_node_find_recurse(state, thisval, args_ptr[0], &array_ptr, &array_length);
+  xml_node_find_recurse(state, info->slots_ptr[info->this_slot], info->slots_ptr[info->args_ptr[0]], &array_ptr, &array_length);
   *state->frame->target_slot = make_array(state, array_ptr, array_length);
   gc_enable(state);
 }
@@ -852,28 +876,28 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
   }
 }
 
-static void xml_node_find_by_name_array_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
-  StringObject *name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(name_obj, "parameter to find_array_by_name must be string!");
   
   Value *array_ptr = NULL; int array_length = 0;
   gc_disable(state);
-  xml_node_find_by_name_recurse(state, thisval, name_obj->value, &array_ptr, &array_length);
+  xml_node_find_by_name_recurse(state, info->slots_ptr[info->this_slot], name_obj->value, &array_ptr, &array_length);
   *state->frame->target_slot = make_array(state, array_ptr, array_length);
   gc_enable(state);
 }
 
 #include "language.h"
 
-static void require_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void require_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
   
-  StringObject *file_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *file_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(file_obj, "parameter to require() must be string!");
   
   char *filename = file_obj->value;
@@ -892,7 +916,9 @@ static void require_fn(VMState *state, Value thisval, Value fn, Value *args_ptr,
   substate.root = state->root;
   substate.shared = state->shared;
   
-  call_function(&substate, root, module, NULL, 0);
+  CallInfo info2 = {0};
+  call_function(&substate, root, module, &info2);
+  vm_update_frame(&substate);
   vm_run(&substate);
   
   if (substate.runstate == VM_ERRORED) {
@@ -906,18 +932,18 @@ static void require_fn(VMState *state, Value thisval, Value fn, Value *args_ptr,
   *state->frame->target_slot = substate.exit_value;
 }
 
-static void freeze_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  VM_ASSERT(NOT_NULL(args_ptr[0]), "can't freeze null");
-  VM_ASSERT(IS_OBJ(args_ptr[0]), "can't freeze primitive (implicitly frozen!)");
-  Object *obj = AS_OBJ(args_ptr[0]);
+static void freeze_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  VM_ASSERT(NOT_NULL(info->slots_ptr[info->args_ptr[0]]), "can't freeze null");
+  VM_ASSERT(IS_OBJ(info->slots_ptr[info->args_ptr[0]]), "can't freeze primitive (implicitly frozen!)");
+  Object *obj = AS_OBJ(info->slots_ptr[info->args_ptr[0]]);
   obj->flags |= OBJ_FROZEN;
 }
 
-static void mark_const_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void mark_const_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  StringObject *key_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[0]), string_base);
+  StringObject *key_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]), string_base);
   VM_ASSERT(key_obj, "argument to _mark_const must be string");
   
   char *key_ptr = key_obj->value;
@@ -945,10 +971,10 @@ static void mark_const_fn(VMState *state, Value thisval, Value fn, Value *args_p
   VM_ASSERT(false, "cannot mark const: variable not found");
 }
 
-static void obj_keys_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
-  VM_ASSERT(NOT_NULL(args_ptr[0]), "cannot get keys of null");
-  Object *obj = OBJ_OR_NULL(args_ptr[0]);
+static void obj_keys_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  VM_ASSERT(NOT_NULL(info->slots_ptr[info->args_ptr[0]]), "cannot get keys of null");
+  Object *obj = OBJ_OR_NULL(info->slots_ptr[info->args_ptr[0]]);
   int keys_len = 0;
   Value *keys_ptr = NULL;
   if (obj) {
@@ -967,60 +993,60 @@ static void obj_keys_fn(VMState *state, Value thisval, Value fn, Value *args_ptr
   *state->frame->target_slot = make_array(state, keys_ptr, keys_len);
 }
 
-static void sin_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void sin_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   float f;
-  if (IS_FLOAT(args_ptr[0])) f = AS_FLOAT(args_ptr[0]);
-  else if (IS_INT(args_ptr[0])) f = AS_INT(args_ptr[0]);
+  if (IS_FLOAT(info->slots_ptr[info->args_ptr[0]])) f = AS_FLOAT(info->slots_ptr[info->args_ptr[0]]);
+  else if (IS_INT(info->slots_ptr[info->args_ptr[0]])) f = AS_INT(info->slots_ptr[info->args_ptr[0]]);
   else VM_ASSERT(false, "unexpected type for math.sin()");
   *state->frame->target_slot = FLOAT2VAL(sinf(f));
 }
 
-static void cos_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void cos_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   float f;
-  if (IS_FLOAT(args_ptr[0])) f = AS_FLOAT(args_ptr[0]);
-  else if (IS_INT(args_ptr[0])) f = AS_INT(args_ptr[0]);
+  if (IS_FLOAT(info->slots_ptr[info->args_ptr[0]])) f = AS_FLOAT(info->slots_ptr[info->args_ptr[0]]);
+  else if (IS_INT(info->slots_ptr[info->args_ptr[0]])) f = AS_INT(info->slots_ptr[info->args_ptr[0]]);
   else VM_ASSERT(false, "unexpected type for math.cos()");
   *state->frame->target_slot = FLOAT2VAL(cosf(f));
 }
 
-static void tan_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void tan_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   float f;
-  if (IS_FLOAT(args_ptr[0])) f = AS_FLOAT(args_ptr[0]);
-  else if (IS_INT(args_ptr[0])) f = AS_INT(args_ptr[0]);
+  if (IS_FLOAT(info->slots_ptr[info->args_ptr[0]])) f = AS_FLOAT(info->slots_ptr[info->args_ptr[0]]);
+  else if (IS_INT(info->slots_ptr[info->args_ptr[0]])) f = AS_INT(info->slots_ptr[info->args_ptr[0]]);
   else VM_ASSERT(false, "unexpected type for math.tan()");
   *state->frame->target_slot = FLOAT2VAL(tanf(f));
 }
 
-static void sqrt_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1, "wrong arity: expected 1, got %i", args_len);
+static void sqrt_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   float f;
-  if (IS_FLOAT(args_ptr[0])) f = AS_FLOAT(args_ptr[0]);
-  else if (IS_INT(args_ptr[0])) f = AS_INT(args_ptr[0]);
+  if (IS_FLOAT(info->slots_ptr[info->args_ptr[0]])) f = AS_FLOAT(info->slots_ptr[info->args_ptr[0]]);
+  else if (IS_INT(info->slots_ptr[info->args_ptr[0]])) f = AS_INT(info->slots_ptr[info->args_ptr[0]]);
   else VM_ASSERT(false, "unexpected type for math.sqrt()");
   *state->frame->target_slot = FLOAT2VAL(sqrtf(f));
 }
 
-static void pow_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 2, "wrong arity: expected 2, got %i", args_len);
+static void pow_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   float a, b;
-  if (IS_FLOAT(args_ptr[0])) a = AS_FLOAT(args_ptr[0]);
-  else if (IS_INT(args_ptr[0])) a = AS_INT(args_ptr[0]);
+  if (IS_FLOAT(info->slots_ptr[info->args_ptr[0]])) a = AS_FLOAT(info->slots_ptr[info->args_ptr[0]]);
+  else if (IS_INT(info->slots_ptr[info->args_ptr[0]])) a = AS_INT(info->slots_ptr[info->args_ptr[0]]);
   else VM_ASSERT(false, "unexpected type for math.pow()");
-  if (IS_FLOAT(args_ptr[1])) b = AS_FLOAT(args_ptr[1]);
-  else if (IS_INT(args_ptr[1])) b = AS_INT(args_ptr[1]);
+  if (IS_FLOAT(info->slots_ptr[info->args_ptr[1]])) b = AS_FLOAT(info->slots_ptr[info->args_ptr[1]]);
+  else if (IS_INT(info->slots_ptr[info->args_ptr[1]])) b = AS_INT(info->slots_ptr[info->args_ptr[1]]);
   else VM_ASSERT(false, "unexpected type for math.pow()");
   *state->frame->target_slot = FLOAT2VAL(powf(a, b));
 }
 
-static void assert_fn(VMState *state, Value thisval, Value fn, Value *args_ptr, int args_len) {
-  VM_ASSERT(args_len == 1 || args_len == 2, "wrong arity: expected 1 or 2, got %i", args_len);
-  bool test = value_is_truthy(args_ptr[0]);
-  if (args_len == 2) {
+static void assert_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
+  bool test = value_is_truthy(info->slots_ptr[info->args_ptr[0]]);
+  if (info->args_len == 2) {
     Object *string_base = state->shared->vcache.string_base;
-    StringObject *msg_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(args_ptr[1]), string_base);
+    StringObject *msg_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(info->slots_ptr[info->args_ptr[1]]), string_base);
     VM_ASSERT(msg_obj, "second parameter to assert() must be string");
     VM_ASSERT(test, "assert failed: %s", msg_obj->value);
   } else {

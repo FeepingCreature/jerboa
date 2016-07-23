@@ -44,7 +44,8 @@ int main(int argc, char **argv) {
     if (res == PARSE_ERROR) continue;
     assert(res == PARSE_OK);
     dump_fn(&vmstate, line_fn);
-    call_function(&vmstate, root, line_fn, NULL, 0);
+    CallInfo null_call = {0};
+    call_function(&vmstate, root, line_fn, &null_call);
     vm_run(&vmstate);
     if (vmstate.runstate == VM_ERRORED) {
       fprintf(stderr, "vm errored: %s\n", vmstate.error);

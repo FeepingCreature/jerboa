@@ -70,7 +70,9 @@ int main(int argc, char **argv) {
     dump_fn(&vmstate, module);
   }
   
-  call_function(&vmstate, root, module, NULL, 0);
+  CallInfo info = {0};
+  call_function(&vmstate, root, module, &info);
+  vm_update_frame(&vmstate);
   vm_run(&vmstate);
   
   save_profile_output("profile.html", source, &vmstate.shared->profstate);

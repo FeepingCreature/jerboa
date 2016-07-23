@@ -27,6 +27,8 @@ void vm_print_backtrace(VMState *state);
 
 char *vm_record_backtrace(VMState *state, int *depth);
 
+void vm_update_frame(VMState *state);
+
 void vm_run(VMState *state);
 
 void init_instr_fn_table();

@@ -62,8 +62,15 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     substate.root = state->root;
     substate.shared = state->shared;
     
-    if (!setup_call(&substate, val, toString_fn, NULL, 0)) return;
+    CallInfo info = {0};
+    Value values[] = {val, toString_fn};
+    info.slots_ptr = values;
+    info.this_slot = 0;
+    info.fn_slot = 1;
     
+    if (!setup_call(&substate, &info)) return;
+    
+    vm_update_frame(&substate);
     vm_run(&substate);
     VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error);
     
