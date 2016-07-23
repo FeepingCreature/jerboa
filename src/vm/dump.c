@@ -112,6 +112,19 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((int*)(ci + 1) + ci->args_length);
       break;
     }
+    case INSTR_CALL_DIRECT:
+    {
+      CallDirectInstr *cdi = (CallDirectInstr*) instr;
+      fprintf(stderr, "call: %%%i = %%%i . %p ( ",
+              cdi->target_slot, cdi->info.this_slot, (void*) AS_OBJ(cdi->info.fn));
+      for (int i = 0; i < cdi->info.args_len; ++i) {
+        if (i) fprintf(stderr, ", ");
+        fprintf(stderr, "%%%i", INFO_ARGS_PTR(&cdi->info)[i]);
+      }
+      fprintf(stderr, " ) \t (%s)\n", cdi->fn_info);
+      *instr_p = (Instr*) ((int*)(cdi + 1) + cdi->info.args_len);
+      break;
+    }
     case INSTR_RETURN:
       fprintf(stderr, "return: %%%i\n", ((ReturnInstr*) instr)->ret_slot);
       *instr_p = (Instr*) ((ReturnInstr*) instr + 1);
@@ -134,9 +147,10 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     }
     case INSTR_ACCESS_STRING_KEY:
-      fprintf(stderr, "access: %%%i = %%%i . '%.*s' \t\t(opt: string key)\n",
+      fprintf(stderr, "access: %%%i = %%%i . '%.*s' \t\t(opt: string key, scratch %%%i)\n",
               ((AccessStringKeyInstr*) instr)->target_slot, ((AccessStringKeyInstr*) instr)->obj_slot,
-              ((AccessStringKeyInstr*) instr)->key_len, ((AccessStringKeyInstr*) instr)->key_ptr);
+              ((AccessStringKeyInstr*) instr)->key_len, ((AccessStringKeyInstr*) instr)->key_ptr,
+              ((AccessStringKeyInstr*) instr)->key_slot);
       *instr_p = (Instr*) ((AccessStringKeyInstr*) instr + 1);
       break;
     case INSTR_ASSIGN_STRING_KEY:

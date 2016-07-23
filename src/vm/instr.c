@@ -37,6 +37,7 @@ int instr_size(Instr *instr) {
 #undef CASE
     case INSTR_ALLOC_STATIC_OBJECT: return sizeof(AllocStaticObjectInstr) + sizeof(Object);
     case INSTR_CALL: return sizeof(CallInstr) + sizeof(int) * ((CallInstr*)instr)->args_length;
+    case INSTR_CALL_DIRECT: return sizeof(CallDirectInstr) + sizeof(int) * ((CallDirectInstr*)instr)->info.args_len;
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();
   }
 }

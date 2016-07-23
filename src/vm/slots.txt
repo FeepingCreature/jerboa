@@ -34,7 +34,14 @@ CASE(INSTR_CALL, CallInstr)
   CHKSLOT(instr->base.context_slot);
   CHKSLOT(instr->this_slot); CHKSLOT(instr->function_slot);
   for (int k = 0; k < instr->args_length; ++k) {
-    CHKSLOT(((int*)(instr + 1))[k]);
+    CHKSLOT(((int*)(instr+1))[k]);
+  }
+  CHKSLOT(instr->target_slot);
+CASE(INSTR_CALL_DIRECT, CallDirectInstr)
+  CHKSLOT(instr->base.context_slot);
+  CHKSLOT(instr->info.this_slot);
+  for (int k = 0; k < instr->info.args_len; ++k) {
+    CHKSLOT(INFO_ARGS_PTR(&instr->info)[k]);
   }
   CHKSLOT(instr->target_slot);
 CASE(INSTR_RETURN, ReturnInstr)
@@ -52,6 +59,7 @@ CASE(INSTR_PHI, PhiInstr)
 
 CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->key_slot);
 CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->value_slot);
 CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)

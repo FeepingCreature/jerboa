@@ -73,7 +73,15 @@ typedef struct {
     bool b;
     Object *obj;
   };
-} __attribute__((aligned (16))) Value;
+} /*__attribute__((aligned (16)))*/ Value; // TODO
+
+typedef struct {
+  Value fn;
+  int this_slot;
+  int args_len;
+} CallInfo;
+
+#define INFO_ARGS_PTR(I) ((int*)(I + 1))
 
 struct _TableEntry {
   const char *name_ptr;

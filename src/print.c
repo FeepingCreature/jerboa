@@ -62,11 +62,12 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     substate.root = state->root;
     substate.shared = state->shared;
     
+    setup_stub_frame(&substate, 1);
+    substate.frame->slots_ptr[0] = val;
+    
     CallInfo info = {0};
-    Value values[] = {val, toString_fn};
-    info.slots_ptr = values;
     info.this_slot = 0;
-    info.fn_slot = 1;
+    info.fn = toString_fn;
     
     if (!setup_call(&substate, &info)) return;
     

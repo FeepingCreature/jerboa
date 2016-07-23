@@ -86,6 +86,18 @@ void vm_remove_frame(VMState *state) {
   vm_stack_free(state, cf, sizeof(Callframe));
 }
 
+void setup_stub_frame(VMState *state, int slots) {
+  vm_alloc_frame(state, slots + 1, 0);
+  Callframe *cf = state->frame;
+  ReturnInstr *ret = calloc(sizeof(ReturnInstr), 1);
+  ret->base.type = INSTR_RETURN;
+  ret->ret_slot = slots;
+  cf->instr_ptr = (Instr*) ret;
+  cf->target_slot = &cf->slots_ptr[ret->ret_slot];
+  gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
+  state->instr = cf->instr_ptr;
+}
+
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
   if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
@@ -161,6 +173,8 @@ void vm_record_profile(VMState *state) {
       Instr *instr = curf->instr_ptr;
       FileRange **belongs_to_p = curf->backtrace_belongs_to_p;
       if (!belongs_to_p) belongs_to_p = &instr->belongs_to;
+      
+      if (!*belongs_to_p) continue; // stub frames and the like
       
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
@@ -380,15 +394,12 @@ static FnWrap vm_instr_access(VMState *state) {
     if (NOT_NULL(index_op)) {
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(access_instr + 1);
-      Value values[] = {index_op, val, key_val};
-      int args_arr[] = {2};
-      CallInfo info = {0};
-      info.slots_ptr = values;
-      info.args_len = 1;
-      info.args_ptr = args_arr;
-      info.this_slot = 1;
-      info.fn_slot = 0;
-      return call_internal(state, &info, target_slot, prev_instr);
+      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int));
+      info->args_len = 1;
+      info->this_slot = obj_slot;
+      info->fn = index_op;
+      INFO_ARGS_PTR(info)[0] = key_slot;
+      return call_internal(state, info, target_slot, prev_instr);
     }
   }
   if (!object_found) {
@@ -409,18 +420,17 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state) {
   Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
   if (NOT_NULL(index_op)) {
     Value key = make_string(state, aski->key_ptr, aski->key_len);
+    state->frame->slots_ptr[aski->key_slot] = key;
     
-    Value values[] = {index_op, val, key};
-    int args_arr[] = {2};
-    CallInfo info = {0};
-    info.slots_ptr = values;
-    info.args_len = 1;
-    info.args_ptr = args_arr;
-    info.this_slot = 1;
-    info.fn_slot = 0;
+    CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int));
+    info->args_len = 1;
+    info->this_slot = aski->obj_slot;
+    info->fn = index_op;
+    INFO_ARGS_PTR(info)[0] = aski->key_slot;
+    
     FileRange **prev_instr = &state->instr->belongs_to;
     state->instr = (Instr*)(aski + 1);
-    return call_internal(state, &info, aski->target_slot, prev_instr);
+    return call_internal(state, info, aski->target_slot, prev_instr);
   } else {
     VM_ASSERT2(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr);
   }
@@ -469,18 +479,16 @@ static FnWrap vm_instr_assign(VMState *state) {
     // non-string key, goes to []=
     Value index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (NOT_NULL(index_assign_op)) {
-      Value values[] = {index_assign_op, val, state->frame->slots_ptr[assign_instr->key_slot], value_val};
-      int args_arr[] = {2, 3};
-      CallInfo info = {0};
-      info.slots_ptr = values;
-      info.args_len = 2;
-      info.args_ptr = args_arr;
-      info.this_slot = 1;
-      info.fn_slot = 0;
+      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int) * 2);
+      info->args_len = 2;
+      info->this_slot = obj_slot;
+      info->fn = index_assign_op;
+      INFO_ARGS_PTR(info)[0] = assign_instr->key_slot;
+      INFO_ARGS_PTR(info)[1] = value_slot;
       
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
-      return call_internal(state, &info, target_slot, prev_instr);
+      return call_internal(state, info, target_slot, prev_instr);
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -651,21 +659,38 @@ static FnWrap vm_instr_call(VMState *state) {
   VM_ASSERT2_SLOT(target_slot < state->frame->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(this_slot < state->frame->slots_len, "slot numbering error");
   
+  CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int) * args_length);
+  info->args_len = args_length;
+  info->fn = state->frame->slots_ptr[function_slot];
+  info->this_slot = this_slot;
+  
   int *args_ptr = (int*)(call_instr + 1);
   for (int i = 0; i < args_length; ++i) {
     VM_ASSERT2_SLOT(args_ptr[i] >= 0 && args_ptr[i] < state->frame->slots_len, "slot numbering error");
+    INFO_ARGS_PTR(info)[i] = args_ptr[i];
   }
-  
-  CallInfo info = {0};
-  info.args_len = args_length;
-  info.args_ptr = args_ptr;
-  info.fn_slot = function_slot;
-  info.this_slot = this_slot;
-  info.slots_ptr = state->frame->slots_ptr;
   
   FileRange **prev_instr = &state->instr->belongs_to;
   state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
-  return call_internal(state, &info, target_slot, prev_instr);
+  return call_internal(state, info, target_slot, prev_instr);
+}
+
+static FnWrap vm_instr_call_direct(VMState *state) {
+  CallDirectInstr *instr = (CallDirectInstr*) state->instr;
+  int this_slot = instr->info.this_slot, args_length = instr->info.args_len;
+  (void) this_slot;
+  int target_slot = instr->target_slot;
+  VM_ASSERT2_SLOT(target_slot < state->frame->slots_len, "slot numbering error");
+  VM_ASSERT2_SLOT(this_slot < state->frame->slots_len, "slot numbering error");
+  
+  int *args_ptr = (int*)(instr + 1);
+  for (int i = 0; i < args_length; ++i) {
+    (void) args_ptr; VM_ASSERT2_SLOT(args_ptr[i] >= 0 && args_ptr[i] < state->frame->slots_len, "slot numbering error");
+  }
+  
+  FileRange **prev_instr = &state->instr->belongs_to;
+  state->instr = (Instr*) ((int*)(instr + 1) + instr->info.args_len);
+  return call_internal(state, &instr->info, target_slot, prev_instr);
 }
 
 static FnWrap vm_halt(VMState *state) {
@@ -872,6 +897,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_INSTANCEOF] = vm_instr_instanceof;
   instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
   instr_fns[INSTR_CALL] = vm_instr_call;
+  instr_fns[INSTR_CALL_DIRECT] = vm_instr_call_direct;
   instr_fns[INSTR_RETURN] = vm_instr_return;
   instr_fns[INSTR_BR] = vm_instr_br;
   instr_fns[INSTR_TESTBR] = vm_instr_testbr;

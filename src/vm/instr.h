@@ -36,6 +36,7 @@ typedef enum {
   INSTR_DEFINE_REFSLOT,
   INSTR_READ_REFSLOT,
   INSTR_WRITE_REFSLOT,
+  INSTR_CALL_DIRECT, // call function whose value is known
   // object is allocated, some fields are defined, object is closed, and refslots are created for its fields
   // this is a very common pattern due to scopes
   INSTR_ALLOC_STATIC_OBJECT,
@@ -218,7 +219,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot;
+  int obj_slot, key_slot; // fallback slot in case we need to call an overload
   char *key_ptr; int key_len;
   size_t key_hash;
   int target_slot;
@@ -283,5 +284,12 @@ typedef struct {
   int info_len;
   StaticFieldInfo *info_ptr;
 } AllocStaticObjectInstr;
+
+typedef struct {
+  Instr base;
+  char *fn_info;
+  int target_slot;
+  CallInfo info;
+} CallDirectInstr;
 
 #endif

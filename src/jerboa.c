@@ -38,10 +38,8 @@ int main(int argc, char **argv) {
   
   init_instr_fn_table();
   
-  // vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);
   Value rootval = OBJ2VAL(root);
-  // vm_remove_frame(&vmstate);
   
   GCRootSet set;
   gc_add_roots(&vmstate, &rootval, 1, &set);

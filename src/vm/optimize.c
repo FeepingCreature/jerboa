@@ -65,14 +65,16 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   }
 }
 
-static Value *find_constant_slots(UserFunction *uf) {
+static Value *find_constant_slots(UserFunction *uf, char ***info_p) {
   Value *slots = calloc(sizeof(Value), uf->slots);
+  if (info_p) *info_p = (char**) calloc(sizeof(char*), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       if (instr->type == INSTR_SET_SLOT) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
         slots[ssi->target_slot] = ssi->value;
+        if (info_p) (*info_p)[ssi->target_slot] = ssi->opt_info;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
@@ -118,7 +120,7 @@ int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_pt
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
   
-  Value *constant_slots = find_constant_slots(uf);
+  Value *constant_slots = find_constant_slots(uf, NULL);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
@@ -407,6 +409,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
         AccessStringKeyInstr aski = {
           .base = { .type = INSTR_ACCESS_STRING_KEY },
           .obj_slot = acci->obj_slot,
+          .key_slot = acci->key_slot,
           .target_slot = acci->target_slot,
           .key_ptr = key_ptr,
           .key_len = key_len,
@@ -533,6 +536,11 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             slot_live[instr->function_slot] = slot_live[instr->this_slot] = true;
             for (int k = 0; k < instr->args_length; ++k) {
               slot_live[((int*)(instr + 1))[k]] = true;
+            }
+          CASE(INSTR_CALL_DIRECT, CallDirectInstr)
+            slot_live[instr->info.this_slot] = true;
+            for (int k = 0; k < instr->info.args_len; ++k) {
+              slot_live[INFO_ARGS_PTR(&instr->info)[k]] = true;
             }
           CASE(INSTR_RETURN, ReturnInstr)
             slot_live[instr->ret_slot] = true;
@@ -801,11 +809,56 @@ bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr 
   return current == blk_earlier;
 }
 
+static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->block_terminated = true;
+  char **slot_info;
+  Value *constant_slots = find_constant_slots(uf, &slot_info);
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    new_block(builder);
+    
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      if (instr_cur->type == INSTR_CALL) {
+        CallInstr *instr = (CallInstr*) instr_cur;
+        int fn_slot = instr->function_slot;
+        if (NOT_NULL(constant_slots[fn_slot])) {
+          int size = sizeof(CallDirectInstr) + sizeof(int) * instr->args_length;
+          CallDirectInstr *cdi = alloca(size);
+          *cdi = (CallDirectInstr) {
+            .base = { .type = INSTR_CALL_DIRECT },
+            .fn_info = slot_info[fn_slot],
+            .target_slot = instr->target_slot,
+            .info = {
+              .fn = constant_slots[fn_slot],
+              .this_slot = instr->this_slot,
+              .args_len = instr->args_length
+            }
+          };
+          for (int i = 0; i < instr->args_length; ++i) {
+            INFO_ARGS_PTR(&cdi->info)[i] = ((int*)(instr + 1)) [i];
+          }
+          addinstr_like(builder, instr_cur, size, (Instr*)cdi);
+          instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+          continue;
+        }
+      }
+      
+      addinstr_like(builder, instr_cur, instr_size(instr_cur), instr_cur);
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
 static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
   
-  Value *constant_slots = find_constant_slots(uf);
+  Value *constant_slots = find_constant_slots(uf, NULL);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(builder);
@@ -1069,6 +1122,8 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     }
     cfg_destroy(&cfg);
   }
+  
+  uf = inline_constant_calls(state, uf);
   
   // must be late!
   uf = fuse_static_object_alloc(state, uf);
