@@ -2,13 +2,6 @@
 
 #include <stdio.h>
 
-static void dump_val(FILE *file, Value val) {
-  if (IS_INT(val)) fprintf(file, "<int: %i>", AS_INT(val));
-  else if (IS_BOOL(val)) fprintf(file, "<bool: %s>", AS_BOOL(val)?"true":"false");
-  else if (IS_FLOAT(val)) fprintf(file, "<float: %f>", AS_FLOAT(val));
-  else fprintf(file, "<obj: %p>", (void*) AS_OBJ(val));
-}
-
 void dump_instr(VMState *state, Instr **instr_p) {
   Instr *instr = *instr_p;
   // fprintf(stderr, "%p", (void*) instr);
@@ -102,27 +95,14 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_CALL:
     {
       CallInstr *ci = (CallInstr*) instr;
-      fprintf(stderr, "call: %%%i = %%%i . %%%i ( ",
-              ci->target_slot, ci->this_slot, ci->function_slot);
+      fprintf(stderr, "call: %%%i = %%%i . %s ( ",
+              ci->target_slot, ci->this_slot, get_arg_info(ci->function));
       for (int i = 0; i < ci->args_length; ++i) {
         if (i) fprintf(stderr, ", ");
         fprintf(stderr, "%%%i", ((int*)(ci + 1))[i]);
       }
       fprintf(stderr, " )\n");
       *instr_p = (Instr*) ((int*)(ci + 1) + ci->args_length);
-      break;
-    }
-    case INSTR_CALL_DIRECT:
-    {
-      CallDirectInstr *cdi = (CallDirectInstr*) instr;
-      fprintf(stderr, "call: %%%i = %%%i . %p ( ",
-              cdi->target_slot, cdi->info.this_slot, (void*) AS_OBJ(cdi->info.fn));
-      for (int i = 0; i < cdi->info.args_len; ++i) {
-        if (i) fprintf(stderr, ", ");
-        fprintf(stderr, "%%%i", INFO_ARGS_PTR(&cdi->info)[i]);
-      }
-      fprintf(stderr, " ) \t (%s)\n", cdi->fn_info);
-      *instr_p = (Instr*) ((int*)(cdi + 1) + cdi->info.args_len);
       break;
     }
     case INSTR_RETURN:
@@ -174,8 +154,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_SET_SLOT:
     {
       SetSlotInstr *ssi = (SetSlotInstr*) instr;
-      fprintf(stderr, "set slot: %%%i = ", ssi->target_slot);
-      dump_val(stderr, ssi->value);
+      fprintf(stderr, "set slot: %%%i = %s", ssi->target_slot, get_val_info(ssi->value));
       fprintf(stderr, " \t\t (opt: %s)\n", ssi->opt_info);
       *instr_p = (Instr*) (ssi + 1);
       break;

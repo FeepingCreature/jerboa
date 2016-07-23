@@ -1,5 +1,6 @@
 #include "vm/builder.h"
 
+#include "core.h"
 #include "util.h"
 #include "parser.h"
 
@@ -297,7 +298,7 @@ int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr
   CallInstr *instr = alloca(sizeof(CallInstr) + sizeof(int) * args_len);
   instr->base.type = INSTR_CALL;
   instr->base.belongs_to = NULL;
-  instr->function_slot = fn;
+  instr->function = (Arg) { .kind = ARG_SLOT, .slot = fn };
   instr->this_slot = this_slot;
   instr->args_length = args_len;
   instr->target_slot = builder->slot_base++;

@@ -5,6 +5,13 @@
 
 #include "object.h"
 
+char *get_arg_info(Arg arg) {
+  if (arg.kind == ARG_SLOT) return my_asprintf("%%%i", arg.slot);
+  if (arg.kind == ARG_REFSLOT) return my_asprintf("&%i", arg.refslot);
+  assert(arg.kind == ARG_VALUE);
+  return get_val_info(arg.value);
+}
+
 int instr_size(Instr *instr) {
   switch (instr->type) {
 #define CASE(EN, TY) case EN: return sizeof(TY)
@@ -37,7 +44,6 @@ int instr_size(Instr *instr) {
 #undef CASE
     case INSTR_ALLOC_STATIC_OBJECT: return sizeof(AllocStaticObjectInstr) + sizeof(Object);
     case INSTR_CALL: return sizeof(CallInstr) + sizeof(int) * ((CallInstr*)instr)->args_length;
-    case INSTR_CALL_DIRECT: return sizeof(CallDirectInstr) + sizeof(int) * ((CallDirectInstr*)instr)->info.args_len;
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();
   }
 }

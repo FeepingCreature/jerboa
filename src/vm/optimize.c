@@ -44,7 +44,8 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slots[instr->obj_slot] = slots[instr->constraint_slot] = false;
           CASE(INSTR_CALL, CallInstr)
-            slots[instr->function_slot] = slots[instr->this_slot] = false;
+            if (instr->function.kind == ARG_SLOT) slots[instr->function.slot] = false;
+            slots[instr->this_slot] = false;
             for (int k = 0; k < instr->args_length; ++k) {
               slots[((int*)(instr + 1))[k]] = false;
             }
@@ -533,14 +534,10 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slot_live[instr->obj_slot] = slot_live[instr->constraint_slot] = true;
           CASE(INSTR_CALL, CallInstr)
-            slot_live[instr->function_slot] = slot_live[instr->this_slot] = true;
+            if (instr->function.kind == ARG_SLOT) slot_live[instr->function.slot] = true;
+            slot_live[instr->this_slot] = true;
             for (int k = 0; k < instr->args_length; ++k) {
               slot_live[((int*)(instr + 1))[k]] = true;
-            }
-          CASE(INSTR_CALL_DIRECT, CallDirectInstr)
-            slot_live[instr->info.this_slot] = true;
-            for (int k = 0; k < instr->info.args_len; ++k) {
-              slot_live[INFO_ARGS_PTR(&instr->info)[k]] = true;
             }
           CASE(INSTR_RETURN, ReturnInstr)
             slot_live[instr->ret_slot] = true;
@@ -559,7 +556,6 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr)
             slot_live[instr->obj_slot] = true;
           CASE(INSTR_READ_REFSLOT, ReadRefslotInstr)
-            slot_live[instr->target_slot] = true;
           CASE(INSTR_WRITE_REFSLOT, WriteRefslotInstr)
             slot_live[instr->source_slot] = true;
           CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
@@ -582,6 +578,12 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
       bool add = true;
+      if (instr->type == INSTR_READ_REFSLOT) {
+        ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
+        if (!slot_live[rri->target_slot]) {
+          add = false;
+        }
+      }
       if (instr->type == INSTR_SET_SLOT) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
         if (!slot_live[ssi->target_slot]) {
@@ -822,24 +824,21 @@ static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
     while (instr_cur != instr_end) {
       if (instr_cur->type == INSTR_CALL) {
         CallInstr *instr = (CallInstr*) instr_cur;
-        int fn_slot = instr->function_slot;
-        if (NOT_NULL(constant_slots[fn_slot])) {
-          int size = sizeof(CallDirectInstr) + sizeof(int) * instr->args_length;
-          CallDirectInstr *cdi = alloca(size);
-          *cdi = (CallDirectInstr) {
-            .base = { .type = INSTR_CALL_DIRECT },
-            .fn_info = slot_info[fn_slot],
+        Arg fn = instr->function;
+        if (fn.kind == ARG_SLOT && NOT_NULL(constant_slots[fn.slot])) {
+          int size = sizeof(CallInstr) + sizeof(int) * instr->args_length;
+          CallInstr *ci = alloca(size);
+          *ci = (CallInstr) {
+            .base = { .type = INSTR_CALL },
+            .function = { .kind = ARG_VALUE, .value = constant_slots[fn.slot] },
             .target_slot = instr->target_slot,
-            .info = {
-              .fn = constant_slots[fn_slot],
-              .this_slot = instr->this_slot,
-              .args_len = instr->args_length
-            }
+            .this_slot = instr->this_slot,
+            .args_length = instr->args_length
           };
           for (int i = 0; i < instr->args_length; ++i) {
-            INFO_ARGS_PTR(&cdi->info)[i] = ((int*)(instr + 1)) [i];
+            ((int*)(ci + 1))[i] = ((int*)(instr + 1)) [i];
           }
-          addinstr_like(builder, instr_cur, size, (Instr*)cdi);
+          addinstr_like(builder, instr_cur, size, (Instr*)ci);
           instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
           continue;
         }

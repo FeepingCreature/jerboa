@@ -390,6 +390,14 @@ Value make_fn(VMState *state, VMFunctionPointer fn) {
   return make_fn_custom(state, fn, sizeof(FunctionObject));
 }
 
+char *get_val_info(Value val) {
+  if (IS_NULL(val)) return "<null>";
+  else if (IS_INT(val)) return my_asprintf("<int: %i>", AS_INT(val));
+  else if (IS_BOOL(val)) return my_asprintf("<bool: %s>", AS_BOOL(val)?"true":"false");
+  else if (IS_FLOAT(val)) return my_asprintf("<float: %f>", AS_FLOAT(val));
+  else return my_asprintf("<obj: %p>", (void*) AS_OBJ(val));
+}
+
 // TODO move elsewhere
 typedef struct {
   const char *text_from, *text_to;
