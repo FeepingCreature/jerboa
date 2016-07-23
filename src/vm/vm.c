@@ -43,15 +43,18 @@ void vm_stack_free(VMState *state, void *ptr, int size) {
 }
 
 void vm_alloc_frame(VMState *state, int slots, int refslots) {
-  Callframe *cf = (Callframe*) vm_stack_alloc(state, sizeof(Callframe));
+  Callframe *cf = (Callframe*) vm_stack_alloc_uninitialized(state, sizeof(Callframe));
   if (!cf) return; // stack overflow
   cf->above = state->frame;
+  cf->backtrace_belongs_to_p = NULL;
+  cf->block = 0;
   cf->slots_len = slots;
-  cf->slots_ptr = vm_stack_alloc(state, sizeof(Value) * slots);
+  cf->slots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value) * slots);
   if (!cf->slots_ptr) { // stack overflow
     vm_stack_free(state, cf, sizeof(Callframe));
     return;
   }
+  for (int i = 0; i < slots; ++i) cf->slots_ptr[i].type = TYPE_NULL;
   
   cf->refslots_len = refslots;
   cf->refslots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value*) * refslots);
@@ -107,6 +110,7 @@ void vm_print_backtrace(VMState *state) {
       FileRange *belongs_to;
       if (curf->backtrace_belongs_to_p) belongs_to = *curf->backtrace_belongs_to_p;
       else belongs_to = instr->belongs_to;
+      if (!belongs_to) continue; // stub frame
       
       const char *file;
       TextRange line;
@@ -349,7 +353,7 @@ static FnWrap vm_instr_freeze_object(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static FnWrap call_internal(VMState *state, CallInfo *info, int target_slot, FileRange **prev_instr) {
+static inline FnWrap call_internal(VMState *state, CallInfo *info, int target_slot, FileRange **prev_instr) {
   // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
   // solve explicitly
   state->frame->backtrace_belongs_to_p = prev_instr;
@@ -394,11 +398,11 @@ static FnWrap vm_instr_access(VMState *state) {
     if (NOT_NULL(index_op)) {
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(access_instr + 1);
-      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int));
+      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
       info->args_len = 1;
-      info->this_slot = obj_slot;
-      info->fn = index_op;
-      INFO_ARGS_PTR(info)[0] = key_slot;
+      info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
+      info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
+      INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = key_slot };
       return call_internal(state, info, target_slot, prev_instr);
     }
   }
@@ -422,11 +426,11 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state) {
     Value key = make_string(state, aski->key_ptr, aski->key_len);
     state->frame->slots_ptr[aski->key_slot] = key;
     
-    CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int));
+    CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
     info->args_len = 1;
-    info->this_slot = aski->obj_slot;
-    info->fn = index_op;
-    INFO_ARGS_PTR(info)[0] = aski->key_slot;
+    info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
+    info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
+    INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = aski->key_slot };
     
     FileRange **prev_instr = &state->instr->belongs_to;
     state->instr = (Instr*)(aski + 1);
@@ -479,12 +483,12 @@ static FnWrap vm_instr_assign(VMState *state) {
     // non-string key, goes to []=
     Value index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
     if (NOT_NULL(index_assign_op)) {
-      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int) * 2);
+      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
       info->args_len = 2;
-      info->this_slot = obj_slot;
-      info->fn = index_assign_op;
-      INFO_ARGS_PTR(info)[0] = assign_instr->key_slot;
-      INFO_ARGS_PTR(info)[1] = value_slot;
+      info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
+      info->fn = (Arg) { .kind = ARG_VALUE, .value = index_assign_op };
+      INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = assign_instr->key_slot };
+      INFO_ARGS_PTR(info)[1] = (Arg) { .kind = ARG_SLOT, .slot = value_slot };
       
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
@@ -653,25 +657,12 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
 
 static FnWrap vm_instr_call(VMState *state) {
   CallInstr *call_instr = (CallInstr*) state->instr;
-  int this_slot = call_instr->this_slot, args_length = call_instr->args_length;
   int target_slot = call_instr->target_slot;
   VM_ASSERT2_SLOT(target_slot < state->frame->slots_len, "slot numbering error");
-  VM_ASSERT2_SLOT(this_slot < state->frame->slots_len, "slot numbering error");
-  
-  CallInfo *info = alloca(sizeof(CallInfo) + sizeof(int) * args_length);
-  info->args_len = args_length;
-  info->fn = load_arg(state, call_instr->function);
-  info->this_slot = this_slot;
-  
-  int *args_ptr = (int*)(call_instr + 1);
-  for (int i = 0; i < args_length; ++i) {
-    VM_ASSERT2_SLOT(args_ptr[i] >= 0 && args_ptr[i] < state->frame->slots_len, "slot numbering error");
-    INFO_ARGS_PTR(info)[i] = args_ptr[i];
-  }
   
   FileRange **prev_instr = &state->instr->belongs_to;
-  state->instr = (Instr*) ((int*)(call_instr + 1) + call_instr->args_length);
-  return call_internal(state, info, target_slot, prev_instr);
+  state->instr = (Instr*) ((Arg*)(call_instr + 1) + call_instr->info.args_len);
+  return call_internal(state, &call_instr->info, target_slot, prev_instr);
 }
 
 static FnWrap vm_halt(VMState *state) {
@@ -817,12 +808,13 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
     StaticFieldInfo *info = &asoi->info_ptr[i];
     VM_ASSERT2_SLOT(info->slot < state->frame->slots_len, "slot numbering error");
     TableEntry *entry = &obj->tbl.entries_ptr[info->tbl_offset];
-    // copied from sample, should be no need to allocate
-    entry->value = state->frame->slots_ptr[info->slot];
-    if (info->constraint) {
-      entry->constraint = info->constraint;
-      if (!value_instance_of(state, entry->value, info->constraint)) {
-        VM_ASSERT2(false, "type constraint violated on variable");
+    if (info->slot) {
+      entry->value = state->frame->slots_ptr[info->slot]; // 0 is null
+      if (info->constraint) {
+        entry->constraint = info->constraint;
+        if (!value_instance_of(state, entry->value, info->constraint)) {
+          VM_ASSERT2(false, "type constraint violated on variable");
+        }
       }
     }
     state->frame->refslots_ptr[info->refslot] = &entry->value;
@@ -845,7 +837,7 @@ static void vm_step(VMState *state) {
   VMInstrFn fn = (VMInstrFn) instr_fns[state->instr->type];
   int i;
   for (i = 0; i < 128 && fn != vm_halt; i++) {
-    // { fprintf(stderr, "run "); Instr *instr = state->instr; dump_instr(state, &instr); }
+    // { fprintf(stderr, "run <%i> ", state->frame->block); Instr *instr = state->instr; dump_instr(state, &instr); }
     fn = fn(state).self;
     fn = fn(state).self;
     fn = fn(state).self;

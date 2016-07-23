@@ -44,10 +44,11 @@ static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slots[instr->obj_slot] = slots[instr->constraint_slot] = false;
           CASE(INSTR_CALL, CallInstr)
-            if (instr->function.kind == ARG_SLOT) slots[instr->function.slot] = false;
-            slots[instr->this_slot] = false;
-            for (int k = 0; k < instr->args_length; ++k) {
-              slots[((int*)(instr + 1))[k]] = false;
+            if (instr->info.fn.kind == ARG_SLOT) slots[instr->info.fn.slot] = false;
+            if (instr->info.this_arg.kind == ARG_SLOT) slots[instr->info.this_arg.slot] = false;
+            for (int k = 0; k < instr->info.args_len; ++k) {
+              Arg arg = ((Arg*)(&instr->info + 1))[k];
+              if (arg.kind == ARG_SLOT) slots[arg.slot] = false;
             }
           CASE(INSTR_RETURN, ReturnInstr)
             slots[instr->ret_slot] = false;
@@ -76,6 +77,22 @@ static Value *find_constant_slots(UserFunction *uf, char ***info_p) {
         SetSlotInstr *ssi = (SetSlotInstr*) instr;
         slots[ssi->target_slot] = ssi->value;
         if (info_p) (*info_p)[ssi->target_slot] = ssi->opt_info;
+      }
+      instr = (Instr*)((char*) instr + instr_size(instr));
+    }
+  }
+  return slots;
+}
+
+static int *find_refslots(UserFunction *uf) {
+  int *slots = calloc(sizeof(Value), uf->slots);
+  for (int i = 0; i < uf->slots; ++i) slots[i] = -1;
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
+      if (instr->type == INSTR_READ_REFSLOT) {
+        ReadRefslotInstr *rri = (ReadRefslotInstr*) instr;
+        slots[rri->target_slot] = rri->source_refslot;
       }
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
@@ -534,10 +551,11 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             slot_live[instr->obj_slot] = slot_live[instr->constraint_slot] = true;
           CASE(INSTR_CALL, CallInstr)
-            if (instr->function.kind == ARG_SLOT) slot_live[instr->function.slot] = true;
-            slot_live[instr->this_slot] = true;
-            for (int k = 0; k < instr->args_length; ++k) {
-              slot_live[((int*)(instr + 1))[k]] = true;
+            if (instr->info.fn.kind == ARG_SLOT) slot_live[instr->info.fn.slot] = true;
+            if (instr->info.this_arg.kind == ARG_SLOT) slot_live[instr->info.this_arg.slot] = true;
+            for (int k = 0; k < instr->info.args_len; ++k) {
+              Arg arg = ((Arg*)(&instr->info + 1))[k];
+              if (arg.kind == ARG_SLOT) slot_live[arg.slot] = true;
             }
           CASE(INSTR_RETURN, ReturnInstr)
             slot_live[instr->ret_slot] = true;
@@ -816,6 +834,7 @@ static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
   builder->block_terminated = true;
   char **slot_info;
   Value *constant_slots = find_constant_slots(uf, &slot_info);
+  int *refslots = find_refslots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(builder);
@@ -824,24 +843,41 @@ static UserFunction *inline_constant_calls(VMState *state, UserFunction *uf) {
     while (instr_cur != instr_end) {
       if (instr_cur->type == INSTR_CALL) {
         CallInstr *instr = (CallInstr*) instr_cur;
-        Arg fn = instr->function;
-        if (fn.kind == ARG_SLOT && NOT_NULL(constant_slots[fn.slot])) {
-          int size = sizeof(CallInstr) + sizeof(int) * instr->args_length;
-          CallInstr *ci = alloca(size);
-          *ci = (CallInstr) {
-            .base = { .type = INSTR_CALL },
-            .function = { .kind = ARG_VALUE, .value = constant_slots[fn.slot] },
-            .target_slot = instr->target_slot,
-            .this_slot = instr->this_slot,
-            .args_length = instr->args_length
-          };
-          for (int i = 0; i < instr->args_length; ++i) {
-            ((int*)(ci + 1))[i] = ((int*)(instr + 1)) [i];
+        Arg fn = instr->info.fn;
+        if (fn.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[fn.slot])) {
+            fn = (Arg) { .kind = ARG_VALUE, .value = constant_slots[fn.slot] };
+          } else if (refslots[fn.slot] != -1) {
+            fn = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[fn.slot] };
           }
-          addinstr_like(builder, instr_cur, size, (Instr*)ci);
-          instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
-          continue;
         }
+        Arg this_arg = instr->info.this_arg;
+        if (this_arg.kind == ARG_SLOT) {
+          if (NOT_NULL(constant_slots[this_arg.slot])) {
+            this_arg = (Arg) { .kind = ARG_VALUE, .value = constant_slots[this_arg.slot] };
+          } else if (refslots[this_arg.slot] != -1) {
+            this_arg = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[this_arg.slot] };
+          }
+        }
+        int size = sizeof(CallInstr) + sizeof(Arg) * instr->info.args_len;
+        CallInstr *ci = alloca(size);
+        *ci = *instr;
+        ci->info.this_arg = this_arg;
+        ci->info.fn = fn;
+        for (int k = 0; k < instr->info.args_len; ++k) {
+          Arg arg = ((Arg*)(&instr->info + 1))[k];
+          if (arg.kind == ARG_SLOT) {
+            if (NOT_NULL(constant_slots[arg.slot])) {
+              arg = (Arg) { .kind = ARG_VALUE, .value = constant_slots[arg.slot] };
+            } else if (refslots[arg.slot] != -1) {
+              arg = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[arg.slot] };
+            }
+          }
+          ((Arg*)(&ci->info + 1))[k] = arg;
+        }
+        addinstr_like(builder, instr_cur, size, (Instr*)ci);
+        instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+        continue;
       }
       
       addinstr_like(builder, instr_cur, instr_size(instr_cur), instr_cur);
@@ -927,7 +963,6 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
               if (info->name_len == scski->key_len && strncmp(info->name_ptr, scski->key_ptr, info->name_len) == 0) {
                 if (info->constraint) abort(); // wat wat wat
                 info->constraint = AS_OBJ(constant_slots[scski->constraint_slot]);
-                refslots_set ++;
               }
             }
             

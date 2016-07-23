@@ -382,6 +382,7 @@ Value make_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom) {
   assert(size_custom >= sizeof(FunctionObject));
   FunctionObject *obj = alloc_object_internal(state, size_custom);
   obj->base.parent = state->shared->vcache.function_base;
+  obj->base.flags |= OBJ_NOINHERIT;
   obj->fn_ptr = fn;
   return OBJ2VAL((Object*) obj);
 }
@@ -452,8 +453,9 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
   
   ProfilerRecord *record_entries = calloc(sizeof(ProfilerRecord), num_records);
   
-  int max_samples_direct = 0, max_samples_indirect = 0;
-  int sum_samples_direct = 0, sum_samples_indirect = 0;
+  // 1 so we can divide by it
+  int max_samples_direct = 1, max_samples_indirect = 1;
+  int sum_samples_direct = 1, sum_samples_indirect = 1;
   int k = 0;
   for (int i = 0; i < direct_table->entries_num; ++i) {
     TableEntry *entry = &direct_table->entries_ptr[i];

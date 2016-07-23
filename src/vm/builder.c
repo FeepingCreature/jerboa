@@ -295,15 +295,17 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
 }
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
-  CallInstr *instr = alloca(sizeof(CallInstr) + sizeof(int) * args_len);
+  CallInstr *instr = alloca(sizeof(CallInstr) + sizeof(Arg) * args_len);
   instr->base.type = INSTR_CALL;
   instr->base.belongs_to = NULL;
-  instr->function = (Arg) { .kind = ARG_SLOT, .slot = fn };
-  instr->this_slot = this_slot;
-  instr->args_length = args_len;
+  instr->info.fn = (Arg) { .kind = ARG_SLOT, .slot = fn };
+  instr->info.this_arg = (Arg) { .kind = ARG_SLOT, .slot = this_slot };
+  instr->info.args_len = args_len;
   instr->target_slot = builder->slot_base++;
-  memcpy((int*)(instr + 1), args_ptr, sizeof(int) * args_len);
-  addinstr(builder, sizeof(*instr) + sizeof(int) * args_len, (Instr*) instr);
+  for (int i = 0; i < args_len; ++i) {
+    ((Arg*)(&instr->info + 1))[i] = (Arg) { .kind = ARG_SLOT, .slot = args_ptr[i] };
+  }
+  addinstr(builder, sizeof(*instr) + sizeof(Arg) * args_len, (Instr*) instr);
   return instr->target_slot;
 }
 

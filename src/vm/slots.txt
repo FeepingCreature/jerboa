@@ -32,10 +32,11 @@ CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->key_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->constraint_slot); 
 CASE(INSTR_CALL, CallInstr)
   CHKSLOT(instr->base.context_slot);
-  CHKSLOT(instr->this_slot);
-  if (instr->function.kind == ARG_SLOT) CHKSLOT(instr->function.slot);
-  for (int k = 0; k < instr->args_length; ++k) {
-    CHKSLOT(((int*)(instr+1))[k]);
+  if (instr->info.fn.kind == ARG_SLOT) CHKSLOT(instr->info.fn.slot);
+  if (instr->info.this_arg.kind == ARG_SLOT) CHKSLOT(instr->info.this_arg.slot);
+  for (int k = 0; k < instr->info.args_len; ++k) {
+    Arg *arg = &((Arg*)(&instr->info+1))[k];
+    if (arg->kind == ARG_SLOT) CHKSLOT(arg->slot);
   }
   CHKSLOT(instr->target_slot);
 CASE(INSTR_RETURN, ReturnInstr)

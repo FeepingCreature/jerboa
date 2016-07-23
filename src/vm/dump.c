@@ -95,14 +95,14 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_CALL:
     {
       CallInstr *ci = (CallInstr*) instr;
-      fprintf(stderr, "call: %%%i = %%%i . %s ( ",
-              ci->target_slot, ci->this_slot, get_arg_info(ci->function));
-      for (int i = 0; i < ci->args_length; ++i) {
+      fprintf(stderr, "call: %%%i = %s . %s ( ",
+              ci->target_slot, get_arg_info(ci->info.this_arg), get_arg_info(ci->info.fn));
+      for (int i = 0; i < ci->info.args_len; ++i) {
         if (i) fprintf(stderr, ", ");
-        fprintf(stderr, "%%%i", ((int*)(ci + 1))[i]);
+        fprintf(stderr, "%s", get_arg_info(((Arg*)(ci + 1))[i]));
       }
       fprintf(stderr, " )\n");
-      *instr_p = (Instr*) ((int*)(ci + 1) + ci->args_length);
+      *instr_p = (Instr*) ((Arg*)(ci + 1) + ci->info.args_len);
       break;
     }
     case INSTR_RETURN:

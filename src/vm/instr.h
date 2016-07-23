@@ -23,36 +23,6 @@ int instr_size(Instr*);
 #define BLOCK_START(FN, IDX) ((Instr*) ((char*) (FN)->body.instrs_ptr + (FN)->body.blocks_ptr[IDX].offset))
 #define BLOCK_END(FN, IDX) ((Instr*) ((char*) (FN)->body.instrs_ptr + (FN)->body.blocks_ptr[IDX].offset + (FN)->body.blocks_ptr[IDX].size))
 
-typedef enum {
-  ARG_SLOT,
-  ARG_REFSLOT,
-  ARG_VALUE
-} ArgKind;
-
-typedef struct {
-  ArgKind kind;
-  union {
-    int slot;
-    int refslot;
-    Value value;
-  };
-} Arg;
-
-static inline Value load_arg(VMState *state, Arg arg) {
-  if (arg.kind == ARG_SLOT) {
-    assert(arg.slot < state->frame->slots_len);
-    return state->frame->slots_ptr[arg.slot];
-  }
-  if (arg.kind == ARG_REFSLOT) {
-    assert(arg.slot < state->frame->refslots_len);
-    return *state->frame->refslots_ptr[arg.refslot];
-  }
-  assert(arg.kind == ARG_VALUE);
-  return arg.value;
-}
-
-char *get_arg_info(Arg arg);
-
 typedef struct {
   Instr base;
   int slot;
@@ -140,10 +110,8 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  Arg function;
-  int this_slot;
-  int args_length; // attached to callinstr as a tail
   int target_slot;
+  CallInfo info;
 } CallInstr;
 
 typedef struct {

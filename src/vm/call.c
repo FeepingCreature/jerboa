@@ -18,7 +18,7 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
     if (info->args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
   }
   for (int i = 0; i < info->args_len; ++i) {
-    cf->slots_ptr[2 + i] = callf->slots_ptr[INFO_ARGS_PTR(info)[i]];
+    cf->slots_ptr[2 + i] = load_arg(callf, INFO_ARGS_PTR(info)[i]);
   }
   
   if (cf->uf->body.blocks_len == 0) {
@@ -49,7 +49,7 @@ static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, C
   // TODO owned_array?
   Value *varargs_ptr = malloc(sizeof(Value) * varargs_len);
   for (int i = 0; i < varargs_len; ++i) {
-    varargs_ptr[i] = state->frame->slots_ptr[INFO_ARGS_PTR(info)[uf->arity + i]];
+    varargs_ptr[i] = load_arg(state->frame, INFO_ARGS_PTR(info)[uf->arity + i]);
   }
   object_set(state, context, "arguments", make_array(state, varargs_ptr, varargs_len));
   context->flags |= OBJ_CLOSED;
@@ -57,7 +57,7 @@ static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, C
 }
 
 static void function_handler(VMState *state, CallInfo *info) {
-  ClosureObject *cl_obj = (ClosureObject*) AS_OBJ(info->fn);
+  ClosureObject *cl_obj = (ClosureObject*) AS_OBJ(load_arg(state->frame, info->fn));
   Object *context = cl_obj->context;
   gc_disable(state); // keep context alive, if need be
   context = setup_vararg(state, context, cl_obj->vmfun, info);
@@ -66,9 +66,9 @@ static void function_handler(VMState *state, CallInfo *info) {
 }
 
 static void method_handler(VMState *state, CallInfo *info) {
-  ClosureObject *cl_obj = (ClosureObject*) AS_OBJ(info->fn);
+  ClosureObject *cl_obj = (ClosureObject*) AS_OBJ(load_arg(state->frame, info->fn));
   Object *context = AS_OBJ(make_object(state, cl_obj->context));
-  create_table_with_single_entry(&context->tbl, "this", 4, hash("this", 4), state->frame->slots_ptr[info->this_slot]);
+  create_table_with_single_entry(&context->tbl, "this", 4, hash("this", 4), load_arg(state->frame, info->this_arg));
   context->flags |= OBJ_CLOSED;
   gc_disable(state); // keep context alive
   context = setup_vararg(state, context, cl_obj->vmfun, info);
@@ -94,15 +94,21 @@ Value make_closure_fn(VMState *state, Object *context, UserFunction *fn) {
 }
 
 bool setup_call(VMState *state, CallInfo *info) {
-  Object *closure_base = state->shared->vcache.closure_base;
   Object *function_base = state->shared->vcache.function_base;
-  Object *fn_obj_n = OBJ_OR_NULL(info->fn);
-  FunctionObject *fn_obj = (FunctionObject*) obj_instance_of(fn_obj_n, function_base);
-  ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn_obj_n, closure_base);
-  VM_ASSERT(fn_obj || cl_obj, "object is neither function nor closure") false;
-  
-  if (fn_obj) fn_obj->fn_ptr(state, info);
-  else cl_obj->fn_ptr(state, info);
-  
-  return state->runstate != VM_ERRORED;
+  Value fn = load_arg(state->frame, info->fn);
+  VM_ASSERT(IS_OBJ(fn), "this is not a thing I can call.") false;
+  Object *fn_obj_n = AS_OBJ(fn);
+  if (fn_obj_n->parent == function_base) {
+    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
+    return state->runstate != VM_ERRORED;
+  } else {
+    Object *closure_base = state->shared->vcache.closure_base;
+    ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn_obj_n, closure_base);
+    if (cl_obj) {
+      cl_obj->fn_ptr(state, info);
+      return state->runstate != VM_ERRORED;
+    } else {
+      VM_ASSERT(false, "object is neither function nor closure") false;
+    }
+  }
 }

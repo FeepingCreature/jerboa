@@ -112,13 +112,30 @@ typedef struct {
   };
 } /*__attribute__((aligned (16)))*/ Value; // TODO
 
+typedef enum {
+  ARG_SLOT,
+  ARG_REFSLOT,
+  ARG_VALUE
+} ArgKind;
+
 typedef struct {
-  Value fn;
-  int this_slot;
+  ArgKind kind;
+  union {
+    int slot;
+    int refslot;
+    Value value;
+  };
+} Arg;
+
+char *get_arg_info(Arg arg);
+
+typedef struct {
+  Arg fn;
+  Arg this_arg;
   int args_len;
 } CallInfo;
 
-#define INFO_ARGS_PTR(I) ((int*)(I + 1))
+#define INFO_ARGS_PTR(I) ((Arg*)(I + 1))
 
 struct _TableEntry {
   const char *name_ptr;
@@ -268,6 +285,19 @@ struct _Callframe {
   int block, prev_block; // required for phi nodes
   Callframe *above;
 };
+
+static inline Value load_arg(Callframe *frame, Arg arg) {
+  if (arg.kind == ARG_SLOT) {
+    assert(arg.slot < frame->slots_len);
+    return frame->slots_ptr[arg.slot];
+  }
+  if (arg.kind == ARG_REFSLOT) {
+    assert(arg.slot < frame->refslots_len);
+    return *frame->refslots_ptr[arg.refslot];
+  }
+  assert(arg.kind == ARG_VALUE);
+  return arg.value;
+}
 
 struct _VMState {
   Callframe *frame;

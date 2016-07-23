@@ -18,7 +18,7 @@ static void ffi_open_fn(VMState *state, CallInfo *info) {
   Object *ffi = AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
   Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle", NULL));
   
-  StringObject *sarg = (StringObject*) obj_instance_of(OBJ_OR_NULL(state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]]), string_base);
+  StringObject *sarg = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sarg, "argument to ffi.open must be string!");
   
   char *file = sarg->value;
@@ -73,12 +73,12 @@ static void ffi_ptr_dereference(VMState *state, CallInfo *info) {
   Object *ffi_pointer = ffi->pointer_obj;
   Object *ffi_charptr = ffi->char_pointer_obj;
   
-  Object *thisptr = AS_OBJ(state->frame->slots_ptr[info->this_slot]);
+  Object *thisptr = AS_OBJ(load_arg(state->frame, info->this_arg));
   VM_ASSERT(thisptr->parent == pointer_base, "internal error");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
   
-  Object *ffi_type_obj = obj_instance_of(OBJ_OR_NULL(state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]]), ffi_type);
-  Value offs_val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[1]];
+  Object *ffi_type_obj = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), ffi_type);
+  Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
   assert(ffi_type_obj);
@@ -147,7 +147,7 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
 static void ffi_ptr_index_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *pointer_base = state->shared->vcache.pointer_base;
-  Object *thisptr = OBJ_OR_NULL(state->frame->slots_ptr[info->this_slot]);
+  Object *thisptr = OBJ_OR_NULL(load_arg(state->frame, info->this_arg));
   
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "invalid pointer index on non-pointer object");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
@@ -155,7 +155,7 @@ static void ffi_ptr_index_fn(VMState *state, CallInfo *info) {
   Object *ffi_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL));
   VM_ASSERT(ffi_type_obj, "cannot index read on untyped pointer!");
   
-  Value offs_val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]];
+  Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
   
@@ -174,7 +174,7 @@ static void ffi_ptr_index_fn(VMState *state, CallInfo *info) {
 static void ffi_ptr_index_assign_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *pointer_base = state->shared->vcache.pointer_base;
-  Object *thisptr = OBJ_OR_NULL(state->frame->slots_ptr[info->this_slot]);
+  Object *thisptr = OBJ_OR_NULL(load_arg(state->frame, info->this_arg));
   
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "invalid pointer index write on non-pointer object");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
@@ -182,7 +182,7 @@ static void ffi_ptr_index_assign_fn(VMState *state, CallInfo *info) {
   Object *ffi_type_obj = AS_OBJ(OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL));
   VM_ASSERT(ffi_type_obj, "cannot assign index on untyped pointer!");
   
-  Value offs_val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]];
+  Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
   
@@ -192,20 +192,20 @@ static void ffi_ptr_index_assign_fn(VMState *state, CallInfo *info) {
   
   char *offset_ptr = (char*) thisptr_obj->ptr + elemsize * offs;
   
-  bool res = ffi_pointer_write(state, ffi_type_obj, (void*) offset_ptr, state->frame->slots_ptr[INFO_ARGS_PTR(info)[1]]);
+  bool res = ffi_pointer_write(state, ffi_type_obj, (void*) offset_ptr, load_arg(state->frame, INFO_ARGS_PTR(info)[1]));
   if (!res) return;
 }
 
 static void ffi_ptr_add(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *pointer_base = state->shared->vcache.pointer_base;
-  Object *thisptr = OBJ_OR_NULL(state->frame->slots_ptr[info->this_slot]);
+  Object *thisptr = OBJ_OR_NULL(load_arg(state->frame, info->this_arg));
   
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "internal error");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
   void *ptr = (void*) thisptr_obj->ptr;
   
-  Value offset_val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]];
+  Value offset_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(offset_val), "offset must be integer");
   int offset = AS_INT(offset_val);
   
@@ -271,7 +271,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
   Object *ffi_obj = state->shared->vcache.ffi_obj;
   FFIObject *ffi = (FFIObject*) ffi_obj;
   
-  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(OBJ_OR_NULL(info->fn), function_base);
+  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->fn)), function_base);
   
   Object *ret_type = ffi_fn->return_type;
   ArrayObject *par_types_array = ffi_fn->par_types_array;
@@ -308,7 +308,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
   // fprintf(stderr, "::");
   for (int i = 0; i < info->args_len; ++i) {
     Object *type = OBJ_OR_NULL(par_types_array->ptr[i]);
-    Value val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[i]];
+    Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
     
     if (UNLIKELY(type == ffi->void_obj)) {
       VM_ASSERT(false, "void in parameter types??");
@@ -323,7 +323,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     }
     else if (type == ffi->int_obj || type == ffi->uint_obj || type == ffi->int32_obj || type == ffi->uint32_obj) {
       // fprintf(stderr, "i32");
-      Value val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[i]];
+      Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
       VM_ASSERT(IS_INT(val), "ffi int argument must be int");
       *(int*) data = AS_INT(val);
       par_ptrs[i] = data;
@@ -331,7 +331,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     }
     else if (type == ffi->long_obj || type == ffi->ulong_obj) {
       // fprintf(stderr, "l");
-      Value val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[i]];
+      Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
       VM_ASSERT(IS_INT(val), "ffi long argument must be int");
       *(long*) data = AS_INT(val);
       par_ptrs[i] = data;
@@ -339,7 +339,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     }
     else if (type == ffi->int64_obj || type == ffi->uint64_obj) {
       // fprintf(stderr, "i64");
-      Value val = state->frame->slots_ptr[INFO_ARGS_PTR(info)[i]];
+      Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
       VM_ASSERT(IS_INT(val), "ffi (u)int64 argument must be int");
       *(int64_t*) data = AS_INT(val);
       par_ptrs[i] = data;
@@ -416,7 +416,7 @@ static void ffi_call_fn_special_d_d(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base; (void) pointer_base;
   Object *function_base = state->shared->vcache.function_base;
   
-  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(AS_OBJ(info->fn), function_base);
+  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(AS_OBJ(load_arg(state->frame, info->fn)), function_base);
   
   Object *ffi_ptr_obj = ffi_fn->_ffi_pointer;
   Object *sym_ptr_obj = ffi_fn->_sym_pointer;
@@ -432,7 +432,7 @@ static void ffi_call_fn_special_d_d(VMState *state, CallInfo *info) {
   void *data = alloca(sizeof(double));
   void *ret_ptr = alloca(sizeof(double));
   
-  Value arg0 = state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]];
+  Value arg0 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   if (IS_FLOAT(arg0)) *(double*) data = AS_FLOAT(arg0);
   else if (IS_INT(arg0)) *(double*) data = AS_INT(arg0);
   else VM_ASSERT(false, "ffi double argument must be int or float");
@@ -449,7 +449,7 @@ static void ffi_call_fn_special_fx_v(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base; (void) pointer_base;
   Object *function_base = state->shared->vcache.function_base;
   
-  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(AS_OBJ(info->fn), function_base);
+  FFIFunctionObject *ffi_fn = (FFIFunctionObject*) obj_instance_of(AS_OBJ(load_arg(state->frame, info->fn)), function_base);
   
   ArrayObject *par_types_array = ffi_fn->par_types_array;
   Object *ffi_ptr_obj = ffi_fn->_ffi_pointer;
@@ -467,7 +467,7 @@ static void ffi_call_fn_special_fx_v(VMState *state, CallInfo *info) {
   void *ret_ptr = NULL;
   
   for (int i = 0; i < info->args_len; ++i) {
-    Value arg = state->frame->slots_ptr[INFO_ARGS_PTR(info)[i]];
+    Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
     if (IS_FLOAT(arg)) *(float*) data = AS_FLOAT(arg);
     else if (IS_INT(arg)) *(float*) data = AS_INT(arg);
     else VM_ASSERT(false, "ffi float argument %i must be int or float, not %s", i, get_type_info(state, arg));
@@ -510,14 +510,14 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle", NULL));
   Object *type_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "type", NULL));
   
-  Object *handle_obj = obj_instance_of(OBJ_OR_NULL(state->frame->slots_ptr[info->this_slot]), handle_base);
+  Object *handle_obj = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), handle_base);
   VM_ASSERT(handle_obj, "ffi sym called on bad object");
   Object *handle_ptr_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(handle_obj, "pointer", NULL));
   VM_ASSERT(handle_ptr_obj && handle_ptr_obj->parent == pointer_base, "sym handle must be pointer");
   PointerObject *handle_ptr = (PointerObject*) handle_ptr_obj;
   void *handle = handle_ptr->ptr;
   
-  StringObject *fn_name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]]), string_base);
+  StringObject *fn_name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(fn_name_obj, "symbol name must be string");
   
   void *fnptr = dlsym(handle, fn_name_obj->value);
@@ -525,10 +525,10 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   // VM_ASSERT(!error, "dlsym failed: %s", error);
   if (error) { *state->frame->target_slot = VNULL; return; }
   
-  Object *ret_type = obj_instance_of(OBJ_OR_NULL(state->frame->slots_ptr[INFO_ARGS_PTR(info)[1]]), type_base);
+  Object *ret_type = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), type_base);
   VM_ASSERT(ret_type, "return type must be ffi.type!");
   
-  ArrayObject *par_types = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(state->frame->slots_ptr[INFO_ARGS_PTR(info)[2]]), array_base);
+  ArrayObject *par_types = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[2])), array_base);
   VM_ASSERT(par_types, "parameter type must be array");
   
   ffi_type *ffi_ret_type = type_to_ffi_ptr(ffi, ret_type);
@@ -552,7 +552,7 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   
   fn_obj->flags |= OBJ_FROZEN;
   object_set(state, fn_obj, "return_type", OBJ2VAL(ret_type));
-  object_set(state, fn_obj, "parameter_types", state->frame->slots_ptr[INFO_ARGS_PTR(info)[2]]);
+  object_set(state, fn_obj, "parameter_types", load_arg(state->frame, INFO_ARGS_PTR(info)[2]));
   object_set(state, fn_obj, "_sym_pointer", OBJ2VAL(_sym_pointer));
   object_set(state, fn_obj, "_ffi_pointer", OBJ2VAL(_ffi_pointer));
   ffi_fn->return_type = ret_type;
@@ -567,9 +567,9 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
 
 static void malloc_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  VM_ASSERT(IS_INT(state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]]), "malloc expected int");
-  VM_ASSERT(AS_INT(state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]]) >= 0, "malloc expected positive number");
-  void *res = malloc(AS_INT(state->frame->slots_ptr[INFO_ARGS_PTR(info)[0]]));
+  VM_ASSERT(IS_INT(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), "malloc expected int");
+  VM_ASSERT(AS_INT(load_arg(state->frame, INFO_ARGS_PTR(info)[0])) >= 0, "malloc expected positive number");
+  void *res = malloc(AS_INT(load_arg(state->frame, INFO_ARGS_PTR(info)[0])));
   VM_ASSERT(res, "memory allocation failed");
   *state->frame->target_slot = make_ffi_pointer(state, res);
 }
