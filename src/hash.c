@@ -13,37 +13,22 @@ static inline TableEntry *table_lookup_with_hash_internal2(HashTable *tbl, const
   assert(key_ptr != NULL);
   if (tbl->entries_stored == 0) return NULL;
   if ((tbl->bloom & hashv) != hashv) return NULL;
-  // printf(":: %.*s into %i having %i\n", key_len, key_ptr, tbl->entries_num, tbl->entries_stored);
   // printf(":: %.*s\n", key_len, key_ptr);
   int entries_num = tbl->entries_num;
   // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
-  if (entries_num <= 8) { // faster to do a direct scan
-    for (int i = 0; i < entries_num; ++i) {
-      TableEntry *entry = &tbl->entries_ptr[i];
-      if (entry->name_len == key_len && (
-          key_ptr == entry->name_ptr
-          ||
-          ((key_len == 0 || key_ptr[0] == entry->name_ptr[0])
-            && (key_len <= 1 || key_ptr[1] == entry->name_ptr[1])
-            && strncmp(key_ptr, entry->name_ptr, key_len) == 0
-          )
-      )) return entry;
-    }
-  } else {
-    int entries_mask = entries_num - 1;
-    for (int i = 0; i < entries_num; ++i) {
-      int k = (hashv + i) & entries_mask;
-      TableEntry *entry = &tbl->entries_ptr[k];
-      if (entry->name_ptr == NULL) return NULL;
-      if (entry->name_len == key_len && (
-        key_ptr == entry->name_ptr
-        ||
-        ((key_len == 0 || key_ptr[0] == entry->name_ptr[0])
-          && (key_len <= 1 || key_ptr[1] == entry->name_ptr[1])
-          && strncmp(key_ptr, entry->name_ptr, key_len) == 0
-        )
-      )) return entry;
-    }
+  size_t entries_mask = entries_num - 1;
+  for (int i = 0; i < entries_num; i++) {
+    int k = (hashv + i) & entries_mask;
+    TableEntry *entry = &tbl->entries_ptr[k];
+    if (entry->name_ptr == NULL) return NULL;
+    if (entry->name_len == key_len && (
+      key_ptr == entry->name_ptr
+      ||
+      ((key_len == 0 || key_ptr[0] == entry->name_ptr[0])
+        && (key_len <= 1 || key_ptr[1] == entry->name_ptr[1])
+        && strncmp(key_ptr, entry->name_ptr, key_len) == 0
+      )
+    )) return entry;
   }
   // scanned the complete table; this really should not have happened
   return NULL;
@@ -62,7 +47,7 @@ TableEntry *table_lookup_with_hash(HashTable *tbl, const char *key_ptr, size_t k
 
 // if the key was not found, return null but allocate a mapping in first_free_ptr
 TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) {
-  size_t hashv = (tbl->entries_num>8)?hash(key_ptr, key_len):0;
+  size_t hashv = hash(key_ptr, key_len);
   return table_lookup_with_hash_internal(tbl, key_ptr, key_len, hashv);
 }
 
