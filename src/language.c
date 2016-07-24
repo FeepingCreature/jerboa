@@ -84,7 +84,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
-  if (!builder) return (RefValue) {0, -1, REFMODE_VARIABLE, NULL};
+  if (!builder) return (RefValue) {0, 0, REFMODE_VARIABLE, NULL};
   assert(builder->current_range);
   int name_slot = addinstr_alloc_string_object(builder, name);
   return (RefValue) {builder->scope, name_slot, REFMODE_VARIABLE, builder->current_range};
@@ -334,9 +334,10 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     assert(res == PARSE_OK);
     *textp = text;
     
+    fn->is_method = is_method;
+    
     int slot = 0;
     if (builder) {
-      fn->is_method = is_method;
       use_range_start(builder, range); // count the closure allocation under 'function'
       slot = addinstr_alloc_closure_object(builder, fn);
       use_range_end(builder, range);
@@ -417,7 +418,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
     *expr = ref_simple(addinstr_call(builder, expr_slot, this_slot, args_ptr, args_len));
     // use_range_end(builder, call_range);
     use_range_end(builder, expr_range);
-  }
+  } else *expr = ref_simple(0);
   return PARSE_OK;
 }
 
@@ -483,7 +484,7 @@ void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs
     int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, op));
     *res_rv = ref_simple(addinstr_call1(builder, fn, lhs_value, rhs_value));
     use_range_end(builder, range);
-  }
+  } else *res_rv = ref_simple(0);
 }
 
 static bool assign_value(FunctionBuilder *builder, RefValue rv, int value, FileRange *assign_range) {
@@ -1189,7 +1190,10 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   } else {
     ParseResult res = parse_assign(&text, builder);
     if (res == PARSE_ERROR) return res;
-    assert(res == PARSE_OK);
+    if (res == PARSE_NONE) {
+      log_parser_error(text, "'for' expected variable declaration or assignment");
+      return PARSE_ERROR;
+    }
   }
   
   if (!eat_string(&text, ";")) {
@@ -1521,6 +1525,11 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   ParseResult res = parse_block(textp, builder, true);
   if (res == PARSE_ERROR) {
     free(fnframe_range);
+    return PARSE_ERROR;
+  }
+  if (res == PARSE_NONE) {
+    free(fnframe_range);
+    log_parser_error(text, "could not parse function block");
     return PARSE_ERROR;
   }
   assert(res == PARSE_OK);

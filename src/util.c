@@ -90,7 +90,7 @@ void utf8_step(const char **ptr, int num, const char **error_p) {
 static bool find_text_pos_from_to(char *text, FileRecord *record, char *text_to, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
   int row_nr = *row_p;
   TextRange line = *line_p;
-  while (line.start < text_to) {
+  while (line.start <= text_to) {
     while (line.end < text_to && *line.end != '\n') line.end ++; // scan to newline
     line.end ++; // scan past newline (even if there isn't a newline - since a pointer to text_to should also be captured)
     if (text >= line.start && text < line.end) {
