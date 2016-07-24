@@ -240,11 +240,11 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   SlotIsStaticObjInfo *info;
   slot_is_static_object(uf, &info);
   
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -264,7 +264,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           // so instead look up in the (known) parent object from the start
           aski_new.obj = (Arg) { .kind = ARG_SLOT, .slot = info[obj_slot].parent_slot };
         }
-        addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
+        addinstr_like(&builder, instr, sizeof(aski_new), (Instr*) &aski_new);
         instr = (Instr*) (aski + 1);
         continue;
       }
@@ -281,18 +281,18 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
               if (field != -1) break; // key was found, we're at the right object
               aski_new.obj.slot = info[obj_slot].parent_slot;
             }
-            addinstr_like(builder, instr, sizeof(aski_new), (Instr*) &aski_new);
+            addinstr_like(&builder, instr, sizeof(aski_new), (Instr*) &aski_new);
             instr = (Instr*) (aski + 1);
             continue;
           }
         }
       }
       
-      addinstr_like(builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
@@ -314,15 +314,15 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
     }
   }
   
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->refslot_base = uf->refslots;
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.refslot_base = uf->refslots;
+  builder.block_terminated = true;
   
   // since the object accesses must dominate the object declaration,
   // the refslot accesses will also dominate the refslot declaration.
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -332,12 +332,12 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
       for (int k = 0; k < info_slots_len; ++k) {
         int slot = info_slots_ptr[k];
         if (instr == info[slot].after_object_decl) {
-          use_range_start(builder, info[slot].belongs_to);
-          builder->scope = info[slot].context_slot;
+          use_range_start(&builder, info[slot].belongs_to);
+          builder.scope = info[slot].context_slot;
           for (int l = 0; l < info[slot].fields_len; ++l) {
-            ref_slots_ptr[slot][l] = addinstr_def_refslot(builder, slot, info[slot].names_ptr[l]);
+            ref_slots_ptr[slot][l] = addinstr_def_refslot(&builder, slot, info[slot].names_ptr[l]);
           }
-          use_range_end(builder, info[slot].belongs_to);
+          use_range_end(&builder, info[slot].belongs_to);
           obj_refslots_initialized[slot] = true;
         }
       }
@@ -353,12 +353,12 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
               char *name = info[obj_slot].names_ptr[k];
               if (strcmp(key, name) == 0) {
                 int refslot = ref_slots_ptr[obj_slot][k];
-                use_range_start(builder, instr->belongs_to);
-                builder->scope = instr->context_slot;
-                addinstr_move(builder,
+                use_range_start(&builder, instr->belongs_to);
+                builder.scope = instr->context_slot;
+                addinstr_move(&builder,
                               (Arg){.kind=ARG_REFSLOT,.refslot=refslot},
                               aski->target);
-                use_range_end(builder, instr->belongs_to);
+                use_range_end(&builder, instr->belongs_to);
                 instr = (Instr*) (aski + 1);
                 continue_outer = true;
                 break;
@@ -380,10 +380,10 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
               char *name = info[obj_slot].names_ptr[k];
               if (strcmp(key, name) == 0) {
                 int refslot = ref_slots_ptr[obj_slot][k];
-                use_range_start(builder, instr->belongs_to);
-                builder->scope = instr->context_slot;
-                addinstr_move(builder, aski->value, (WriteArg){.kind=ARG_REFSLOT,.refslot=refslot});
-                use_range_end(builder, instr->belongs_to);
+                use_range_start(&builder, instr->belongs_to);
+                builder.scope = instr->context_slot;
+                addinstr_move(&builder, aski->value, (WriteArg){.kind=ARG_REFSLOT,.refslot=refslot});
+                use_range_end(&builder, instr->belongs_to);
                 instr = (Instr*) (aski + 1);
                 continue_outer = true;
                 break;
@@ -394,11 +394,11 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
         }
       }
       
-      addinstr_like(builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   int new_refslots = fn->refslots;
   copy_fn_stats(uf, fn);
   fn->refslots = new_refslots; // do update this
@@ -414,14 +414,14 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
 }
 
 static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   char **slot_table_ptr = NULL;
   int slot_table_len = 0;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -459,7 +459,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
           .key_len = key_len,
           .key_hash = hash(key_ptr, key_len)
         };
-        addinstr_like(builder, instr, sizeof(aski), (Instr*) &aski);
+        addinstr_like(&builder, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(acci + 1);
         continue;
       }
@@ -474,7 +474,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
           .key = slot_table_ptr[assi->key.slot],
           .type = assi->type
         };
-        addinstr_like(builder, instr, sizeof(aski), (Instr*) &aski);
+        addinstr_like(&builder, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(assi + 1);
         continue;
       }
@@ -489,16 +489,16 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
           .key_ptr = key_ptr,
           .key_len = strlen(key_ptr)
         };
-        addinstr_like(builder, instr, sizeof(scski), (Instr*) &scski);
+        addinstr_like(&builder, instr, sizeof(scski), (Instr*) &scski);
         instr = (Instr*)(sci + 1);
         continue;
       }
-      addinstr_like(builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, instr, instr_size(instr), instr);
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
@@ -622,11 +622,11 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
     }
   }
   
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -637,22 +637,22 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           add = false;
         }
       }
-      if (add) addinstr_like(builder, instr, instr_size(instr), instr);
+      if (add) addinstr_like(&builder, instr, instr_size(instr), instr);
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
 
 static UserFunction *call_functions_directly(VMState *state, UserFunction *uf) {
-FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
@@ -673,18 +673,18 @@ FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
             for (int i = 0; i < instr->info.args_len; ++i) {
               ((Arg*)(&cfdi->info + 1))[i] = ((Arg*)(&instr->info + 1))[i];
             }
-            addinstr_like(builder, instr_cur, size, (Instr*) cfdi);
+            addinstr_like(&builder, instr_cur, size, (Instr*) cfdi);
             instr_cur = (Instr*) ((char*) instr + instr->size);
             continue;
           }
         }
       }
       
-      addinstr_like(builder, instr_cur, instr_size(instr_cur), instr_cur);
+      addinstr_like(&builder, instr_cur, instr_size(instr_cur), instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
@@ -776,11 +776,11 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   free(node2rpost.ptr);
   free(sfidoms_ptr);
   
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -841,15 +841,15 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
           .target = target,
           .opt_info = opt_info
         };
-        addinstr_like(builder, instr, sizeof(mi), (Instr*) &mi);
+        addinstr_like(&builder, instr, sizeof(mi), (Instr*) &mi);
       } else {
-        addinstr_like(builder, instr, instr_size(instr), instr);
+        addinstr_like(&builder, instr, instr_size(instr), instr);
       }
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
@@ -913,8 +913,8 @@ bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr 
 
 // pattern: %0 = instr; &0 = %0;     -> &0 = instr;
 static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   int *num_slot_use = calloc(sizeof(int), uf->slots);
   
@@ -937,7 +937,7 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
   }
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
@@ -956,7 +956,7 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
               ((Arg*)(&ci->info + 1))[k] = ((Arg*)(&instr->info + 1))[k];
             }
             ci->info.target = mi_next->target;
-            addinstr_like(builder, instr_cur, size, (Instr*)ci);
+            addinstr_like(&builder, instr_cur, size, (Instr*)ci);
             instr_cur = (Instr*) (mi_next + 1);
             continue;
           }
@@ -973,7 +973,7 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
           ) {
             AccessStringKeyInstr aski = *instr;
             aski.target = mi_next->target;
-            addinstr_like(builder, instr_cur, sizeof(aski), (Instr*)&aski);
+            addinstr_like(&builder, instr_cur, sizeof(aski), (Instr*)&aski);
             instr_cur = (Instr*) (mi_next + 1);
             continue;
           }
@@ -981,24 +981,24 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
       }
       
       int sz = instr_size(instr_cur);
-      addinstr_like(builder, instr_cur, sz, (Instr*) instr_cur);
+      addinstr_like(&builder, instr_cur, sz, (Instr*) instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + sz);
     }
   }
   
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
 
 static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   Value *constant_slots = find_constant_slots(uf);
   int *refslots = find_refslots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
@@ -1047,7 +1047,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
           }
           ((Arg*)(&ci->info + 1))[k] = arg;
         }
-        addinstr_like(builder, instr_cur, size, (Instr*)ci);
+        addinstr_like(&builder, instr_cur, size, (Instr*)ci);
         instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
         continue;
       }
@@ -1077,7 +1077,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1100,7 +1100,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1114,7 +1114,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.source = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.source.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1128,7 +1128,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.test = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.test.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1158,7 +1158,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.arg2 = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.arg2.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1172,7 +1172,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.ret = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.ret.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1193,7 +1193,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.constraint = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.constraint.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1223,7 +1223,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.key = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.key.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1253,7 +1253,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1281,7 +1281,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.key = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.key.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1302,28 +1302,28 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.value = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.value.slot] };
           }
         }
-        addinstr_like(builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
       
-      addinstr_like(builder, instr_cur, instr_size(instr_cur), instr_cur);
+      addinstr_like(&builder, instr_cur, instr_size(instr_cur), instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
 
 static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   Value *constant_slots = find_constant_slots(uf);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
@@ -1427,17 +1427,17 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
           for (int k = 0; k < info_len; ++k) {
             ASOI_INFO(asoi)[k] = info_ptr[k];
           }
-          addinstr_like(builder, instr, instr_size((Instr*) asoi), (Instr*) asoi);
+          addinstr_like(&builder, instr, instr_size((Instr*) asoi), (Instr*) asoi);
           instr = instr_reading;
           continue;
         }
       }
       
-      addinstr_like(builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   return fn;
 }
@@ -1464,8 +1464,8 @@ static void reassign_slot(int *slot_p, int numslots, Instr *instr_cur, Instr **f
 // this function makes the IR **NON-SSA**
 // and thus it **MUST** come completely last!!
 static UserFunction *compactify_registers(UserFunction *uf) {
-  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
-  builder->block_terminated = true;
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
   
   // use the lexical orderedness assumption
   Instr **first_use = calloc(sizeof(Instr*), uf->slots);
@@ -1501,17 +1501,17 @@ static UserFunction *compactify_registers(UserFunction *uf) {
   }
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-    new_block(builder);
+    new_block(&builder);
     
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
       switch (instr_cur->type) {
 
 #define CASE(KEY, TY) \
-          use_range_start(builder, instr_cur->belongs_to);\
-          builder->scope = ((Instr*) instr)->context_slot;\
-          addinstr(builder, sz, (Instr*) instr);\
-          use_range_end(builder, instr_cur->belongs_to);\
+          use_range_start(&builder, instr_cur->belongs_to);\
+          builder.scope = ((Instr*) instr)->context_slot;\
+          addinstr(&builder, sz, (Instr*) instr);\
+          use_range_end(&builder, instr_cur->belongs_to);\
           instr_cur = (Instr*) ((char*) instr_cur + sz);\
           continue;\
         }\
@@ -1537,7 +1537,7 @@ static UserFunction *compactify_registers(UserFunction *uf) {
   int maxslot = 0;
   for (int i = 0; i < uf->slots; ++i) if (slot_map[i] > maxslot) maxslot = slot_map[i];
   
-  UserFunction *fn = build_function(builder);
+  UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   fn->slots = maxslot + 1;
   fn->non_ssa = true;
