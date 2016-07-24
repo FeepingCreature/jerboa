@@ -59,7 +59,7 @@ CASE(INSTR_CALL, CallInstr)
     Arg *arg = &((Arg*)(&instr->info+1))[k];
     if (arg->kind == ARG_SLOT) CHKSLOT(arg->slot);
   }
-  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
+  if (instr->info.target.kind == ARG_SLOT) CHKSLOT(instr->info.target.slot);
 CASE(INSTR_RETURN, ReturnInstr)
   CHKSLOT(instr->base.context_slot);
   if (instr->ret.kind == ARG_SLOT) CHKSLOT(instr->ret.slot);

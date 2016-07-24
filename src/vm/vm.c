@@ -104,6 +104,7 @@ void setup_stub_frame(VMState *state, int slots) {
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
   if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
+  if (state->frame) state->frame->instr_ptr = state->instr;
   while (state) {
     for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
@@ -344,15 +345,13 @@ static FnWrap vm_instr_freeze_object(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static inline FnWrap call_internal(VMState *state, CallInfo *info, FileRange **prev_instr) {
+static inline bool call_internal(VMState *state, CallInfo *info, FileRange **prev_instr) {
   // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
   // solve explicitly
   state->frame->backtrace_belongs_to_p = prev_instr;
   state->frame->instr_ptr = state->instr;
   
-  if (!setup_call(state, info)) return (FnWrap) { vm_halt };
-  
-  return (FnWrap) { instr_fns[state->instr->type] };
+  return setup_call(state, info);
 }
 
 static FnWrap vm_instr_access(VMState *state) {
@@ -386,7 +385,9 @@ static FnWrap vm_instr_access(VMState *state) {
       info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
       info->target = access_instr->target;
       INFO_ARGS_PTR(info)[0] = access_instr->key;
-      return call_internal(state, info, prev_instr);
+      if (!call_internal(state, info, prev_instr)) return (FnWrap) { vm_halt };
+      
+      return (FnWrap) { instr_fns[state->instr->type] };
     }
   }
   if (!object_found) {
@@ -400,7 +401,7 @@ static FnWrap vm_instr_access(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static FnWrap vm_instr_access_string_key_index_fallback(VMState *state) {
+static bool vm_instr_access_string_key_index_fallback(VMState *state) {
   AccessStringKeyInstr *aski = (AccessStringKeyInstr*) state->instr;
   Value val = load_arg(state->frame, aski->obj);
   Object *obj = closest_obj(state, val);
@@ -417,14 +418,12 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state) {
     INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = aski->key_slot };
     
     FileRange **prev_instr = &state->instr->belongs_to;
-    state->instr = (Instr*)(aski + 1);
     return call_internal(state, info, prev_instr);
   } else {
-    VM_ASSERT2(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr);
+    VM_ASSERT(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr) false;
   }
 }
 
-static FnWrap vm_instr_access_string_key(VMState *state) __attribute__ ((hot));
 static FnWrap vm_instr_access_string_key(VMState *state) {
   AccessStringKeyInstr *aski = (AccessStringKeyInstr*) state->instr;
   
@@ -437,7 +436,7 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   set_arg(state, aski->target, object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found));
   
   if (UNLIKELY(!object_found)) {
-    return vm_instr_access_string_key_index_fallback(state);
+    if (!vm_instr_access_string_key_index_fallback(state)) return (FnWrap) { vm_halt };
   }
   
   state->instr = (Instr*)(aski + 1);
@@ -469,7 +468,8 @@ static FnWrap vm_instr_assign(VMState *state) {
       
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
-      return call_internal(state, info, prev_instr);
+      if (!call_internal(state, info, prev_instr)) return (FnWrap) { vm_halt };
+      return (FnWrap) { instr_fns[state->instr->type] };
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -536,6 +536,7 @@ static FnWrap vm_instr_instanceof(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_set_constraint(VMState *state) __attribute__ ((hot));
 static FnWrap vm_instr_set_constraint(VMState *state) {
   SetConstraintInstr *set_constraint_instr = (SetConstraintInstr*) state->instr;
   Value val = load_arg(state->frame, set_constraint_instr->obj);
@@ -613,6 +614,7 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
 
 #include "vm/optimize.h"
 
+static FnWrap vm_instr_call(VMState *state) __attribute__ ((hot));
 static FnWrap vm_instr_call(VMState *state) {
   CallInstr *call_instr = (CallInstr*) state->instr;
   CallInfo *info = &call_instr->info;
@@ -676,6 +678,7 @@ static FnWrap vm_instr_br(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_testbr(VMState *state) __attribute__ ((hot));
 static FnWrap vm_instr_testbr(VMState *state) {
   TestBranchInstr *tbr_instr = (TestBranchInstr*) state->instr;
   int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
@@ -730,6 +733,7 @@ static FnWrap vm_instr_move(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_alloc_static_object(VMState *state) __attribute__ ((hot));
 static FnWrap vm_instr_alloc_static_object(VMState *state) {
   AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) state->instr;
   

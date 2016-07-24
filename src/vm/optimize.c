@@ -1345,14 +1345,15 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
             SetConstraintStringKeyInstr *scski = (SetConstraintStringKeyInstr*) instr_reading;
             
             if (scski->obj.slot != alobi->target_slot) break;
-            if (scski->constraint.kind != ARG_SLOT) break;
-            if (!IS_OBJ(constant_slots[scski->constraint.slot])) break; // wat wat
+            if (scski->constraint.kind != ARG_SLOT && scski->constraint.kind != ARG_VALUE) break;
+            if (scski->constraint.kind == ARG_SLOT && !IS_OBJ(constant_slots[scski->constraint.slot])) break; // wat wat
             
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
               if (info->name_len == scski->key_len && strncmp(info->name_ptr, scski->key_ptr, info->name_len) == 0) {
                 if (info->constraint) abort(); // wat wat wat
-                info->constraint = AS_OBJ(constant_slots[scski->constraint.slot]);
+                if (scski->constraint.kind == ARG_SLOT) info->constraint = AS_OBJ(constant_slots[scski->constraint.slot]);
+                else info->constraint = AS_OBJ(scski->constraint.value);
               }
             }
             
