@@ -1,7 +1,25 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 
-#include "object.h"
+#include "core.h"
+
+struct _VMState {
+  Callframe *frame;
+  Instr *instr;
+  
+  VMSharedState *shared;
+  
+  VMRunState runstate;
+  
+  Object *root;
+  Value exit_value; // set when the last stackframe returns
+  
+  char *error;
+  char *backtrace; int backtrace_depth;
+  VMState *parent;
+};
+
+void vm_error(VMState *state, const char *fmt, ...);
 
 #define VM_ASSERT(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return
 
@@ -22,8 +40,6 @@ void vm_alloc_frame(VMState *state, int slots, int refslots);
 void vm_remove_frame(VMState *state);
 
 void setup_stub_frame(VMState *state, int slots);
-
-void vm_error(VMState *state, const char *fmt, ...);
 
 void vm_print_backtrace(VMState *state);
 

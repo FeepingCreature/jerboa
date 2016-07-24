@@ -137,6 +137,14 @@ typedef struct {
   };
 } WriteArg;
 
+typedef struct {
+  ArgKind kind;
+  union {
+    Value *slot_p;
+    TableEntry *refslot_p;
+  };
+} RefArg;
+
 char *get_arg_info(Arg arg);
 char *get_write_arg_info(WriteArg warg);
 
@@ -286,53 +294,15 @@ typedef struct {
 struct _Callframe {
   UserFunction *uf;
   Value *slots_ptr; int slots_len;
-  Value **refslots_ptr; int refslots_len; // references to values in closed objects
+  TableEntry **refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots; // gc entries
   Instr *instr_ptr;
   // overrides instr_ptr->belongs_to, used when in a call
   // double pointer due to Dark Magic
   FileRange **backtrace_belongs_to_p;
-  Value *target_slot; // when returning to this frame, assign result value to this slot
+  RefArg target; // when returning to this frame, assign result value to this
   int block, prev_block; // required for phi nodes
   Callframe *above;
-};
-
-static inline Value load_arg(Callframe *frame, Arg arg) {
-  if (arg.kind == ARG_SLOT) {
-    assert(arg.slot < frame->slots_len);
-    return frame->slots_ptr[arg.slot];
-  }
-  if (arg.kind == ARG_REFSLOT) {
-    assert(arg.refslot < frame->refslots_len);
-    return *frame->refslots_ptr[arg.refslot];
-  }
-  assert(arg.kind == ARG_VALUE);
-  return arg.value;
-}
-
-static inline Value *ref_arg(Callframe *frame, WriteArg warg) {
-  if (warg.kind == ARG_REFSLOT) {
-    assert(warg.refslot < frame->refslots_len);
-    return frame->refslots_ptr[warg.refslot];
-  }
-  assert(warg.kind == ARG_SLOT);
-  return &frame->slots_ptr[warg.slot];
-}
-
-struct _VMState {
-  Callframe *frame;
-  Instr *instr;
-  
-  VMSharedState *shared;
-  
-  VMRunState runstate;
-  
-  Object *root;
-  Value exit_value; // set when the last stackframe returns
-  
-  char *error;
-  char *backtrace; int backtrace_depth;
-  VMState *parent;
 };
 
 #endif

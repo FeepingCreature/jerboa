@@ -54,10 +54,10 @@ void cache_free(int size, void *ptr) {
   free(ptr);
 }
 
-Value *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
+TableEntry *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
   while (obj) {
     TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
-    if (entry) return &entry->value;
+    if (entry) return entry;
     obj = obj->parent;
   }
   return NULL;
@@ -66,7 +66,9 @@ Value *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_
 Value *object_lookup_ref(Object *obj, const char *key_ptr) {
   size_t len = strlen(key_ptr);
   size_t hashv = hash(key_ptr, len);
-  return object_lookup_ref_with_hash(obj, key_ptr, len, hashv);
+  TableEntry *entry = object_lookup_ref_with_hash(obj, key_ptr, len, hashv);
+  if (entry) return &entry->value;
+  return NULL;
 }
 
 Value object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
@@ -181,13 +183,13 @@ bool value_is_truthy(Value value) {
   return true;
 }
 
-static bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constraint) {
+bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constraint) {
   if (!constraint) return true;
   if (IS_NULL(value)) return false;
   if (IS_INT(value)) return constraint == sstate->vcache.int_base;
   if (IS_BOOL(value)) return constraint == sstate->vcache.bool_base;
   if (IS_FLOAT(value)) return constraint == sstate->vcache.float_base;
-  return AS_OBJ(value)->parent == constraint;
+  return obj_instance_of(AS_OBJ(value), constraint) != NULL;
 }
 
 // returns error or null

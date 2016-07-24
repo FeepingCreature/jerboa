@@ -96,7 +96,7 @@ void setup_stub_frame(VMState *state, int slots) {
   ret->base.type = INSTR_RETURN;
   ret->ret = (Arg) { .kind = ARG_SLOT, .slot = slots };
   cf->instr_ptr = (Instr*) ret;
-  cf->target_slot = &cf->slots_ptr[ret->ret.slot];
+  cf->target = (RefArg) { .kind = ARG_SLOT, .slot_p = &cf->slots_ptr[ret->ret.slot] };
   gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
   state->instr = cf->instr_ptr;
 }
@@ -272,7 +272,7 @@ static FnWrap vm_instr_alloc_object(VMState *state) {
 static FnWrap vm_instr_alloc_int_object(VMState *state) {
   AllocIntObjectInstr *alloc_int_obj_instr = (AllocIntObjectInstr*) state->instr;
   int value = alloc_int_obj_instr->value;
-  *ref_arg(state->frame, alloc_int_obj_instr->target) = INT2VAL(value);
+  set_arg(state, alloc_int_obj_instr->target, INT2VAL(value));
   state->instr = (Instr*)(alloc_int_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -280,7 +280,7 @@ static FnWrap vm_instr_alloc_int_object(VMState *state) {
 static FnWrap vm_instr_alloc_bool_object(VMState *state) {
   AllocBoolObjectInstr *alloc_bool_obj_instr = (AllocBoolObjectInstr*) state->instr;
   bool value = alloc_bool_obj_instr->value;
-  *ref_arg(state->frame, alloc_bool_obj_instr->target) = BOOL2VAL(value);
+  set_arg(state, alloc_bool_obj_instr->target, BOOL2VAL(value));
   state->instr = (Instr*)(alloc_bool_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -288,14 +288,14 @@ static FnWrap vm_instr_alloc_bool_object(VMState *state) {
 static FnWrap vm_instr_alloc_float_object(VMState *state) {
   AllocFloatObjectInstr *alloc_float_obj_instr = (AllocFloatObjectInstr*) state->instr;
   float value = alloc_float_obj_instr->value;
-  *ref_arg(state->frame, alloc_float_obj_instr->target) = FLOAT2VAL(value);
+  set_arg(state, alloc_float_obj_instr->target, FLOAT2VAL(value));
   state->instr = (Instr*)(alloc_float_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
 static FnWrap vm_instr_alloc_array_object(VMState *state) {
   AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) state->instr;
-  *ref_arg(state->frame, alloc_array_obj_instr->target) = make_array(state, NULL, 0);
+  set_arg(state, alloc_array_obj_instr->target, make_array(state, NULL, 0));
   state->instr = (Instr*)(alloc_array_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -303,7 +303,7 @@ static FnWrap vm_instr_alloc_array_object(VMState *state) {
 static FnWrap vm_instr_alloc_string_object(VMState *state) {
   AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) state->instr;
   char *value = alloc_string_obj_instr->value;
-  *ref_arg(state->frame, alloc_string_obj_instr->target) = make_string(state, value, strlen(value));
+  set_arg(state, alloc_string_obj_instr->target, make_string(state, value, strlen(value)));
   state->instr = (Instr*)(alloc_string_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -315,7 +315,7 @@ static FnWrap vm_instr_alloc_closure_object(VMState *state) {
   Value context = state->frame->slots_ptr[context_slot];
   VM_ASSERT2(IS_OBJ(context), "bad slot type");
   Object *context_obj = AS_OBJ(context);
-  *ref_arg(state->frame, alloc_closure_obj_instr->target) = make_closure_fn(state, context_obj, alloc_closure_obj_instr->fn);
+  set_arg(state, alloc_closure_obj_instr->target, make_closure_fn(state, context_obj, alloc_closure_obj_instr->fn));
   state->instr = (Instr*)(alloc_closure_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -344,11 +344,11 @@ static FnWrap vm_instr_freeze_object(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static inline FnWrap call_internal(VMState *state, CallInfo *info, Value *target, FileRange **prev_instr) {
+static inline FnWrap call_internal(VMState *state, CallInfo *info, RefArg target, FileRange **prev_instr) {
   // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
   // solve explicitly
   state->frame->backtrace_belongs_to_p = prev_instr;
-  state->frame->target_slot = target;
+  state->frame->target = target;
   state->frame->instr_ptr = state->instr;
   
   if (!setup_call(state, info)) return (FnWrap) { vm_halt };
@@ -374,7 +374,7 @@ static FnWrap vm_instr_access(VMState *state) {
   if (skey) {
     key_obj->flags |= OBJ_IMMORTAL; // TODO better way
     key = skey->value;
-    *ref_arg(state->frame, access_instr->target) = object_lookup(obj, key, &object_found);
+    set_arg(state, access_instr->target, object_lookup(obj, key, &object_found));
   }
   if (!object_found) {
     Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
@@ -433,7 +433,7 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   int key_len = aski->key_len;
   size_t key_hash = aski->key_hash;
   bool object_found = false;
-  *ref_arg(state->frame, aski->target) = object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found);
+  set_arg(state, aski->target, object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found));
   
   if (UNLIKELY(!object_found)) {
     return vm_instr_access_string_key_index_fallback(state);
@@ -467,7 +467,7 @@ static FnWrap vm_instr_assign(VMState *state) {
       
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
-      return call_internal(state, info, &state->frame->slots_ptr[target_slot], prev_instr);
+      return call_internal(state, info, (RefArg) { .kind = ARG_SLOT, .slot_p = &state->frame->slots_ptr[target_slot] }, prev_instr);
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -514,7 +514,7 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
   char *key = skey->value;
   bool object_found = false;
   object_lookup(obj, key, &object_found);
-  *ref_arg(state->frame, key_in_obj_instr->target) = BOOL2VAL(object_found);
+  set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
   
   state->instr = (Instr*)(key_in_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -528,7 +528,7 @@ static FnWrap vm_instr_instanceof(VMState *state) {
   bool res;
   if (!IS_OBJ(proto_val)) res = false; // nothing is instanceof 5
   else res = value_instance_of(state, load_arg(state->frame, instr->obj), AS_OBJ(proto_val));
-  *ref_arg(state->frame, instr->target) = BOOL2VAL(res);
+  set_arg(state, instr->target, BOOL2VAL(res));
   
   state->instr = (Instr*)(instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -629,7 +629,7 @@ static FnWrap vm_instr_return(VMState *state) {
   vm_remove_frame(state);
   
   if (state->frame) {
-    *state->frame->target_slot = res;
+    vm_return(state, res);
     state->instr = state->frame->instr_ptr;
   } else {
     state->exit_value = res;
@@ -666,9 +666,9 @@ static FnWrap vm_instr_testbr(VMState *state) {
 static FnWrap vm_instr_phi(VMState *state) {
   PhiInstr *phi = (PhiInstr*) state->instr;
   if (state->frame->prev_block == phi->block1) {
-    *ref_arg(state->frame, phi->target) = load_arg(state->frame, phi->arg1);
+    set_arg(state, phi->target, load_arg(state->frame, phi->arg1));
   } else if (state->frame->prev_block == phi->block2) {
-    *ref_arg(state->frame, phi->target) = load_arg(state->frame, phi->arg2);
+    set_arg(state, phi->target, load_arg(state->frame, phi->arg2));
   } else VM_ASSERT2(false, "phi block error: arrived here from block not in list: [%i, %i], but came from %i",
                     phi->block1, phi->block2, state->frame->prev_block);
   
@@ -686,9 +686,9 @@ static FnWrap vm_instr_define_refslot(VMState *state) {
   Object *obj = closest_obj(state, state->frame->slots_ptr[obj_slot]);
   VM_ASSERT2(obj, "cannot define refslot for null obj");
   
-  Value *pp = object_lookup_ref_with_hash(obj, dri->key_ptr, dri->key_len, dri->key_hash);
-  VM_ASSERT2(pp, "key not in object");
-  state->frame->refslots_ptr[target_refslot] = pp;
+  TableEntry *entry = object_lookup_ref_with_hash(obj, dri->key_ptr, dri->key_len, dri->key_hash);
+  VM_ASSERT2(entry, "key not in object");
+  state->frame->refslots_ptr[target_refslot] = entry;
   
   state->instr = (Instr*)(dri + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -697,7 +697,7 @@ static FnWrap vm_instr_define_refslot(VMState *state) {
 static FnWrap vm_instr_move(VMState *state) {
   MoveInstr *mi = (MoveInstr*) state->instr;
   
-  *ref_arg(state->frame, mi->target) = load_arg(state->frame, mi->source);
+  set_arg(state, mi->target, load_arg(state->frame, mi->source));
   
   state->instr = (Instr*)(mi + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
@@ -732,7 +732,7 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
         }
       }
     }
-    state->frame->refslots_ptr[info->refslot] = &entry->value;
+    state->frame->refslots_ptr[info->refslot] = entry;
   }
   
   obj->flags = OBJ_CLOSED;
