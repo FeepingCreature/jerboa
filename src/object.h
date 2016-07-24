@@ -68,12 +68,22 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
     assert(arg.refslot < frame->refslots_len);
   } else assert(arg.kind == ARG_VALUE);
   
+  if (arg.kind == ARG_SLOT) {
+    return frame->slots_ptr[arg.slot];
+  }
+  if (arg.kind == ARG_REFSLOT) {
+    return frame->refslots_ptr[arg.refslot]->value;
+  }
+  return arg.value;
+  // NOT faster
+  /*
   Value *ptrs[] = {
     &frame->slots_ptr[arg.slot],
     &frame->refslots_ptr[arg.refslot]->value,
     &arg.value
   };
   return *ptrs[arg.kind];
+  */
 }
 
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
@@ -98,9 +108,6 @@ static inline void set_arg(VMState *state, WriteArg warg, Value value) {
 static inline void vm_return(VMState *state, CallInfo *info, Value val) {
   set_arg(state, info->target, val);
 }
-
-// args_ptr's entries are guaranteed to lie inside slots_ptr.
-typedef void (*VMFunctionPointer)(VMState *state, CallInfo *info);
 
 // such as intrinsics
 typedef struct {

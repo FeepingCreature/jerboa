@@ -60,6 +60,15 @@ CASE(INSTR_CALL, CallInstr)
     if (arg->kind == ARG_SLOT) CHKSLOT(arg->slot);
   }
   if (instr->info.target.kind == ARG_SLOT) CHKSLOT(instr->info.target.slot);
+CASE(INSTR_CALL_FUNCTION_DIRECT, CallFunctionDirectInstr)
+  CHKSLOT(instr->base.context_slot);
+  if (instr->info.fn.kind == ARG_SLOT) CHKSLOT(instr->info.fn.slot);
+  if (instr->info.this_arg.kind == ARG_SLOT) CHKSLOT(instr->info.this_arg.slot);
+  for (int k = 0; k < instr->info.args_len; ++k) {
+    Arg *arg = &((Arg*)(&instr->info+1))[k];
+    if (arg->kind == ARG_SLOT) CHKSLOT(arg->slot);
+  }
+  if (instr->info.target.kind == ARG_SLOT) CHKSLOT(instr->info.target.slot);
 CASE(INSTR_RETURN, ReturnInstr)
   CHKSLOT(instr->base.context_slot);
   if (instr->ret.kind == ARG_SLOT) CHKSLOT(instr->ret.slot);
@@ -96,6 +105,6 @@ CASE(INSTR_MOVE, MoveInstr)
 CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
   CHKSLOT(instr->base.context_slot);
   for (int k = 0; k < instr->info_len; ++k) {
-    CHKSLOT(instr->info_ptr[k].slot);
+    CHKSLOT(ASOI_INFO(instr)[k].slot);
   }
   CHKSLOT(instr->parent_slot); CHKSLOT(instr->target_slot);

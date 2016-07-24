@@ -20,6 +20,7 @@ int main(int argc, char **argv) {
   init_instr_fn_table();
   
   VMState vmstate = {0};
+  vmstate.runstate = VM_TERMINATED;
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
   vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);

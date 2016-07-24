@@ -51,6 +51,7 @@ typedef enum {
   INSTR_SET_CONSTRAINT_STRING_KEY,
   INSTR_DEFINE_REFSLOT,
   INSTR_MOVE,
+  INSTR_CALL_FUNCTION_DIRECT,
   // object is allocated, some fields are defined, object is closed, and refslots are created for its fields
   // this is a very common pattern due to scopes
   INSTR_ALLOC_STATIC_OBJECT,
@@ -59,6 +60,7 @@ typedef enum {
 } InstrType;
 
 #define UNLIKELY(X) __builtin_expect(X, 0)
+#define LIKELY(X) __builtin_expect(X, 1)
 
 struct _HashTable {
   TableEntry *entries_ptr;
@@ -172,7 +174,7 @@ static inline int as_int_(Value v) { assert(v.type == TYPE_INT); return v.i; }
 static inline bool as_bool_(Value v) { assert(v.type == TYPE_BOOL); return v.b; }
 static inline float as_float_(Value v) { assert(v.type == TYPE_FLOAT); return v.f; }
 static inline Object *as_obj_(Value v) { assert(v.type == TYPE_OBJECT); return v.obj; }
-static inline Object *obj_or_null_(Value v) { if (v.type == TYPE_OBJECT) return v.obj; return NULL; }
+static inline Object *obj_or_null_(Value v) { return (v.type == TYPE_OBJECT)?v.obj:NULL; }
 
 #define IS_INT(V) ((V).type == TYPE_INT)
 #define IS_BOOL(V) ((V).type == TYPE_BOOL)
@@ -198,10 +200,9 @@ static inline Object *obj_or_null_(Value v) { if (v.type == TYPE_OBJECT) return 
 #define OBJ2VAL(O) ((Value) { .type = TYPE_OBJECT, .obj = (O) })
 
 typedef enum {
-  // DO NOT CHANGE ORDER (see vm.c:vm_instr_call)
-  VM_TERMINATED = 0,
-  VM_RUNNING = 1,
-  VM_ERRORED = 2
+  VM_RUNNING,
+  VM_TERMINATED,
+  VM_ERRORED,
 } VMRunState;
 
 typedef struct {
@@ -302,5 +303,7 @@ struct _Callframe {
   int block, prev_block; // required for phi nodes
   Callframe *above;
 };
+
+typedef void (*VMFunctionPointer)(VMState *state, CallInfo *info);
 
 #endif

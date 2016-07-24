@@ -46,8 +46,12 @@ int instr_size(Instr *instr) {
     CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
     CASE(INSTR_MOVE, MoveInstr);
 #undef CASE
-    case INSTR_ALLOC_STATIC_OBJECT: return sizeof(AllocStaticObjectInstr) + sizeof(Object);
-    case INSTR_CALL: return sizeof(CallInstr) + sizeof(Arg) * ((CallInstr*)instr)->info.args_len;
+    case INSTR_ALLOC_STATIC_OBJECT:
+      return sizeof(AllocStaticObjectInstr)
+      + sizeof(Object)
+      + sizeof(StaticFieldInfo) * ((AllocStaticObjectInstr*)instr)->info_len;
+    case INSTR_CALL: return ((CallInstr*)instr)->size;
+    case INSTR_CALL_FUNCTION_DIRECT: return ((CallFunctionDirectInstr*)instr)->size;
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();
   }
 }

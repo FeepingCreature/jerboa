@@ -353,6 +353,7 @@ void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target) {
 
 UserFunction *build_function(FunctionBuilder *builder) {
   assert(builder->block_terminated);
+  if (builder->body.blocks_len == 0) { fprintf(stderr, "Built an invalid function!\n"); abort(); }
   UserFunction *fn = malloc(sizeof(UserFunction));
   fn->arity = builder->arglist_len;
   fn->variadic_tail = builder->variadic_tail;

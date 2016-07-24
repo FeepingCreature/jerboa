@@ -613,7 +613,7 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             slot_live[instr->obj_slot] = true;
           CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
             for (int k = 0; k < instr->info_len; ++k)
-              slot_live[instr->info_ptr[k].slot] = true;
+              slot_live[ASOI_INFO(instr)[k].slot] = true;
           CASE(INSTR_LAST, Instr) abort();
         } break;
         default: assert("Unhandled Instruction Type!" && false);
@@ -640,6 +640,48 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
       if (add) addinstr_like(builder, instr, instr_size(instr), instr);
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
+static UserFunction *call_functions_directly(VMState *state, UserFunction *uf) {
+FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->block_terminated = true;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    new_block(builder);
+    
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      if (instr_cur->type == INSTR_CALL) {
+        CallInstr *instr = (CallInstr*) instr_cur;
+        if (instr->info.fn.kind == ARG_VALUE && IS_OBJ(instr->info.fn.value)) {
+          Object *fn_obj_n = AS_OBJ(instr->info.fn.value);
+          if (fn_obj_n->parent == state->shared->vcache.function_base) {
+            int size = sizeof(CallFunctionDirectInstr) + sizeof(Arg) * instr->size;
+            CallFunctionDirectInstr *cfdi = alloca(size);
+            cfdi->base = (Instr) {
+              .type = INSTR_CALL_FUNCTION_DIRECT,
+              .belongs_to = instr->base.belongs_to
+            };
+            cfdi->size = size;
+            cfdi->fn = ((FunctionObject*)fn_obj_n)->fn_ptr;
+            cfdi->info = instr->info;
+            for (int i = 0; i < instr->info.args_len; ++i) {
+              ((Arg*)(&cfdi->info + 1))[i] = ((Arg*)(&instr->info + 1))[i];
+            }
+            addinstr_like(builder, instr_cur, size, (Instr*) cfdi);
+            instr_cur = (Instr*) ((char*) instr + instr->size);
+            continue;
+          }
+        }
+      }
+      
+      addinstr_like(builder, instr_cur, instr_size(instr_cur), instr_cur);
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
   UserFunction *fn = build_function(builder);
@@ -1372,16 +1414,20 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
             info->tbl_offset = entry - sample_obj.tbl.entries_ptr;
           }
           
-          AllocStaticObjectInstr *asoi = alloca(sizeof(AllocStaticObjectInstr) + sizeof(Object));
+          AllocStaticObjectInstr *asoi = alloca(sizeof(AllocStaticObjectInstr)
+                                                + sizeof(Object)
+                                                + sizeof(StaticFieldInfo) * info_len);
           *asoi = (AllocStaticObjectInstr) {
             .base = { .type = INSTR_ALLOC_STATIC_OBJECT },
             .info_len = info_len,
-            .info_ptr = info_ptr,
             .parent_slot = alobi->parent_slot,
             .target_slot = alobi->target_slot,
           };
-          *(Object*) (asoi + 1) = sample_obj;
-          addinstr_like(builder, instr, sizeof(AllocStaticObjectInstr) + sizeof(Object), (Instr*) asoi);
+          ASOI_OBJ(asoi) = sample_obj;
+          for (int k = 0; k < info_len; ++k) {
+            ASOI_INFO(asoi)[k] = info_ptr[k];
+          }
+          addinstr_like(builder, instr, instr_size((Instr*) asoi), (Instr*) asoi);
           instr = instr_reading;
           continue;
         }
@@ -1555,6 +1601,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   // must be late!
   uf = fuse_static_object_alloc(state, uf);
   uf = remove_dead_slot_writes(uf);
+  uf = call_functions_directly(state, uf);
   
   // must be very very *very* last!
   uf = compactify_registers(uf);

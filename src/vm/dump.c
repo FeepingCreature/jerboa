@@ -116,7 +116,20 @@ void dump_instr(VMState *state, Instr **instr_p) {
         fprintf(stderr, "%s", get_arg_info(((Arg*)(ci + 1))[i]));
       }
       fprintf(stderr, " )\n");
-      *instr_p = (Instr*) ((Arg*)(ci + 1) + ci->info.args_len);
+      *instr_p = (Instr*) ((char*)ci + ci->size);
+      break;
+    }
+    case INSTR_CALL_FUNCTION_DIRECT:
+    {
+      CallFunctionDirectInstr *cfdi = (CallFunctionDirectInstr*) instr;
+      fprintf(stderr, "call intrinsic: %s = %s . %s ( ",
+              get_write_arg_info(cfdi->info.target), get_arg_info(cfdi->info.this_arg), get_arg_info(cfdi->info.fn));
+      for (int i = 0; i < cfdi->info.args_len; ++i) {
+        if (i) fprintf(stderr, ", ");
+        fprintf(stderr, "%s", get_arg_info(((Arg*)(cfdi + 1))[i]));
+      }
+      fprintf(stderr, " ) \t (opt: fast path)\n");
+      *instr_p = (Instr*) ((char*)cfdi + cfdi->size);
       break;
     }
     case INSTR_RETURN:
@@ -195,14 +208,14 @@ void dump_instr(VMState *state, Instr **instr_p) {
       AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) instr;
       fprintf(stderr, "%%%i = new frame %%%i { ", asoi->target_slot, asoi->parent_slot);
       for (int i = 0; i < asoi->info_len; ++i) {
-        StaticFieldInfo *info = &asoi->info_ptr[i];
+        StaticFieldInfo *info = &ASOI_INFO(asoi)[i];
         char *infostr = "";
         if (info->constraint) infostr = get_type_info(state, OBJ2VAL(info->constraint));
         fprintf(stderr, "%.*s%s%s = %%%i (&%i); ",
                 info->name_len, info->name_ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
       fprintf(stderr, "}\n");
-      *instr_p = (Instr*) ((char*) asoi + sizeof(AllocStaticObjectInstr) + sizeof(Object));
+      *instr_p = (Instr*) ((char*) instr + instr_size(instr));
       break;
     }
     default:

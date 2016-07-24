@@ -192,7 +192,16 @@ typedef struct {
   int target_slot, parent_slot;
   
   int info_len;
-  StaticFieldInfo *info_ptr;
 } AllocStaticObjectInstr;
+
+#define ASOI_OBJ(I) *((Object*)((AllocStaticObjectInstr*)(I) + 1))
+#define ASOI_INFO(I) ((StaticFieldInfo*)((Object*)((AllocStaticObjectInstr*)(I) + 1) + 1))
+
+typedef struct {
+  Instr base;
+  int size; // faster than recomputing
+  VMFunctionPointer fn;
+  CallInfo info;
+} CallFunctionDirectInstr;
 
 #endif

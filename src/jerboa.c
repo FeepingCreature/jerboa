@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
   }
   
   VMState vmstate = {0};
+  vmstate.runstate = VM_TERMINATED;
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
   
   int argc2 = 0;

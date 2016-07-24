@@ -645,6 +645,18 @@ static FnWrap vm_instr_call(VMState *state) {
   }
 }
 
+static FnWrap vm_instr_call_function_direct(VMState *state) __attribute__ ((hot));
+static FnWrap vm_instr_call_function_direct(VMState *state) {
+  CallFunctionDirectInstr *instr = (CallFunctionDirectInstr*) state->instr;
+  CallInfo *info = &instr->info;
+  
+  state->instr = (Instr*) ((char*) instr + instr->size);
+  instr->fn(state, info);
+  if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
+  
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_halt(VMState *state) {
   (void) state;
   return (FnWrap) { vm_halt };
@@ -751,17 +763,13 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
   memcpy(obj->tbl.entries_ptr, ((Object*)(asoi+1))->tbl.entries_ptr, tbl_len);
   
   for (int i = 0; i < asoi->info_len; ++i) {
-    StaticFieldInfo *info = &asoi->info_ptr[i];
+    StaticFieldInfo *info = &ASOI_INFO(asoi)[i];
     VM_ASSERT2_SLOT(info->slot < state->frame->slots_len, "slot numbering error");
     TableEntry *entry = &obj->tbl.entries_ptr[info->tbl_offset];
-    if (info->slot) {
-      entry->value = state->frame->slots_ptr[info->slot]; // 0 is null
-      if (info->constraint) {
-        entry->constraint = info->constraint;
-        if (!value_instance_of(state, entry->value, info->constraint)) {
-          VM_ASSERT2(false, "type constraint violated on variable");
-        }
-      }
+    entry->value = state->frame->slots_ptr[info->slot]; // 0 is null
+    if (info->constraint) {
+      entry->constraint = info->constraint;
+      VM_ASSERT2(value_instance_of(state, entry->value, info->constraint), "type constraint violated on variable");
     }
     state->frame->refslots_ptr[info->refslot] = entry;
   }
@@ -770,7 +778,10 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
   
   state->frame->slots_ptr[target_slot] = OBJ2VAL(obj);
   
-  state->instr = (Instr*)((char*) asoi + sizeof(AllocStaticObjectInstr) + sizeof(Object));
+  state->instr = (Instr*)((char*) asoi
+                          + sizeof(AllocStaticObjectInstr)
+                          + sizeof(Object)
+                          + sizeof(StaticFieldInfo) * asoi->info_len);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -829,6 +840,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_SET_CONSTRAINT_STRING_KEY] = vm_instr_set_constraint_string_key;
   instr_fns[INSTR_DEFINE_REFSLOT] = vm_instr_define_refslot;
   instr_fns[INSTR_MOVE] = vm_instr_move;
+  instr_fns[INSTR_CALL_FUNCTION_DIRECT] = vm_instr_call_function_direct;
   instr_fns[INSTR_ALLOC_STATIC_OBJECT] = vm_instr_alloc_static_object;
 }
 

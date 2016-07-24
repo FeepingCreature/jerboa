@@ -75,7 +75,7 @@ static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   Value val1 = load_arg(state->frame, info->this_arg);
   Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   
-  if (IS_INT(val2)) {
+  if (LIKELY(IS_INT(val2))) {
     int i1 = AS_INT(val1), i2 = AS_INT(val2);
     int res;
     switch (mop) {
@@ -94,7 +94,7 @@ static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
     return;
   }
   
-  if (IS_FLOAT(val2)) {
+  if (LIKELY(IS_FLOAT(val2))) {
     float v1 = AS_INT(val1), v2 = AS_FLOAT(val2);
     float res;
     switch (mop) {
@@ -797,6 +797,7 @@ static void xml_parse_fn(VMState *state, CallInfo *info) {
 static bool xml_node_check_pred(VMState *state, Value node, Value pred)
 {
   VMState substate = {0};
+  substate.runstate = VM_TERMINATED;
   substate.parent = state;
   substate.root = state->root;
   substate.shared = state->shared;
@@ -919,6 +920,7 @@ static void require_fn(VMState *state, CallInfo *info) {
   // dump_fn(module);
   
   VMState substate = {0};
+  substate.runstate = VM_TERMINATED;
   substate.parent = state;
   substate.root = state->root;
   substate.shared = state->shared;

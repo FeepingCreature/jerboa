@@ -58,6 +58,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
   Value toString_fn = object_lookup(obj, "toString", NULL);
   if (allow_tostring && NOT_NULL(toString_fn)) {
     VMState substate = {0};
+    substate.runstate = VM_TERMINATED;
     substate.parent = state;
     substate.root = state->root;
     substate.shared = state->shared;
