@@ -4,17 +4,23 @@ CASE(INSTR_GET_ROOT, GetRootInstr)
 CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->parent_slot); CHKSLOT(instr->target_slot);
 CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr)
   CHKSLOT(instr->base.context_slot); CHKSLOT(instr->slot);
 CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
@@ -31,7 +37,10 @@ CASE(INSTR_ASSIGN, AssignInstr)
   if (instr->value.kind == ARG_SLOT) CHKSLOT(instr->value.slot);
   CHKSLOT(instr->target_slot);
 CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
-  CHKSLOT(instr->base.context_slot); CHKSLOT(instr->key_slot); CHKSLOT(instr->obj_slot); CHKSLOT(instr->target_slot);
+  CHKSLOT(instr->base.context_slot);
+  if (instr->key.kind == ARG_SLOT) CHKSLOT(instr->key.slot);
+  if (instr->obj.kind == ARG_SLOT) CHKSLOT(instr->obj.slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_INSTANCEOF, InstanceofInstr)
   CHKSLOT(instr->base.context_slot);
   if (instr->obj.kind == ARG_SLOT) CHKSLOT(instr->obj.slot);
@@ -58,12 +67,12 @@ CASE(INSTR_BR, BranchInstr)
   CHKSLOT(instr->base.context_slot);
 CASE(INSTR_TESTBR, TestBranchInstr)
   CHKSLOT(instr->base.context_slot);
-  CHKSLOT(instr->test_slot);
+  if (instr->test.kind == ARG_SLOT) CHKSLOT(instr->test.slot);
 CASE(INSTR_PHI, PhiInstr)
   CHKSLOT(instr->base.context_slot);
-  CHKSLOT(instr->slot1);
-  CHKSLOT(instr->slot2);
-  CHKSLOT(instr->target_slot);
+  if (instr->arg1.kind == ARG_SLOT) CHKSLOT(instr->arg1.slot);
+  if (instr->arg2.kind == ARG_SLOT) CHKSLOT(instr->arg2.slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 
 CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
   CHKSLOT(instr->base.context_slot);

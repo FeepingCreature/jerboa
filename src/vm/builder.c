@@ -135,12 +135,12 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
 int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
   KeyInObjInstr instr = {
     .base = { .type = INSTR_KEY_IN_OBJ },
-    .key_slot = key_slot,
-    .obj_slot = obj_slot,
-    .target_slot = builder->slot_base++
+    .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
+    .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot) {
@@ -193,60 +193,60 @@ int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
 int addinstr_alloc_int_object(FunctionBuilder *builder, int value) {
   AllocIntObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_INT_OBJECT },
-    .target_slot = builder->slot_base++,
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ },
     .value = value
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_alloc_bool_object(FunctionBuilder *builder, bool value) {
   AllocBoolObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_BOOL_OBJECT },
-    .target_slot = builder->slot_base++,
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ },
     .value = value
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_alloc_float_object(FunctionBuilder *builder, float value) {
   AllocFloatObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_FLOAT_OBJECT },
-    .target_slot = builder->slot_base++,
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ },
     .value = value
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_alloc_array_object(FunctionBuilder *builder) {
   AllocArrayObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_ARRAY_OBJECT },
-    .target_slot = builder->slot_base++
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_alloc_string_object(FunctionBuilder *builder, char *value) {
   AllocStringObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_STRING_OBJECT },
-    .target_slot = builder->slot_base++,
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ },
     .value = value
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
   AllocClosureObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_CLOSURE_OBJECT },
-    .target_slot = builder->slot_base++,
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ },
     .fn = fn
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
@@ -284,7 +284,7 @@ int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, in
 void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, int *falsebranch) {
   TestBranchInstr instr = {
     .base = { .type = INSTR_TESTBR },
-    .test_slot = test
+    .test = (Arg) { .kind = ARG_SLOT, .slot = test }
   };
   *truebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.true_blk);
   *falsebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.false_blk);
@@ -296,14 +296,14 @@ int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, in
   PhiInstr instr = {
     .base = { .type = INSTR_PHI },
     .block1 = block1,
-    .slot1 = slot1,
+    .arg1 = (Arg) { .kind = ARG_SLOT, .slot = slot1 },
     .block2 = block2,
-    .slot2 = slot2,
-    .target_slot = builder->slot_base ++
+    .arg2 = (Arg) { .kind = ARG_SLOT, .slot = slot2 },
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base ++ }
   };
   
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  return instr.target_slot;
+  return instr.target.slot;
 }
 
 void addinstr_branch(FunctionBuilder *builder, int *branch) {

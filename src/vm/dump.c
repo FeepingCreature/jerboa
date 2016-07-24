@@ -18,36 +18,40 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((AllocObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_INT_OBJECT:
-      fprintf(stderr, "alloc int object: %%%i = new int(%i)\n",
-              ((AllocIntObjectInstr*) instr)->target_slot, ((AllocIntObjectInstr*) instr)->value);
+      fprintf(stderr, "alloc int object: %s = new int(%i)\n",
+              get_write_arg_info(((AllocIntObjectInstr*) instr)->target),
+              ((AllocIntObjectInstr*) instr)->value);
       *instr_p = (Instr*) ((AllocIntObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_BOOL_OBJECT:
     {
       AllocBoolObjectInstr *aboi = (AllocBoolObjectInstr*) instr;
-      fprintf(stderr, "alloc bool object: %%%i = %s\n",
-              aboi->target_slot, aboi->value?"true":"false");
+      fprintf(stderr, "alloc bool object: %s = %s\n",
+              get_write_arg_info(aboi->target),
+              aboi->value?"true":"false");
       *instr_p = (Instr*) (aboi + 1);
       break;
     }
     case INSTR_ALLOC_FLOAT_OBJECT:
-      fprintf(stderr, "alloc float object: %%%i = new float(%f)\n",
-              ((AllocFloatObjectInstr*) instr)->target_slot, ((AllocFloatObjectInstr*) instr)->value);
+      fprintf(stderr, "alloc float object: %s = new float(%f)\n",
+              get_write_arg_info(((AllocFloatObjectInstr*) instr)->target),
+              ((AllocFloatObjectInstr*) instr)->value);
       *instr_p = (Instr*) ((AllocFloatObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_ARRAY_OBJECT:
-      fprintf(stderr, "alloc array object: %%%i = []\n",
-              ((AllocArrayObjectInstr*) instr)->target_slot);
+      fprintf(stderr, "alloc array object: %s = []\n",
+              get_write_arg_info(((AllocArrayObjectInstr*) instr)->target));
       *instr_p = (Instr*) ((AllocArrayObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_STRING_OBJECT:
-      fprintf(stderr, "alloc string object: %%%i = new string(%s)\n",
-              ((AllocStringObjectInstr*) instr)->target_slot, ((AllocStringObjectInstr*) instr)->value);
+      fprintf(stderr, "alloc string object: %s = new string(%s)\n",
+              get_write_arg_info(((AllocStringObjectInstr*) instr)->target),
+              ((AllocStringObjectInstr*) instr)->value);
       *instr_p = (Instr*) ((AllocStringObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_CLOSURE_OBJECT:
-      fprintf(stderr, "alloc closure object: %%%i = new function(), dumped later\n",
-              ((AllocClosureObjectInstr*) instr)->target_slot);
+      fprintf(stderr, "alloc closure object: %s = new function(), dumped later\n",
+              get_write_arg_info(((AllocClosureObjectInstr*) instr)->target));
       *instr_p = (Instr*) ((AllocClosureObjectInstr*) instr + 1);
       break;
     case INSTR_CLOSE_OBJECT:
@@ -79,8 +83,10 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     }
     case INSTR_KEY_IN_OBJ:
-      fprintf(stderr, "key in obj: %%%i = %%%i in %%%i\n",
-              ((KeyInObjInstr*) instr)->target_slot, ((KeyInObjInstr*) instr)->key_slot, ((KeyInObjInstr*) instr)->obj_slot);
+      fprintf(stderr, "key in obj: %s = %s in %s\n",
+              get_write_arg_info(((KeyInObjInstr*) instr)->target),
+              get_arg_info(((KeyInObjInstr*) instr)->key),
+              get_arg_info(((KeyInObjInstr*) instr)->obj));
       *instr_p = (Instr*) ((KeyInObjInstr*) instr + 1);
       break;
     case INSTR_INSTANCEOF:
@@ -122,15 +128,18 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((BranchInstr*) instr + 1);
       break;
     case INSTR_TESTBR:
-      fprintf(stderr, "test-branch: %%%i ? <%i> : <%i>\n",
-              ((TestBranchInstr*) instr)->test_slot, ((TestBranchInstr*) instr)->true_blk, ((TestBranchInstr*) instr)->false_blk);
+      fprintf(stderr, "test-branch: %s ? <%i> : <%i>\n",
+              get_arg_info(((TestBranchInstr*) instr)->test),
+              ((TestBranchInstr*) instr)->true_blk, ((TestBranchInstr*) instr)->false_blk);
       *instr_p = (Instr*) ((TestBranchInstr*) instr + 1);
       break;
     case INSTR_PHI:
     {
       PhiInstr *phi = (PhiInstr*) instr;
-      fprintf(stderr, "phi: %%%i = [ <%i>: %%%i, <%i>: %%%i ]\n",
-              phi->target_slot, phi->block1, phi->slot1, phi->block2, phi->slot2);
+      fprintf(stderr, "phi: %s = [ <%i>: %s, <%i>: %s ]\n",
+              get_write_arg_info(phi->target),
+              phi->block1, get_arg_info(phi->arg1),
+              phi->block2, get_arg_info(phi->arg2));
       *instr_p = (Instr*) (phi + 1);
       break;
     }

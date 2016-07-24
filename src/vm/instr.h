@@ -38,36 +38,36 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
   int value;
 } AllocIntObjectInstr;
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
   bool value;
 } AllocBoolObjectInstr;
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
   float value;
 } AllocFloatObjectInstr;
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
 } AllocArrayObjectInstr;
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
   char *value;
 } AllocStringObjectInstr;
 
 typedef struct {
   Instr base;
-  int target_slot;
+  WriteArg target;
   UserFunction *fn;
 } AllocClosureObjectInstr;
 
@@ -96,7 +96,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot, key_slot, target_slot;
+  Arg obj, key; WriteArg target;
 } KeyInObjInstr;
 
 typedef struct {
@@ -127,15 +127,15 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int test_slot;
+  Arg test;
   int true_blk, false_blk;
 } TestBranchInstr;
 
 typedef struct {
   Instr base;
-  int block1, slot1;
-  int block2, slot2;
-  int target_slot;
+  int block1; Arg arg1;
+  int block2; Arg arg2;
+  WriteArg target;
 } PhiInstr;
 
 typedef struct {
