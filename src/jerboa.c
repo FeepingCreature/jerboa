@@ -71,7 +71,10 @@ int main(int argc, char **argv) {
   
   module = optimize_runtime(&vmstate, module, root);
   
+  Value retval;
+  
   CallInfo info = {0};
+  info.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &retval };
   call_function(&vmstate, root, module, &info);
   vm_update_frame(&vmstate);
   vm_run(&vmstate);

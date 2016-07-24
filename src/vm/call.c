@@ -10,22 +10,22 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
   Callframe *cf = state->frame;
   cf->uf = fn;
   cf->slots_ptr[1] = OBJ2VAL(context);
-  gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
+  cf->target = info->target;
   
   if (fn->variadic_tail) {
-    if (info->args_len < cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
+    if (info->args_len < fn->arity) { vm_error(state, "arity violation in call!"); return; }
   } else {
-    if (info->args_len != cf->uf->arity) { vm_error(state, "arity violation in call!"); return; }
+    if (info->args_len != fn->arity) { vm_error(state, "arity violation in call!"); return; }
   }
   for (int i = 0; i < info->args_len; ++i) {
     cf->slots_ptr[2 + i] = load_arg(callf, INFO_ARGS_PTR(info)[i]);
   }
   
-  if (cf->uf->body.blocks_len == 0) {
+  if (fn->body.blocks_len == 0) {
     vm_error(state, "invalid function: no instructions");
     return;
   }
-  state->instr = cf->uf->body.instrs_ptr;
+  state->instr = fn->body.instrs_ptr;
 }
 
 #include "vm/optimize.h"

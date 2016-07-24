@@ -111,7 +111,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  WriteArg target;
+  int size; // faster than recomputing
   CallInfo info;
 } CallInstr;
 

@@ -22,6 +22,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   Value fn_value = load_arg(state->frame, info->this_arg);
   
   setup_stub_frame(state, len);
+  state->frame->target = info->target;
   for (int i = 0; i < len; ++i) {
     state->frame->slots_ptr[i] = args_array->ptr[i];
   }
@@ -30,6 +31,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   info2->args_len = len;
   info2->this_arg = (Arg) { .kind = ARG_VALUE, .value = VNULL };
   info2->fn = (Arg) { .kind = ARG_VALUE, .value = fn_value };
+  info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = len }; // len is the return slot
   for (int i = 0; i < len; ++i) {
     INFO_ARGS_PTR(info2)[i] = (Arg) { .kind = ARG_SLOT, .slot = i };
   }
@@ -43,7 +45,7 @@ static void bool_not_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Value this_val = load_arg(state->frame, info->this_arg);
   VM_ASSERT(IS_BOOL(this_val), "internal error: bool negation called on wrong type of object");
-  vm_return(state, make_bool(state, !AS_BOOL(this_val)));
+  vm_return(state, info, make_bool(state, !AS_BOOL(this_val)));
 }
 
 static void bool_eq_fn(VMState *state, CallInfo *info) {
@@ -53,7 +55,7 @@ static void bool_eq_fn(VMState *state, CallInfo *info) {
   
   VM_ASSERT(IS_BOOL(val1), "internal error: bool compare function called on wrong type of object");
   VM_ASSERT(IS_BOOL(val2), "can't compare bool with this value");
-  vm_return(state, make_bool(state, AS_BOOL(val1) == AS_BOOL(val2)));
+  vm_return(state, info, make_bool(state, AS_BOOL(val1) == AS_BOOL(val2)));
 }
 
 typedef enum {
@@ -88,7 +90,7 @@ static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
       case MATH_BIT_AND: res = i1 & i2; break;
       default: abort();
     }
-    vm_return(state, INT2VAL(res));
+    vm_return(state, info, INT2VAL(res));
     return;
   }
   
@@ -107,7 +109,7 @@ static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
         VM_ASSERT(false, "bit math with float operands is not supported");
       default: abort();
     }
-    vm_return(state, FLOAT2VAL(res));
+    vm_return(state, info, FLOAT2VAL(res));
     return;
   }
   vm_error(state, "don't know how to perform int math with %s", get_type_info(state, val2));
@@ -152,7 +154,7 @@ static void int_parse_fn(VMState *state, CallInfo *info) {
   }
   text = sobj->value;
   int res = (int) strtol(text, NULL, base);
-  vm_return(state, INT2VAL(res));
+  vm_return(state, info, INT2VAL(res));
 }
 
 static void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
@@ -177,7 +179,7 @@ static void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
     case MATH_BIT_AND: vm_error(state, "bitops are undefined for float");
     default: abort();
   }
-  vm_return(state, FLOAT2VAL(res));
+  vm_return(state, info, FLOAT2VAL(res));
   return;
 }
 
@@ -215,7 +217,7 @@ static void string_add_fn(VMState *state, CallInfo *info) {
   else VM_ASSERT(false, "don't know how to format object: %p", INFO_ARGS_PTR(info)[0]);
   char *str3 = my_asprintf("%s%s", str1, str2);
   free(str2);
-  vm_return(state, make_string(state, str3, strlen(str3)));
+  vm_return(state, info, make_string(state, str3, strlen(str3)));
   free(str3);
 }
 
@@ -233,7 +235,7 @@ static void string_eq_fn(VMState *state, CallInfo *info) {
     *str1 = ((StringObject*) sobj1)->value,
     *str2 = ((StringObject*) sobj2)->value;
   int res = strcmp(str1, str2);
-  vm_return(state, BOOL2VAL(res == 0));
+  vm_return(state, info, BOOL2VAL(res == 0));
 }
 
 static void string_startswith_fn(VMState *state, CallInfo *info) {
@@ -255,9 +257,9 @@ static void string_startswith_fn(VMState *state, CallInfo *info) {
   if (len2 > len1) res = -1;
   else res = strncmp(str1, str2, len2);
   if (res == 0) {
-    vm_return(state, make_string(state, str1 + len2, strlen(str1) - len2));
+    vm_return(state, info, make_string(state, str1 + len2, strlen(str1) - len2));
   } else {
-    vm_return(state, VNULL);
+    vm_return(state, info, VNULL);
   }
 }
 
@@ -280,9 +282,9 @@ static void string_endswith_fn(VMState *state, CallInfo *info) {
   if (len2 > len1) res = -1;
   else res = strncmp(str1 + len1 - len2, str2, len2);
   if (res == 0) {
-    vm_return(state, make_string(state, str1, strlen(str1) - len2));
+    vm_return(state, info, make_string(state, str1, strlen(str1) - len2));
   } else {
-    vm_return(state, VNULL);
+    vm_return(state, info, VNULL);
   }
 }
 
@@ -321,7 +323,7 @@ static void string_slice_fn(VMState *state, CallInfo *info) {
   utf8_step(&end, to - from, &error);
   VM_ASSERT(!error, error);
   
-  vm_return(state, make_string(state, start, end - start));
+  vm_return(state, info, make_string(state, start, end - start));
 }
 
 static void string_find_fn(VMState *state, CallInfo *info) {
@@ -338,18 +340,18 @@ static void string_find_fn(VMState *state, CallInfo *info) {
   char *match = sobj2->value;
   int matchlen = strlen(match);
   if (matchlen == 0) {
-    vm_return(state, INT2VAL(0));
+    vm_return(state, info, INT2VAL(0));
     return;
   }
   
   char *pos = memmem(str, len, match, matchlen);
   if (pos == NULL) {
-    vm_return(state, INT2VAL(-1));
+    vm_return(state, info, INT2VAL(-1));
     return;
   }
   
   int pos_utf8 = utf8_strnlen(str, pos - str);
-  vm_return(state, INT2VAL(pos_utf8));
+  vm_return(state, info, INT2VAL(pos_utf8));
 }
 
 static void string_byte_len_fn(VMState *state, CallInfo *info) {
@@ -360,7 +362,7 @@ static void string_byte_len_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(sobj, "internal error: string.endsWith() called on wrong type of object");
   
   char *str = ((StringObject*) sobj)->value;
-  vm_return(state, INT2VAL(strlen(str)));
+  vm_return(state, info, INT2VAL(strlen(str)));
 }
 
 typedef enum {
@@ -389,7 +391,7 @@ static void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
       case CMP_GE: res = i1 >= i2; break;
       default: abort();
     }
-    vm_return(state, BOOL2VAL(res));
+    vm_return(state, info, BOOL2VAL(res));
     return;
   }
   
@@ -404,7 +406,7 @@ static void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
       case CMP_GE: res = v1 >= v2; break;
       default: abort();
     }
-    vm_return(state, BOOL2VAL(res));
+    vm_return(state, info, BOOL2VAL(res));
     return;
   }
   VM_ASSERT(false, "don't know how to compare int with %s", get_type_info(state, load_arg(state->frame, INFO_ARGS_PTR(info)[0])));
@@ -451,7 +453,7 @@ static void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
     case CMP_GE: res = v1 >= v2; break;
     default: abort();
   }
-  vm_return(state, BOOL2VAL(res));
+  vm_return(state, info, BOOL2VAL(res));
 }
 
 static void float_eq_fn(VMState *state, CallInfo *info) {
@@ -478,7 +480,7 @@ static void float_toint_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Value arg1 = load_arg(state->frame, info->this_arg);
   VM_ASSERT(IS_FLOAT(arg1), "float.toInt called on wrong type of object");
-  vm_return(state, INT2VAL((int) AS_FLOAT(arg1)));
+  vm_return(state, info, INT2VAL((int) AS_FLOAT(arg1)));
 }
 
 static void ptr_is_null_fn(VMState *state, CallInfo *info) {
@@ -487,7 +489,7 @@ static void ptr_is_null_fn(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base;
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "internal error");
   PointerObject *ptr_obj = (PointerObject*) thisptr;
-  vm_return(state, BOOL2VAL(ptr_obj->ptr == NULL));
+  vm_return(state, info, BOOL2VAL(ptr_obj->ptr == NULL));
 }
 
 static void array_resize_fn(VMState *state, CallInfo *info) {
@@ -505,7 +507,7 @@ static void array_resize_fn(VMState *state, CallInfo *info) {
   memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
   arr_obj->length = newsize;
   object_set(state, (Object*) arr_obj, "length", INT2VAL(newsize));
-  vm_return(state, this_val);
+  vm_return(state, info, this_val);
 }
 
 static void array_push_fn(VMState *state, CallInfo *info) {
@@ -518,7 +520,7 @@ static void array_push_fn(VMState *state, CallInfo *info) {
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * ++arr_obj->length);
   arr_obj->ptr[arr_obj->length - 1] = value;
   object_set(state, (Object*) arr_obj, "length", INT2VAL(arr_obj->length));
-  vm_return(state, this_val);
+  vm_return(state, info, this_val);
 }
 
 static void array_pop_fn(VMState *state, CallInfo *info) {
@@ -529,7 +531,7 @@ static void array_pop_fn(VMState *state, CallInfo *info) {
   Value res = arr_obj->ptr[arr_obj->length - 1];
   arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * --arr_obj->length);
   object_set(state, (Object*) arr_obj, "length", INT2VAL(arr_obj->length));
-  vm_return(state, res);
+  vm_return(state, info, res);
 }
 
 static void array_index_fn(VMState *state, CallInfo *info) {
@@ -537,13 +539,11 @@ static void array_index_fn(VMState *state, CallInfo *info) {
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
   Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  if (!IS_INT(arg)) { vm_return(state, VNULL); return; }
+  if (!IS_INT(arg)) { vm_return(state, info, VNULL); return; }
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = AS_INT(arg);
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
-  // sometimes called naked
-  if (state->frame) vm_return(state, arr_obj->ptr[index]);
-  else state->exit_value = arr_obj->ptr[index];
+  vm_return(state, info, arr_obj->ptr[index]);
 }
 
 static void array_index_assign_fn(VMState *state, CallInfo *info) {
@@ -556,7 +556,7 @@ static void array_index_assign_fn(VMState *state, CallInfo *info) {
   int index = AS_INT(arg);
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   arr_obj->ptr[index] = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
-  vm_return(state, VNULL);
+  vm_return(state, info, VNULL);
 }
 
 static void array_join_fn(VMState *state, CallInfo *info) {
@@ -596,7 +596,7 @@ static void array_join_fn(VMState *state, CallInfo *info) {
   }
   res_cur[0] = 0;
   // TODO make string constructor that takes ownership of the pointer instead
-  vm_return(state, make_string(state, res, res_len));
+  vm_return(state, info, make_string(state, res, res_len));
   free(res);
 }
 
@@ -617,7 +617,7 @@ static void file_print_fn(VMState *state, CallInfo *info) {
     if (state->runstate == VM_ERRORED) return;
   }
   fprintf(file, "\n");
-  vm_return(state, VNULL);
+  vm_return(state, info, VNULL);
 }
 
 static void file_open_fn(VMState *state, CallInfo *info) {
@@ -639,7 +639,7 @@ static void file_open_fn(VMState *state, CallInfo *info) {
   }
   Object *file_obj = AS_OBJ(make_object(state, file_base));
   object_set(state, file_obj, "_handle", make_ptr(state, (void*) fh));
-  vm_return(state, OBJ2VAL(file_obj));
+  vm_return(state, info, OBJ2VAL(file_obj));
   gc_enable(state);
 }
 
@@ -659,7 +659,7 @@ static void file_close_fn(VMState *state, CallInfo *info) {
   fclose(file);
   object_set(state, AS_OBJ(this_val), "_handle", VNULL);
   
-  vm_return(state, VNULL);
+  vm_return(state, info, VNULL);
 }
 
 static void print_fn(VMState *state, CallInfo *info) {
@@ -669,7 +669,7 @@ static void print_fn(VMState *state, CallInfo *info) {
     if (state->runstate == VM_ERRORED) return;
   }
   fprintf(stdout, "\n");
-  vm_return(state, VNULL);
+  vm_return(state, info, VNULL);
 }
 
 static void keys_fn(VMState *state, CallInfo *info) {
@@ -694,7 +694,7 @@ static void keys_fn(VMState *state, CallInfo *info) {
       }
     }
   }
-  vm_return(state, make_array(state, res_ptr, res_len));
+  vm_return(state, info, make_array(state, res_ptr, res_len));
   gc_enable(state);
 }
 
@@ -759,7 +759,7 @@ static void xml_load_fn(VMState *state, CallInfo *info) {
   
   gc_disable(state);
   
-  vm_return(state, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
+  vm_return(state, info, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
   gc_enable(state);
   
   xmlFreeDoc(doc);
@@ -787,7 +787,7 @@ static void xml_parse_fn(VMState *state, CallInfo *info) {
   
   gc_disable(state);
   
-  vm_return(state, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
+  vm_return(state, info, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
   gc_enable(state);
   
   xmlFreeDoc(doc);
@@ -801,15 +801,14 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   substate.root = state->root;
   substate.shared = state->shared;
   
-  vm_alloc_frame(&substate, 1, 0);
-  
-  substate.frame->slots_ptr[0] = node;
+  Value res;
   
   CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
   info->args_len = 1;
   info->fn = (Arg) { .kind = ARG_VALUE, .value = pred };
   info->this_arg = (Arg) { .kind = ARG_VALUE, .value = VNULL };
-  INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = 0 };
+  info->target = (WriteArg) { .kind = ARG_POINTER, .pointer = &res };
+  INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = node };
   
   if (!setup_call(&substate, info)) {
     VM_ASSERT(false, "pred check failure: %s\n", substate.error) false;
@@ -819,7 +818,6 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   vm_run(&substate);
   VM_ASSERT(substate.runstate != VM_ERRORED, "pred check failure: %s\n", substate.error) false;
   
-  Value res = substate.exit_value;
   return value_is_truthy(res);
 }
 
@@ -850,7 +848,7 @@ static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
   Value *array_ptr = NULL; int array_length = 0;
   gc_disable(state);
   xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), &array_ptr, &array_length);
-  vm_return(state, make_array(state, array_ptr, array_length));
+  vm_return(state, info, make_array(state, array_ptr, array_length));
   gc_enable(state);
 }
 
@@ -895,7 +893,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
   Value *array_ptr = NULL; int array_length = 0;
   gc_disable(state);
   xml_node_find_by_name_recurse(state, load_arg(state->frame, info->this_arg), name_obj->value, &array_ptr, &array_length);
-  vm_return(state, make_array(state, array_ptr, array_length));
+  vm_return(state, info, make_array(state, array_ptr, array_length));
   gc_enable(state);
 }
 
@@ -925,7 +923,10 @@ static void require_fn(VMState *state, CallInfo *info) {
   substate.root = state->root;
   substate.shared = state->shared;
   
+  Value resval;
+  
   CallInfo info2 = {0};
+  info2.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &resval };
   call_function(&substate, root, module, &info2);
   vm_update_frame(&substate);
   vm_run(&substate);
@@ -938,7 +939,7 @@ static void require_fn(VMState *state, CallInfo *info) {
     return;
   }
   
-  vm_return(state, substate.exit_value);
+  vm_return(state, info, resval);
 }
 
 static void freeze_fn(VMState *state, CallInfo *info) {
@@ -947,6 +948,7 @@ static void freeze_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(IS_OBJ(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), "can't freeze primitive (implicitly frozen!)");
   Object *obj = AS_OBJ(load_arg(state->frame, INFO_ARGS_PTR(info)[0]));
   obj->flags |= OBJ_FROZEN;
+  vm_return(state, info, VNULL);
 }
 
 static void mark_const_fn(VMState *state, CallInfo *info) {
@@ -955,17 +957,15 @@ static void mark_const_fn(VMState *state, CallInfo *info) {
   StringObject *key_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(key_obj, "argument to _mark_const must be string");
   
+  Value thisval = load_arg(state->frame, info->this_arg); // free functions are called on the local scope
+  
   char *key_ptr = key_obj->value;
   int key_len = strlen(key_ptr);
   size_t key_hash = hash(key_ptr, key_len);
   
-  vm_return(state, VNULL);
+  vm_return(state, info, VNULL);
   
-  // frames are only allocated for user functions
-  // so we're still in the calling frame
-  Callframe *cf = state->frame;
-  int context_slot = cf->instr_ptr->context_slot;
-  Object *context = closest_obj(state, cf->slots_ptr[context_slot]);
+  Object *context = closest_obj(state, thisval);
   
   Object *cur = context;
   while (cur) {
@@ -999,7 +999,7 @@ static void obj_keys_fn(VMState *state, CallInfo *info) {
     }
     assert(k == keys_len);
   }
-  vm_return(state, make_array(state, keys_ptr, keys_len));
+  vm_return(state, info, make_array(state, keys_ptr, keys_len));
 }
 
 static void sin_fn(VMState *state, CallInfo *info) {
@@ -1009,7 +1009,7 @@ static void sin_fn(VMState *state, CallInfo *info) {
   if (IS_FLOAT(val)) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.sin()");
-  vm_return(state, FLOAT2VAL(sinf(f)));
+  vm_return(state, info, FLOAT2VAL(sinf(f)));
 }
 
 static void cos_fn(VMState *state, CallInfo *info) {
@@ -1019,7 +1019,7 @@ static void cos_fn(VMState *state, CallInfo *info) {
   if (IS_FLOAT(val)) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.cos()");
-  vm_return(state, FLOAT2VAL(cosf(f)));
+  vm_return(state, info, FLOAT2VAL(cosf(f)));
 }
 
 static void tan_fn(VMState *state, CallInfo *info) {
@@ -1029,7 +1029,7 @@ static void tan_fn(VMState *state, CallInfo *info) {
   if (IS_FLOAT(val)) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.tan()");
-  vm_return(state, FLOAT2VAL(tanf(f)));
+  vm_return(state, info, FLOAT2VAL(tanf(f)));
 }
 
 static void sqrt_fn(VMState *state, CallInfo *info) {
@@ -1039,7 +1039,7 @@ static void sqrt_fn(VMState *state, CallInfo *info) {
   if (IS_FLOAT(val)) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.sqrt()");
-  vm_return(state, FLOAT2VAL(sqrtf(f)));
+  vm_return(state, info, FLOAT2VAL(sqrtf(f)));
 }
 
 static void pow_fn(VMState *state, CallInfo *info) {
@@ -1053,7 +1053,7 @@ static void pow_fn(VMState *state, CallInfo *info) {
   if (IS_FLOAT(val2)) b = AS_FLOAT(val2);
   else if (IS_INT(val2)) b = AS_INT(val2);
   else VM_ASSERT(false, "unexpected type for math.pow()");
-  vm_return(state, FLOAT2VAL(powf(a, b)));
+  vm_return(state, info, FLOAT2VAL(powf(a, b)));
 }
 
 static void assert_fn(VMState *state, CallInfo *info) {
@@ -1067,7 +1067,7 @@ static void assert_fn(VMState *state, CallInfo *info) {
   } else {
     VM_ASSERT(test, "assert failed");
   }
-  vm_return(state, VNULL);
+  vm_return(state, info, VNULL);
 }
 
 char *get_type_info(VMState *state, Value val) {

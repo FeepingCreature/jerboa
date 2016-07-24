@@ -250,18 +250,20 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
 }
 
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
-  CallInstr *instr = alloca(sizeof(CallInstr) + sizeof(Arg) * args_len);
+  int size = sizeof(CallInstr) + sizeof(Arg) * args_len;
+  CallInstr *instr = alloca(size);
   instr->base.type = INSTR_CALL;
   instr->base.belongs_to = NULL;
+  instr->size = size;
   instr->info.fn = (Arg) { .kind = ARG_SLOT, .slot = fn };
   instr->info.this_arg = (Arg) { .kind = ARG_SLOT, .slot = this_slot };
   instr->info.args_len = args_len;
-  instr->target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ };
+  instr->info.target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ };
   for (int i = 0; i < args_len; ++i) {
     ((Arg*)(&instr->info + 1))[i] = (Arg) { .kind = ARG_SLOT, .slot = args_ptr[i] };
   }
-  addinstr(builder, sizeof(*instr) + sizeof(Arg) * args_len, (Instr*) instr);
-  return instr->target.slot;
+  addinstr(builder, size, (Instr*) instr);
+  return instr->info.target.slot;
 }
 
 int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot) {

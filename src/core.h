@@ -115,9 +115,11 @@ typedef struct {
 } /*__attribute__((aligned (16)))*/ Value; // TODO
 
 typedef enum {
-  ARG_SLOT,
-  ARG_REFSLOT,
-  ARG_VALUE
+  // DO NOT CHANGE ORDER (see object.h:load_arg)
+  ARG_SLOT = 0,
+  ARG_REFSLOT = 1,
+  ARG_VALUE = 2,
+  ARG_POINTER = ARG_VALUE // for WriteArg
 } ArgKind;
 
 typedef struct {
@@ -134,16 +136,9 @@ typedef struct {
   union {
     int slot;
     int refslot;
+    Value *pointer;
   };
 } WriteArg;
-
-typedef struct {
-  ArgKind kind;
-  union {
-    Value *slot_p;
-    TableEntry *refslot_p;
-  };
-} RefArg;
 
 char *get_arg_info(Arg arg);
 char *get_write_arg_info(WriteArg warg);
@@ -151,6 +146,7 @@ char *get_write_arg_info(WriteArg warg);
 typedef struct {
   Arg fn;
   Arg this_arg;
+  WriteArg target; // duplicated here
   int args_len;
 } CallInfo;
 
@@ -202,9 +198,10 @@ static inline Object *obj_or_null_(Value v) { if (v.type == TYPE_OBJECT) return 
 #define OBJ2VAL(O) ((Value) { .type = TYPE_OBJECT, .obj = (O) })
 
 typedef enum {
-  VM_TERMINATED,
-  VM_RUNNING,
-  VM_ERRORED
+  // DO NOT CHANGE ORDER (see vm.c:vm_instr_call)
+  VM_TERMINATED = 0,
+  VM_RUNNING = 1,
+  VM_ERRORED = 2
 } VMRunState;
 
 typedef struct {
@@ -300,7 +297,8 @@ struct _Callframe {
   // overrides instr_ptr->belongs_to, used when in a call
   // double pointer due to Dark Magic
   FileRange **backtrace_belongs_to_p;
-  RefArg target; // when returning to this frame, assign result value to this
+  // when returning *from* this frame, assign result value to this (in the *above* frame)
+  WriteArg target;
   int block, prev_block; // required for phi nodes
   Callframe *above;
 };

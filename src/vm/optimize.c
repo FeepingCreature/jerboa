@@ -901,19 +901,19 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
     while (instr_cur != instr_end) {
       if (instr_cur->type == INSTR_CALL) {
         CallInstr *instr = (CallInstr*) instr_cur;
-        if (instr->target.kind == ARG_SLOT && num_slot_use[instr->target.slot] == 2) {
+        if (instr->info.target.kind == ARG_SLOT && num_slot_use[instr->info.target.slot] == 2) {
           int size = sizeof(CallInstr) + sizeof(Arg) * instr->info.args_len;
           Instr *instr_next = (Instr*) ((char*) instr_cur + size);
           MoveInstr *mi_next = (MoveInstr*) instr_next;
           if (instr_next->type == INSTR_MOVE
-            && mi_next->source.kind == ARG_SLOT && mi_next->source.slot == instr->target.slot
+            && mi_next->source.kind == ARG_SLOT && mi_next->source.slot == instr->info.target.slot
           ) {
             CallInstr *ci = alloca(size);
             *ci = *instr;
             for (int k = 0; k < instr->info.args_len; ++k) {
               ((Arg*)(&ci->info + 1))[k] = ((Arg*)(&instr->info + 1))[k];
             }
-            ci->target = mi_next->target;
+            ci->info.target = mi_next->target;
             addinstr_like(builder, instr_cur, size, (Instr*)ci);
             instr_cur = (Instr*) (mi_next + 1);
             continue;
@@ -978,7 +978,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             this_arg = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[this_arg.slot] };
           }
         }
-        WriteArg target = instr->target;
+        WriteArg target = instr->info.target;
         if (target.kind == ARG_SLOT) {
           if (NOT_NULL(constant_slots[target.slot])) {
             fprintf(stderr, "bad bytecode - call and store in .. value??\n");
@@ -991,7 +991,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
         int size = sizeof(CallInstr) + sizeof(Arg) * instr->info.args_len;
         CallInstr *ci = alloca(size);
         *ci = *instr;
-        ci->target = target;
+        ci->info.target = target;
         ci->info.this_arg = this_arg;
         ci->info.fn = fn;
         for (int k = 0; k < instr->info.args_len; ++k) {

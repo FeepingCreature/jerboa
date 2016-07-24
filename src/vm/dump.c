@@ -110,7 +110,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
     {
       CallInstr *ci = (CallInstr*) instr;
       fprintf(stderr, "call: %s = %s . %s ( ",
-              get_write_arg_info(ci->target), get_arg_info(ci->info.this_arg), get_arg_info(ci->info.fn));
+              get_write_arg_info(ci->info.target), get_arg_info(ci->info.this_arg), get_arg_info(ci->info.fn));
       for (int i = 0; i < ci->info.args_len; ++i) {
         if (i) fprintf(stderr, ", ");
         fprintf(stderr, "%s", get_arg_info(((Arg*)(ci + 1))[i]));

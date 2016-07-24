@@ -45,12 +45,14 @@ int main(int argc, char **argv) {
     assert(res == PARSE_OK);
     dump_fn(&vmstate, line_fn);
     CallInfo null_call = {0};
+    Value rootval;
+    null_call.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &rootval };
     call_function(&vmstate, root, line_fn, &null_call);
     vm_run(&vmstate);
     if (vmstate.runstate == VM_ERRORED) {
       fprintf(stderr, "vm errored: %s\n", vmstate.error);
     } else {
-      root = AS_OBJ(vmstate.exit_value);
+      root = AS_OBJ(rootval);
     }
   }
   

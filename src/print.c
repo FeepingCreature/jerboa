@@ -62,11 +62,12 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     substate.root = state->root;
     substate.shared = state->shared;
     
-    setup_stub_frame(&substate, 0);
+    Value str;
     
     CallInfo info = {0};
     info.this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
     info.fn = (Arg) { .kind = ARG_VALUE, .value = toString_fn };
+    info.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &str };
     
     if (!setup_call(&substate, &info)) return;
     
@@ -74,7 +75,6 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     vm_run(&substate);
     VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error);
     
-    Value str = substate.exit_value;
     if (NOT_NULL(str)) {
       gc_disable(state); // keep str alive
       print_recursive(state, fh, str, allow_tostring);

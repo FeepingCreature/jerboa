@@ -12,7 +12,6 @@ struct _VMState {
   VMRunState runstate;
   
   Object *root;
-  Value exit_value; // set when the last stackframe returns
   
   char *error;
   char *backtrace; int backtrace_depth;

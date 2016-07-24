@@ -64,48 +64,39 @@ char *get_val_info(Value val);
 static inline Value load_arg(Callframe *frame, Arg arg) {
   if (arg.kind == ARG_SLOT) {
     assert(arg.slot < frame->slots_len);
-    return frame->slots_ptr[arg.slot];
-  }
-  if (arg.kind == ARG_REFSLOT) {
+  } else if (arg.kind == ARG_REFSLOT) {
     assert(arg.refslot < frame->refslots_len);
-    return frame->refslots_ptr[arg.refslot]->value;
-  }
-  assert(arg.kind == ARG_VALUE);
-  return arg.value;
-}
-
-static inline RefArg ref_arg(Callframe *frame, WriteArg warg) {
-  if (warg.kind == ARG_REFSLOT) {
-    assert(warg.refslot < frame->refslots_len);
-    return (RefArg) { .kind = ARG_REFSLOT, .refslot_p = frame->refslots_ptr[warg.refslot] };
-  }
-  assert(warg.kind == ARG_SLOT);
-  return (RefArg) { .kind = ARG_SLOT, .slot_p = &frame->slots_ptr[warg.refslot] };
-}
-
-static inline char *set_ref(VMState *state, RefArg arg, Value value) {
-  if (arg.kind == ARG_REFSLOT) {
-    Object *constraint = arg.refslot_p->constraint;
-    if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
-      return my_asprintf("value failed type constraint: constraint was %s, but value was %s",
-                        get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
-    }
-    arg.refslot_p->value = value;
-    return NULL;
-  }
-  assert(arg.kind == ARG_SLOT);
-  *arg.slot_p = value;
-  return NULL;
+  } else assert(arg.kind == ARG_VALUE);
+  
+  Value *ptrs[] = {
+    &frame->slots_ptr[arg.slot],
+    &frame->refslots_ptr[arg.refslot]->value,
+    &arg.value
+  };
+  return *ptrs[arg.kind];
 }
 
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
-  char *error = set_ref(state, ref_arg(state->frame, warg), value);
-  VM_ASSERT(!error, error);
+  if (warg.kind == ARG_REFSLOT) {
+    assert(warg.refslot < state->frame->refslots_len);
+    TableEntry *entry = state->frame->refslots_ptr[warg.refslot];
+    Object *constraint = entry->constraint;
+    VM_ASSERT(!constraint || value_fits_constraint(state->shared, value, constraint),
+              "value failed type constraint: constraint was %s, but value was %s",
+              get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
+    entry->value = value;
+    return;
+  }
+  if (UNLIKELY(warg.kind == ARG_POINTER)) {
+    *warg.pointer = value;
+    return;
+  }
+  assert(warg.kind == ARG_SLOT);
+  state->frame->slots_ptr[warg.slot] = value;
 }
 
-static inline void vm_return(VMState *state, Value val) {
-  char *error = set_ref(state, state->frame->target, val);
-  VM_ASSERT(!error, error);
+static inline void vm_return(VMState *state, CallInfo *info, Value val) {
+  set_arg(state, info->target, val);
 }
 
 // args_ptr's entries are guaranteed to lie inside slots_ptr.

@@ -66,6 +66,7 @@ void vm_alloc_frame(VMState *state, int slots, int refslots) {
   // no need to zero refslots, as they're not gc'd
   
   state->frame = cf;
+  gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
 }
 
 void vm_error(VMState *state, const char *fmt, ...) {
@@ -90,15 +91,14 @@ void vm_remove_frame(VMState *state) {
 }
 
 void setup_stub_frame(VMState *state, int slots) {
+  if (state->frame) state->frame->instr_ptr = state->instr;
   vm_alloc_frame(state, slots + 1, 0);
   Callframe *cf = state->frame;
   ReturnInstr *ret = calloc(sizeof(ReturnInstr), 1);
   ret->base.type = INSTR_RETURN;
   ret->ret = (Arg) { .kind = ARG_SLOT, .slot = slots };
+  state->instr = (Instr*) ret;
   cf->instr_ptr = (Instr*) ret;
-  cf->target = (RefArg) { .kind = ARG_SLOT, .slot_p = &cf->slots_ptr[ret->ret.slot] };
-  gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
-  state->instr = cf->instr_ptr;
 }
 
 void vm_print_backtrace(VMState *state) {
@@ -344,11 +344,10 @@ static FnWrap vm_instr_freeze_object(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static inline FnWrap call_internal(VMState *state, CallInfo *info, RefArg target, FileRange **prev_instr) {
+static inline FnWrap call_internal(VMState *state, CallInfo *info, FileRange **prev_instr) {
   // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
   // solve explicitly
   state->frame->backtrace_belongs_to_p = prev_instr;
-  state->frame->target = target;
   state->frame->instr_ptr = state->instr;
   
   if (!setup_call(state, info)) return (FnWrap) { vm_halt };
@@ -385,8 +384,9 @@ static FnWrap vm_instr_access(VMState *state) {
       info->args_len = 1;
       info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
       info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
+      info->target = access_instr->target;
       INFO_ARGS_PTR(info)[0] = access_instr->key;
-      return call_internal(state, info, ref_arg(state->frame, access_instr->target), prev_instr);
+      return call_internal(state, info, prev_instr);
     }
   }
   if (!object_found) {
@@ -413,11 +413,12 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state) {
     info->args_len = 1;
     info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
     info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
+    info->target = aski->target;
     INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = aski->key_slot };
     
     FileRange **prev_instr = &state->instr->belongs_to;
     state->instr = (Instr*)(aski + 1);
-    return call_internal(state, info, ref_arg(state->frame, aski->target), prev_instr);
+    return call_internal(state, info, prev_instr);
   } else {
     VM_ASSERT2(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr);
   }
@@ -462,12 +463,13 @@ static FnWrap vm_instr_assign(VMState *state) {
       info->args_len = 2;
       info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
       info->fn = (Arg) { .kind = ARG_VALUE, .value = index_assign_op };
+      info->target = (WriteArg) { .kind = ARG_SLOT, .slot = target_slot };
       INFO_ARGS_PTR(info)[0] = assign_instr->key;
       INFO_ARGS_PTR(info)[1] = assign_instr->value;
       
       FileRange **prev_instr = &state->instr->belongs_to;
       state->instr = (Instr*)(assign_instr + 1);
-      return call_internal(state, info, (RefArg) { .kind = ARG_SLOT, .slot_p = &state->frame->slots_ptr[target_slot] }, prev_instr);
+      return call_internal(state, info, prev_instr);
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -609,12 +611,36 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+#include "vm/optimize.h"
+
 static FnWrap vm_instr_call(VMState *state) {
   CallInstr *call_instr = (CallInstr*) state->instr;
+  CallInfo *info = &call_instr->info;
   
-  FileRange **prev_instr = &state->instr->belongs_to;
-  state->instr = (Instr*) ((Arg*)(call_instr + 1) + call_instr->info.args_len);
-  return call_internal(state, &call_instr->info, ref_arg(state->frame, call_instr->target), prev_instr);
+  Instr *next_instr = (Instr*) ((char*) call_instr + call_instr->size);
+  
+  // inline call_internal/setup_call hotpath
+  Value fn = load_arg(state->frame, info->fn);
+  VM_ASSERT2(IS_OBJ(fn), "this is not a thing I can call.");
+  Object *fn_obj_n = AS_OBJ(fn);
+  
+  if (fn_obj_n->parent == state->shared->vcache.function_base) {
+    state->instr = next_instr;
+    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
+    FnWrap next_instr[] = {
+      (FnWrap) { vm_halt },
+      (FnWrap) { instr_fns[state->instr->type] },
+      (FnWrap) { vm_halt }
+    };
+    return next_instr[state->runstate];
+  } else {
+    // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
+    // solve explicitly
+    state->frame->backtrace_belongs_to_p = &call_instr->base.belongs_to;
+    state->frame->instr_ptr = next_instr;
+    if (!setup_call(state, info)) return (FnWrap) { vm_halt };
+    return (FnWrap) { instr_fns[state->instr->type] };
+  }
 }
 
 static FnWrap vm_halt(VMState *state) {
@@ -625,16 +651,17 @@ static FnWrap vm_halt(VMState *state) {
 static FnWrap vm_instr_return(VMState *state) {
   ReturnInstr *ret_instr = (ReturnInstr*) state->instr;
   Value res = load_arg(state->frame, ret_instr->ret);
+  WriteArg target = state->frame->target;
   gc_remove_roots(state, &state->frame->frameroot_slots);
   vm_remove_frame(state);
   
-  if (state->frame) {
-    vm_return(state, res);
-    state->instr = state->frame->instr_ptr;
-  } else {
-    state->exit_value = res;
+  set_arg(state, target, res);
+  
+  if (UNLIKELY(!state->frame)) {
     return (FnWrap) { vm_halt };
   }
+  
+  state->instr = state->frame->instr_ptr;
   
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -753,7 +780,7 @@ static void vm_step(VMState *state) {
   int i;
   for (i = 0; i < 128 && fn != vm_halt; i++) {
     /*{
-      fprintf(stderr, "run <%i> {%p, %i, %i} ", state->frame->block, (void*) state->frame, state->frame->slots_len, state->frame->refslots_len);
+      fprintf(stderr, "run <%i> {%p, %i, %i} ", state->frame->block, (void*) state->instr, state->frame->slots_len, state->frame->refslots_len);
       Instr *instr = state->instr;
       dump_instr(state, &instr);
     }*/
