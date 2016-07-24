@@ -869,6 +869,68 @@ bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr 
   return current == blk_earlier;
 }
 
+// pattern: %0 = instr; &0 = %0;     -> &0 = instr;
+static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
+  FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
+  builder->block_terminated = true;
+  
+  int *num_slot_use = calloc(sizeof(int), uf->slots);
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+#define CHKSLOT(SLOT) num_slot_use[SLOT]++;
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+      switch (instr_cur->type) {
+        case INSTR_INVALID: { abort();
+#include "vm/slots.txt"
+          CASE(INSTR_LAST, Instr) abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+      }
+#undef CASE
+#undef CHKSLOT
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    new_block(builder);
+    
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      if (instr_cur->type == INSTR_CALL) {
+        CallInstr *instr = (CallInstr*) instr_cur;
+        if (instr->target.kind == ARG_SLOT && num_slot_use[instr->target.slot] == 2) {
+          int size = sizeof(CallInstr) + sizeof(Arg) * instr->info.args_len;
+          Instr *instr_next = (Instr*) ((char*) instr_cur + size);
+          MoveInstr *mi_next = (MoveInstr*) instr_next;
+          if (instr_next->type == INSTR_MOVE
+            && mi_next->source.kind == ARG_SLOT && mi_next->source.slot == instr->target.slot
+          ) {
+            CallInstr *ci = alloca(size);
+            *ci = *instr;
+            for (int k = 0; k < instr->info.args_len; ++k) {
+              ((Arg*)(&ci->info + 1))[k] = ((Arg*)(&instr->info + 1))[k];
+            }
+            ci->target = mi_next->target;
+            addinstr_like(builder, instr_cur, size, (Instr*)ci);
+            instr_cur = (Instr*) (mi_next + 1);
+            continue;
+          }
+        }
+      }
+      int sz = instr_size(instr_cur);
+      addinstr_like(builder, instr_cur, sz, (Instr*) instr_cur);
+      instr_cur = (Instr*) ((char*) instr_cur + sz);
+    }
+  }
+  
+  UserFunction *fn = build_function(builder);
+  copy_fn_stats(uf, fn);
+  return fn;
+}
+
 static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
@@ -904,6 +966,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             fprintf(stderr, "bad bytecode - call and store in .. value??\n");
             abort();
           } else if (refslots[target.slot] != -1) {
+            abort(); // TODO
             target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[target.slot] };
           }
         }
@@ -950,6 +1013,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             fprintf(stderr, "bad bytecode - access key and store in .. value??\n");
             abort();
           } else if (refslots[instr.target.slot] != -1) {
+            abort(); // TODO
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
@@ -972,6 +1036,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             fprintf(stderr, "bad bytecode - access key and store in .. value??\n");
             abort();
           } else if (refslots[instr.target.slot] != -1) {
+            abort(); // TODO
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
@@ -1015,6 +1080,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             fprintf(stderr, "bad bytecode - compute phi node and store in .. value??\n");
             abort();
           } else if (refslots[instr.target.slot] != -1) {
+            abort(); // TODO
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
@@ -1086,6 +1152,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             fprintf(stderr, "bad bytecode - access key and store in .. value??\n");
             abort();
           } else if (refslots[instr.target.slot] != -1) {
+            abort(); // TODO
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
@@ -1122,6 +1189,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             fprintf(stderr, "bad bytecode - instanceof and store in .. value??\n");
             abort();
           } else if (refslots[instr.target.slot] != -1) {
+            abort(); // TODO
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
@@ -1330,7 +1398,7 @@ static void reassign_slot(int *slot_p, int numslots, Instr *instr_cur, Instr **f
 // WARNING
 // this function makes the IR **NON-SSA**
 // and thus it **MUST** come completely last!!
-UserFunction *compactify_registers(UserFunction *uf) {
+static UserFunction *compactify_registers(UserFunction *uf) {
   FunctionBuilder *builder = calloc(sizeof(FunctionBuilder), 1);
   builder->block_terminated = true;
   
@@ -1462,6 +1530,8 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   }
   
   uf = inline_constant_slots(state, uf);
+  
+  uf = slot_refslot_fuse(state, uf);
   
   // must be late!
   uf = fuse_static_object_alloc(state, uf);
