@@ -920,6 +920,24 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
           }
         }
       }
+      
+      if (instr_cur->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *instr = (AccessStringKeyInstr*) instr_cur;
+        if (instr->target.kind == ARG_SLOT && num_slot_use[instr->target.slot] == 2) {
+          Instr *instr_next = (Instr*) ((char*) instr_cur + sizeof(AccessStringKeyInstr));
+          MoveInstr *mi_next = (MoveInstr*) instr_next;
+          if (instr_next->type == INSTR_MOVE
+            && mi_next->source.kind == ARG_SLOT && mi_next->source.slot == instr->target.slot
+          ) {
+            AccessStringKeyInstr aski = *instr;
+            aski.target = mi_next->target;
+            addinstr_like(builder, instr_cur, sizeof(aski), (Instr*)&aski);
+            instr_cur = (Instr*) (mi_next + 1);
+            continue;
+          }
+        }
+      }
+      
       int sz = instr_size(instr_cur);
       addinstr_like(builder, instr_cur, sz, (Instr*) instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + sz);
