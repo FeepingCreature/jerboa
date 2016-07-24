@@ -122,11 +122,6 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int target_slot;
-} SaveResultInstr;
-
-typedef struct {
-  Instr base;
   int blk;
 } BranchInstr;
 
