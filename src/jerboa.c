@@ -8,6 +8,7 @@
 #include "object.h"
 #include "gc.h"
 #include "vm/call.h"
+#include "vm/optimize.h"
 #include "vm/runtime.h"
 #include "vm/dump.h"
 #include "vm/vm.h"
@@ -67,6 +68,8 @@ int main(int argc, char **argv) {
   if (vmstate.shared->verbose) {
     dump_fn(&vmstate, module);
   }
+  
+  module = optimize_runtime(&vmstate, module, root);
   
   CallInfo info = {0};
   call_function(&vmstate, root, module, &info);
