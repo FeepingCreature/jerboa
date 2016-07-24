@@ -56,8 +56,7 @@ static Object *setup_vararg(VMState *state, Object *context, UserFunction *uf, C
   return context;
 }
 
-static void function_handler(VMState *state, CallInfo *info) {
-  ClosureObject *cl_obj = (ClosureObject*) AS_OBJ(load_arg(state->frame, info->fn));
+static void function_handler(VMState *state, ClosureObject *cl_obj, CallInfo *info) {
   Object *context = cl_obj->context;
   gc_disable(state); // keep context alive, if need be
   context = setup_vararg(state, context, cl_obj->vmfun, info);
@@ -65,8 +64,7 @@ static void function_handler(VMState *state, CallInfo *info) {
   gc_enable(state);
 }
 
-static void method_handler(VMState *state, CallInfo *info) {
-  ClosureObject *cl_obj = (ClosureObject*) AS_OBJ(load_arg(state->frame, info->fn));
+static void method_handler(VMState *state, ClosureObject *cl_obj, CallInfo *info) {
   Object *context = AS_OBJ(make_object(state, cl_obj->context));
   create_table_with_single_entry(&context->tbl, "this", 4, hash("this", 4), load_arg(state->frame, info->this_arg));
   context->flags |= OBJ_CLOSED;
@@ -85,8 +83,6 @@ static void closure_mark_fn(VMState *state, Object *obj) {
 Value make_closure_fn(VMState *state, Object *context, UserFunction *fn) {
   ClosureObject *obj = alloc_object_internal(state, sizeof(ClosureObject));
   obj->base.parent = state->shared->vcache.closure_base;
-  if (fn->is_method) obj->fn_ptr = method_handler;
-  else obj->fn_ptr = function_handler;
   obj->base.mark_fn = closure_mark_fn;
   obj->context = context;
   obj->vmfun = fn;
@@ -105,7 +101,9 @@ bool setup_call(VMState *state, CallInfo *info) {
     Object *closure_base = state->shared->vcache.closure_base;
     ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn_obj_n, closure_base);
     if (cl_obj) {
-      cl_obj->fn_ptr(state, info);
+      UserFunction *vmfun = cl_obj->vmfun;
+      if (vmfun->is_method) method_handler(state, cl_obj, info);
+      else function_handler(state, cl_obj, info);
       return state->runstate != VM_ERRORED;
     } else {
       VM_ASSERT(false, "object is neither function nor closure") false;

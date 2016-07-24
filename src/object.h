@@ -59,14 +59,15 @@ char *get_type_info(VMState*, Value);
 // args_ptr's entries are guaranteed to lie inside slots_ptr.
 typedef void (*VMFunctionPointer)(VMState *state, CallInfo *info);
 
+// such as intrinsics
 typedef struct {
   Object base;
   VMFunctionPointer fn_ptr;
 } FunctionObject;
 
+// such as script functions
 typedef struct {
   Object base;
-  VMFunctionPointer fn_ptr;
   Object *context;
   UserFunction *vmfun;
   int num_called; // used for triggering optimization
