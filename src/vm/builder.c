@@ -102,10 +102,7 @@ void set_int_var(FunctionBuilder *builder, int offset, int value) {
 
 int addinstr_get_root(FunctionBuilder *builder) {
   GetRootInstr instr = {
-    .base = {
-      .type = INSTR_GET_ROOT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_GET_ROOT },
     .slot = builder->slot_base++
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
@@ -114,10 +111,7 @@ int addinstr_get_root(FunctionBuilder *builder) {
 
 int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
   AccessInstr instr = {
-    .base = {
-      .type = INSTR_ACCESS,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ACCESS },
     .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
     .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
     .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
@@ -128,10 +122,7 @@ int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot) {
 
 void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type) {
   AssignInstr instr = {
-    .base = {
-      .type = INSTR_ASSIGN,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ASSIGN },
     .obj = (Arg) { .kind = ARG_SLOT, .slot = obj },
     .value = (Arg) { .kind = ARG_SLOT, .slot = slot },
     .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
@@ -143,10 +134,7 @@ void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, 
 
 int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
   KeyInObjInstr instr = {
-    .base = {
-      .type = INSTR_KEY_IN_OBJ,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_KEY_IN_OBJ },
     .key_slot = key_slot,
     .obj_slot = obj_slot,
     .target_slot = builder->slot_base++
@@ -157,10 +145,7 @@ int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
 
 int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot) {
   InstanceofInstr instr = {
-    .base = {
-      .type = INSTR_INSTANCEOF,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_INSTANCEOF },
     .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
     .proto = (Arg) { .kind = ARG_SLOT, .slot = proto_slot },
     .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
@@ -171,10 +156,7 @@ int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot) 
 
 void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slot, int cons_slot) {
   SetConstraintInstr instr = {
-    .base = {
-      .type = INSTR_SET_CONSTRAINT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_SET_CONSTRAINT },
     .obj = (Arg) { .kind = ARG_SLOT, .slot = obj_slot },
     .key = (Arg) { .kind = ARG_SLOT, .slot = key_slot },
     .constraint = (Arg) { .kind = ARG_SLOT, .slot = cons_slot }
@@ -184,10 +166,7 @@ void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slo
 
 void addinstr_close_object(FunctionBuilder *builder, int obj) {
   CloseObjectInstr instr = {
-    .base = {
-      .type = INSTR_CLOSE_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_CLOSE_OBJECT },
     .slot = obj
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
@@ -195,10 +174,7 @@ void addinstr_close_object(FunctionBuilder *builder, int obj) {
 
 void addinstr_freeze_object(FunctionBuilder *builder, int obj) {
   FreezeObjectInstr instr = {
-    .base = {
-      .type = INSTR_FREEZE_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_FREEZE_OBJECT },
     .slot = obj
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
@@ -206,10 +182,7 @@ void addinstr_freeze_object(FunctionBuilder *builder, int obj) {
 
 int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
   AllocObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_OBJECT },
     .target_slot = builder->slot_base++,
     .parent_slot = parent
   };
@@ -219,10 +192,7 @@ int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
 
 int addinstr_alloc_int_object(FunctionBuilder *builder, int value) {
   AllocIntObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_INT_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_INT_OBJECT },
     .target_slot = builder->slot_base++,
     .value = value
   };
@@ -232,10 +202,7 @@ int addinstr_alloc_int_object(FunctionBuilder *builder, int value) {
 
 int addinstr_alloc_bool_object(FunctionBuilder *builder, bool value) {
   AllocBoolObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_BOOL_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_BOOL_OBJECT },
     .target_slot = builder->slot_base++,
     .value = value
   };
@@ -245,10 +212,7 @@ int addinstr_alloc_bool_object(FunctionBuilder *builder, bool value) {
 
 int addinstr_alloc_float_object(FunctionBuilder *builder, float value) {
   AllocFloatObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_FLOAT_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_FLOAT_OBJECT },
     .target_slot = builder->slot_base++,
     .value = value
   };
@@ -258,10 +222,7 @@ int addinstr_alloc_float_object(FunctionBuilder *builder, float value) {
 
 int addinstr_alloc_array_object(FunctionBuilder *builder) {
   AllocArrayObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_ARRAY_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_ARRAY_OBJECT },
     .target_slot = builder->slot_base++
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
@@ -270,10 +231,7 @@ int addinstr_alloc_array_object(FunctionBuilder *builder) {
 
 int addinstr_alloc_string_object(FunctionBuilder *builder, char *value) {
   AllocStringObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_STRING_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_STRING_OBJECT },
     .target_slot = builder->slot_base++,
     .value = value
   };
@@ -283,10 +241,7 @@ int addinstr_alloc_string_object(FunctionBuilder *builder, char *value) {
 
 int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
   AllocClosureObjectInstr instr = {
-    .base = {
-      .type = INSTR_ALLOC_CLOSURE_OBJECT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_ALLOC_CLOSURE_OBJECT },
     .target_slot = builder->slot_base++,
     .fn = fn
   };
@@ -328,10 +283,7 @@ int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, in
 
 void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, int *falsebranch) {
   TestBranchInstr instr = {
-    .base = {
-      .type = INSTR_TESTBR,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_TESTBR },
     .test_slot = test
   };
   *truebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.true_blk);
@@ -342,10 +294,7 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, i
 
 int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, int slot2) {
   PhiInstr instr = {
-    .base = {
-      .type = INSTR_PHI,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_PHI },
     .block1 = block1,
     .slot1 = slot1,
     .block2 = block2,
@@ -359,10 +308,7 @@ int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, in
 
 void addinstr_branch(FunctionBuilder *builder, int *branch) {
   BranchInstr instr = {
-    .base = {
-      .type = INSTR_BR,
-      .belongs_to = NULL
-    }
+    .base = { .type = INSTR_BR }
   };
   *branch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.blk);
   
@@ -371,10 +317,7 @@ void addinstr_branch(FunctionBuilder *builder, int *branch) {
 
 void addinstr_return(FunctionBuilder *builder, int slot) {
   ReturnInstr instr = {
-    .base = {
-      .type = INSTR_RETURN,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_RETURN },
     .ret = (Arg) { .kind = ARG_SLOT, .slot = slot }
   };
   
@@ -384,10 +327,7 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
 int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key) {
   int keylen = strlen(key);
   DefineRefslotInstr instr = {
-    .base = {
-      .type = INSTR_DEFINE_REFSLOT,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_DEFINE_REFSLOT },
     .obj_slot = obj_slot,
     .key_ptr = key,
     .key_len = keylen,
@@ -401,10 +341,7 @@ int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key) {
 
 void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target) {
   MoveInstr instr = {
-    .base = {
-      .type = INSTR_MOVE,
-      .belongs_to = NULL
-    },
+    .base = { .type = INSTR_MOVE },
     .source = source,
     .target = target
   };
