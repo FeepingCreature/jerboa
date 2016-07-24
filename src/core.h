@@ -95,6 +95,7 @@ struct _Object {
   
   HashTable tbl;
   void (*mark_fn)(VMState *state, Object *obj); // for gc
+  void (*free_fn)(Object *obj); // for gc
 };
 
 typedef enum {

@@ -694,7 +694,7 @@ static void keys_fn(VMState *state, CallInfo *info) {
       }
     }
   }
-  vm_return(state, info, make_array(state, res_ptr, res_len));
+  vm_return(state, info, make_array(state, res_ptr, res_len, true));
   gc_enable(state);
 }
 
@@ -728,7 +728,7 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
     // printf("alloc_string(%lu)\n", strlen((char*) element->name));
     object_set(state, res, "nodeName", make_string(state, (char*) element->name, strlen((char*) element->name)));
     object_set(state, res, "attr", OBJ2VAL(attr));
-    object_set(state, res, "children", make_array(state, children_ptr, children_len));
+    object_set(state, res, "children", make_array(state, children_ptr, children_len, true));
   } else if (element->type == 3) {
     res = AS_OBJ(make_object(state, text_node_base));
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
@@ -849,7 +849,7 @@ static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
   Value *array_ptr = NULL; int array_length = 0;
   gc_disable(state);
   xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), &array_ptr, &array_length);
-  vm_return(state, info, make_array(state, array_ptr, array_length));
+  vm_return(state, info, make_array(state, array_ptr, array_length, true));
   gc_enable(state);
 }
 
@@ -894,7 +894,7 @@ static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
   Value *array_ptr = NULL; int array_length = 0;
   gc_disable(state);
   xml_node_find_by_name_recurse(state, load_arg(state->frame, info->this_arg), name_obj->value, &array_ptr, &array_length);
-  vm_return(state, info, make_array(state, array_ptr, array_length));
+  vm_return(state, info, make_array(state, array_ptr, array_length, true));
   gc_enable(state);
 }
 
@@ -1001,7 +1001,7 @@ static void obj_keys_fn(VMState *state, CallInfo *info) {
     }
     assert(k == keys_len);
   }
-  vm_return(state, info, make_array(state, keys_ptr, keys_len));
+  vm_return(state, info, make_array(state, keys_ptr, keys_len, true));
 }
 
 static void sin_fn(VMState *state, CallInfo *info) {
@@ -1205,7 +1205,7 @@ Object *create_root(VMState *state) {
   object_set(state, element_node_obj, "nodeName", make_string_foreign(state, ""));
   object_set(state, element_node_obj, "nodeType", INT2VAL(1));
   object_set(state, element_node_obj, "attr", make_object(state, NULL));
-  object_set(state, element_node_obj, "children", make_array(state, NULL, 0));
+  object_set(state, element_node_obj, "children", make_array(state, NULL, 0, false));
   object_set(state, xml_obj, "element_node", OBJ2VAL(element_node_obj));
   
   Object *text_node_obj = AS_OBJ(make_object(state, node_obj));

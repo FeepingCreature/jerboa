@@ -132,6 +132,7 @@ typedef struct {
   Object base;
   Value *ptr;
   int length;
+  bool owned;
 } ArrayObject;
 
 // used internally
@@ -154,7 +155,7 @@ Value make_string_foreign(VMState *state, char *value);
 
 Value make_bool(VMState *state, bool value);
 
-Value make_array(VMState *state, Value *ptr, int length);
+Value make_array(VMState *state, Value *ptr, int length, bool owned);
 
 Value make_ptr(VMState *state, void *ptr);
 

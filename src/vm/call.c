@@ -78,7 +78,7 @@ bool setup_call(VMState *state, CallInfo *info) {
     for (int i = 0; i < varargs_len; ++i) {
       varargs_ptr[i] = load_arg(state->frame, INFO_ARGS_PTR(info)[vmfun->arity + i]);
     }
-    object_set(state, context, "arguments", make_array(state, varargs_ptr, varargs_len));
+    object_set(state, context, "arguments", make_array(state, varargs_ptr, varargs_len, true));
     context->flags |= OBJ_CLOSED;
   }
   cl_obj->num_called ++;

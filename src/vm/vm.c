@@ -296,7 +296,7 @@ static FnWrap vm_instr_alloc_float_object(VMState *state) {
 
 static FnWrap vm_instr_alloc_array_object(VMState *state) {
   AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) state->instr;
-  set_arg(state, alloc_array_obj_instr->target, make_array(state, NULL, 0));
+  set_arg(state, alloc_array_obj_instr->target, make_array(state, NULL, 0, false));
   state->instr = (Instr*)(alloc_array_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }

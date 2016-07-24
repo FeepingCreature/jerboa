@@ -141,6 +141,9 @@ void obj_mark(VMState *state, Object *obj) {
 }
 
 void obj_free(Object *obj) {
+  if (obj->free_fn) {
+    obj->free_fn(obj);
+  }
   cache_free(sizeof(TableEntry) * obj->tbl.entries_num, obj->tbl.entries_ptr);
   cache_free(obj->size, obj);
 }
@@ -364,12 +367,21 @@ static void array_mark_fn(VMState *state, Object *obj) {
   }
 }
 
-Value make_array(VMState *state, Value *ptr, int length) {
+static void array_free_fn(Object *obj) {
+  ArrayObject *arr_obj = (ArrayObject*) obj;
+  if (arr_obj->owned) {
+    free(arr_obj->ptr);
+  }
+}
+
+Value make_array(VMState *state, Value *ptr, int length, bool owned) {
   ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
   obj->base.parent = state->shared->vcache.array_base;
   obj->base.mark_fn = array_mark_fn;
+  obj->base.free_fn = array_free_fn;
   obj->ptr = ptr;
   obj->length = length;
+  obj->owned = owned;
   object_set(state, (Object*) obj, "length", INT2VAL(length));
   return OBJ2VAL((Object*) obj);
 }

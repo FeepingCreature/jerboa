@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     args_ptr[i - 2] = make_string(&vmstate, argv[i], strlen(argv[i]));
   }
   
-  Value args = make_array(&vmstate, args_ptr, args_len);
+  Value args = make_array(&vmstate, args_ptr, args_len, true);
   object_set(&vmstate, root, "arguments", args);
   
   if (vmstate.shared->verbose) {
