@@ -17,23 +17,31 @@ function print_xml(node, depth) {
     print(spacing, "</", node.nodeName, ">");
   }
 }
-xml.node["toString"] = method() {
+xml.node["toStringBits"] = method(arr) {
   if (this.nodeType == 1) {
-    var res = "";
-    var attrs = "";
+    arr.push("<");
+    arr.push(this.nodeName);
     var attr_names = keys(this.attr);
-    for (var i = 0; i < attr_names.length; i++) {
-      attrs = attrs + " " + attr_names[i]+"='"+this.attr[attr_names[i]]+"'";
+    for (var i:int = 0; i < attr_names.length; i++) {
+      arr.push(" ");
+      arr.push(attr_names[i]);
+      arr.push("='");
+      arr.push(this.attr[attr_names[i]]);
+      arr.push("'");
     }
-    res = res + "<"+this.nodeName+attrs+">";
-    for (var i = 0; i < this.children.length; i++) {
-      var str = this.children[i].toString();
-      if (str) res = res + str;
+    arr.push(">");
+    for (var i:int = 0; i < this.children.length; i++) {
+      this.children[i].toStringBits(arr);
     }
-    res = res + "</" + this.nodeName + ">";
-    return res;
+    arr.push("</");
+    arr.push(this.nodeName);
+    arr.push(">");
   }
-  return null;
+};
+xml.node["toString"] = method() {
+  var bits = [];
+  this.toStringBits(bits);
+  return bits.join("");
 };
 var XmlResults = {
   array = [];
