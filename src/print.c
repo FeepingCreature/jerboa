@@ -77,9 +77,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     VM_ASSERT(substate.runstate != VM_ERRORED, "toString failure: %s\n", substate.error);
     
     if (NOT_NULL(str)) {
-      gc_disable(state); // keep str alive
       print_recursive(state, fh, str, allow_tostring);
-      gc_enable(state);
       return;
     }
   }
@@ -125,5 +123,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
 }
 
 void print_recursive(VMState *state, FILE *fh, Value val, bool allow_tostring) {
+  gc_disable(state);
   print_recursive_indent(state, fh, val, allow_tostring, 0);
+  gc_enable(state);
 }

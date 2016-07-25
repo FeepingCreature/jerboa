@@ -103,7 +103,7 @@ static void ffi_ptr_dereference(VMState *state, CallInfo *info) {
     vm_return(state, info, make_ffi_pointer(state, ptr));
   } else if (ffi_type_obj == ffi_charptr) {
     char *ptr = *(char**) offset_ptr;
-    vm_return(state, info, make_string_foreign(state, ptr));
+    vm_return(state, info, make_string_static(state, ptr));
   } else assert("TODO" && false);
 }
 

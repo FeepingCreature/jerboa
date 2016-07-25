@@ -225,6 +225,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
   }
+  free(constant_slots);
 }
 
 static void copy_fn_stats(UserFunction *from, UserFunction *to) {
@@ -294,6 +295,8 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
+  free(info);
   return fn;
 }
 
@@ -401,11 +404,12 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
   UserFunction *fn = build_function(&builder);
   int new_refslots = fn->refslots;
   copy_fn_stats(uf, fn);
+  free_function(uf);
   fn->refslots = new_refslots; // do update this
-  
+  free(info);
   free(info_slots_ptr);
   free(obj_refslots_initialized);
-  for (int i = 0; i < uf->slots; ++i) {
+  for (int i = 0; i < fn->slots; ++i) {
     free(ref_slots_ptr[i]);
   }
   free(ref_slots_ptr);
@@ -500,6 +504,7 @@ static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   return fn;
 }
 
@@ -644,6 +649,7 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   return fn;
 }
 
@@ -686,12 +692,13 @@ FunctionBuilder builder = {0};
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   return fn;
 }
 
 bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr *earlier, Instr *later);
 
-UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context) {
+UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *uf, Object *context, bool free_fn_after) {
   SlotIsStaticObjInfo *static_info;
   slot_is_static_object(uf, &static_info);
   CFG cfg;
@@ -775,6 +782,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   free(rpost2node.ptr);
   free(node2rpost.ptr);
   free(sfidoms_ptr);
+  free(static_info);
   
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
@@ -826,11 +834,10 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
       if (instr->type == INSTR_ALLOC_STRING_OBJECT) {
         AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
         replace_with_mv = true;
-        int len = strlen(asoi->value);
-        Object *obj = AS_OBJ(make_string(state, asoi->value, len));
+        Object *obj = AS_OBJ(make_string_static(state, asoi->value));
         obj->flags |= OBJ_IMMORTAL;
         val = OBJ2VAL(obj);
-        opt_info = my_asprintf("inlined alloc_string %.*s", len, asoi->value);
+        opt_info = my_asprintf("inlined alloc_string %s", asoi->value);
         target = asoi->target;
       }
       
@@ -851,6 +858,7 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  if (free_fn_after) free_function(uf);
   return fn;
 }
 
@@ -988,6 +996,7 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
   
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   return fn;
 }
 
@@ -1313,6 +1322,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   return fn;
 }
 
@@ -1439,6 +1449,7 @@ static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) 
   }
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   return fn;
 }
 
@@ -1539,6 +1550,7 @@ static UserFunction *compactify_registers(UserFunction *uf) {
   
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
+  free_function(uf);
   fn->slots = maxslot + 1;
   fn->non_ssa = true;
   return fn;
@@ -1556,9 +1568,9 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   */
   
   // moved here because it can be kind of expensive due to lazy coding, and I'm too lazy to fix it
-  uf = inline_static_lookups_to_constants(state, uf, context);
+  uf = inline_static_lookups_to_constants(state, uf, context, false);
   // run a second time, to pick up accesses on objects that just now became statically known
-  uf = inline_static_lookups_to_constants(state, uf, context);
+  uf = inline_static_lookups_to_constants(state, uf, context, true);
   
   uf = access_vars_via_refslots(uf);
   

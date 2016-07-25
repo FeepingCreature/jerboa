@@ -54,6 +54,27 @@ void cache_free(int size, void *ptr) {
   free(ptr);
 }
 
+void free_cache(VMState *state) {
+  fprintf(stderr, "Calling this function is not presently safe, since not every pointer in the freelist points to the start of an object.\n");
+  abort();
+  for (int i = 0; i < FREELIST_LIMIT; i++) {
+    void *ptr = freelist[i];
+    while (ptr) {
+      void *prev_ptr = ptr;
+      ptr = *(void**) ptr;
+      free(prev_ptr);
+    }
+    freelist[i] = NULL;
+  }
+  if (state->shared->stack_data_offset > 0) {
+    fprintf(stderr, "stack nonzero at exit!\n");
+    abort();
+  }
+  free(state->shared->stack_data_ptr);
+  state->shared->stack_data_ptr = NULL;
+  state->shared->stack_data_len = 0;
+}
+
 TableEntry *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
   while (obj) {
     TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
@@ -343,16 +364,18 @@ Value make_string(VMState *state, const char *ptr, int len) {
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->static_ptr = true;
   obj->value = ((char*) obj) + sizeof(StringObject);
   strncpy(obj->value, ptr, len);
   obj->value[len] = 0;
   return OBJ2VAL((Object*) obj);
 }
 
-Value make_string_foreign(VMState *state, char *value) {
+Value make_string_static(VMState *state, char *value) {
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
+  obj->static_ptr = true;
   obj->value = value;
   return OBJ2VAL((Object*) obj);
 }
@@ -381,9 +404,33 @@ Value make_array(VMState *state, Value *ptr, int length, bool owned) {
   obj->base.free_fn = array_free_fn;
   obj->ptr = ptr;
   obj->length = length;
+  if (owned) obj->capacity = length;
+  else obj->capacity = 0;
   obj->owned = owned;
   object_set(state, (Object*) obj, "length", INT2VAL(length));
   return OBJ2VAL((Object*) obj);
+}
+
+// bit twiddle
+static unsigned int next_pow2(unsigned int x) {
+  x -= 1; // don't do anything to existing powers of two
+  x |= (x >> 1); // fill 1s to the right
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16); // until the number is [all 0s] [all 1s]
+  return x + 1; // add 1 to get a clean power of two.
+}
+
+void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_len) {
+  assert(aobj->owned);
+  if (newsize > aobj->capacity) {
+    int newcap = next_pow2(newsize);
+    aobj->ptr = realloc(aobj->ptr, sizeof(Value) * newcap);
+    aobj->capacity = newcap;
+  }
+  aobj->length = newsize;
+  if (update_len) object_set(state, (Object*) aobj, "length", INT2VAL(aobj->length));
 }
 
 Value make_ptr(VMState *state, void *ptr) {
@@ -415,6 +462,12 @@ char *get_val_info(Value val) {
   else if (IS_BOOL(val)) return my_asprintf("<bool: %s>", AS_BOOL(val)?"true":"false");
   else if (IS_FLOAT(val)) return my_asprintf("<float: %f>", AS_FLOAT(val));
   else return my_asprintf("<obj: %p>", (void*) AS_OBJ(val));
+}
+
+void free_function(UserFunction *uf) {
+  free(uf->body.blocks_ptr);
+  free(uf->body.instrs_ptr);
+  free(uf);
 }
 
 // TODO move elsewhere

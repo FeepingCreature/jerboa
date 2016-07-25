@@ -99,5 +99,9 @@ int main(int argc, char **argv) {
   // one last run, deleting everything
   gc_run(&vmstate);
   
+  if (vmstate.shared->verbose) {
+    fprintf(stderr, "(%i remaining objects)\n", vmstate.shared->gcstate.num_obj_allocated);
+  }
+  
   return resvalue;
 }

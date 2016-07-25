@@ -500,13 +500,12 @@ static void array_resize_fn(VMState *state, CallInfo *info) {
   Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(arg), "parameter to resize function must be int");
   VM_ASSERT(arr_obj, "internal error: resize called on object that is not an array");
+  VM_ASSERT(arr_obj->owned, "cannot resize an array whose memory we don't own!");
   int oldsize = arr_obj->length;
   int newsize = AS_INT(arg);
   VM_ASSERT(newsize >= 0, "bad size: %i", newsize);
-  arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * newsize);
+  array_resize(state, arr_obj, newsize, true);
   memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
-  arr_obj->length = newsize;
-  object_set(state, (Object*) arr_obj, "length", INT2VAL(newsize));
   vm_return(state, info, this_val);
 }
 
@@ -516,10 +515,10 @@ static void array_push_fn(VMState *state, CallInfo *info) {
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(this_val), array_base);
   VM_ASSERT(arr_obj, "internal error: push called on object that is not an array");
+  VM_ASSERT(arr_obj->owned, "cannot resize an array whose memory we don't own!");
   Value value = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * ++arr_obj->length);
+  array_resize(state, arr_obj, arr_obj->length + 1, true);
   arr_obj->ptr[arr_obj->length - 1] = value;
-  object_set(state, (Object*) arr_obj, "length", INT2VAL(arr_obj->length));
   vm_return(state, info, this_val);
 }
 
@@ -528,9 +527,10 @@ static void array_pop_fn(VMState *state, CallInfo *info) {
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
   VM_ASSERT(arr_obj, "internal error: pop called on object that is not an array");
+  VM_ASSERT(arr_obj->owned, "cannot resize an array whose memory we don't own!");
+  VM_ASSERT(arr_obj->length, "array underflow");
   Value res = arr_obj->ptr[arr_obj->length - 1];
-  arr_obj->ptr = realloc(arr_obj->ptr, sizeof(Value) * --arr_obj->length);
-  object_set(state, (Object*) arr_obj, "length", INT2VAL(arr_obj->length));
+  array_resize(state, arr_obj, arr_obj->length - 1, true);
   vm_return(state, info, res);
 }
 
@@ -632,7 +632,6 @@ static void file_open_fn(VMState *state, CallInfo *info) {
   StringObject *fmobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), string_base);
   VM_ASSERT(fmobj, "second parameter to file.open() must be string!");
   
-  gc_disable(state);
   FILE *fh = fopen(fnobj->value, fmobj->value);
   if (fh == NULL) {
     VM_ASSERT(false, "file could not be opened: '%s' as '%s': %s", fnobj->value, fmobj->value, strerror(errno));
@@ -640,7 +639,6 @@ static void file_open_fn(VMState *state, CallInfo *info) {
   Object *file_obj = AS_OBJ(make_object(state, file_base));
   object_set(state, file_obj, "_handle", make_ptr(state, (void*) fh));
   vm_return(state, info, OBJ2VAL(file_obj));
-  gc_enable(state);
 }
 
 static void file_close_fn(VMState *state, CallInfo *info) {
@@ -674,7 +672,6 @@ static void print_fn(VMState *state, CallInfo *info) {
 
 static void keys_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  gc_disable(state);
   int res_len = 0;
   Object *obj = OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0]));
   if (obj) {
@@ -695,7 +692,6 @@ static void keys_fn(VMState *state, CallInfo *info) {
     }
   }
   vm_return(state, info, make_array(state, res_ptr, res_len, true));
-  gc_enable(state);
 }
 
 static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node_base, Object *element_node_base) {
@@ -758,7 +754,6 @@ static void xml_load_fn(VMState *state, CallInfo *info) {
   xmlNode *root_element = xmlDocGetRootElement(doc);
   
   gc_disable(state);
-  
   vm_return(state, info, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
   gc_enable(state);
   
@@ -786,7 +781,6 @@ static void xml_parse_fn(VMState *state, CallInfo *info) {
   xmlNode *root_element = xmlDocGetRootElement(doc);
   
   gc_disable(state);
-  
   vm_return(state, info, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
   gc_enable(state);
   
@@ -822,14 +816,14 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   return value_is_truthy(res);
 }
 
-static void xml_node_find_recurse(VMState *state, Value node, Value pred, Value **array_p_p, int *array_l_p)
+static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayObject *aobj)
 {
   Object *array_base = state->shared->vcache.array_base;
   bool res = xml_node_check_pred(state, node, pred);
   if (state->runstate == VM_ERRORED) return;
   if (res) {
-    (*array_p_p) = realloc((void*) *array_p_p, sizeof(Value) * ++(*array_l_p));
-    (*array_p_p)[(*array_l_p) - 1] = node;
+    array_resize(state, aobj, aobj->length + 1, false);
+    aobj->ptr[aobj->length - 1] = node;
   }
   
   Object *children_obj = AS_OBJ(OBJECT_LOOKUP_STRING(closest_obj(state, node), "children", NULL));
@@ -838,7 +832,7 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, Value 
   VM_ASSERT(children_aobj, "'children' property in node is not an array");
   for (int i = 0; i < children_aobj->length; ++i) {
     Value child = children_aobj->ptr[i];
-    xml_node_find_recurse(state, child, pred, array_p_p, array_l_p);
+    xml_node_find_recurse(state, child, pred, aobj);
     if (state->runstate == VM_ERRORED) return;
   }
 }
@@ -846,14 +840,15 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, Value 
 static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
-  Value *array_ptr = NULL; int array_length = 0;
+  ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   gc_disable(state);
-  xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), &array_ptr, &array_length);
-  vm_return(state, info, make_array(state, array_ptr, array_length, true));
+  xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), aobj);
+  array_resize(state, aobj, aobj->length, true);
+  vm_return(state, info, OBJ2VAL((Object*) aobj));
   gc_enable(state);
 }
 
-static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name, Value **array_p_p, int *array_l_p)
+static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name, ArrayObject *aobj)
 {
   Object *string_base = state->shared->vcache.string_base;
   Object *array_base = state->shared->vcache.array_base;
@@ -869,8 +864,8 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
   StringObject *nodeName_str = (StringObject*) obj_instance_of(OBJ_OR_NULL(node_name), string_base);
   VM_ASSERT(nodeName_str, "'nodeName' must be string");
   if (strcmp(nodeName_str->value, name) == 0) {
-    (*array_p_p) = realloc((void*) *array_p_p, sizeof(Value) * ++(*array_l_p));
-    (*array_p_p)[(*array_l_p) - 1] = node;
+    array_resize(state, aobj, aobj->length + 1, false);
+    aobj->ptr[aobj->length - 1] = node;
   }
   
   Value children = OBJECT_LOOKUP_STRING(node_obj, "children", NULL);
@@ -879,7 +874,7 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
   VM_ASSERT(children_arr, "'children' property in node is not an array");
   for (int i = 0; i < children_arr->length; ++i) {
     Value child = children_arr->ptr[i];
-    xml_node_find_by_name_recurse(state, child, name, array_p_p, array_l_p);
+    xml_node_find_by_name_recurse(state, child, name, aobj);
     if (state->runstate == VM_ERRORED) return;
   }
 }
@@ -891,10 +886,11 @@ static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
   StringObject *name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(name_obj, "parameter to find_array_by_name must be string!");
   
-  Value *array_ptr = NULL; int array_length = 0;
+  ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   gc_disable(state);
-  xml_node_find_by_name_recurse(state, load_arg(state->frame, info->this_arg), name_obj->value, &array_ptr, &array_length);
-  vm_return(state, info, make_array(state, array_ptr, array_length, true));
+  xml_node_find_by_name_recurse(state, load_arg(state->frame, info->this_arg), name_obj->value, aobj);
+  array_resize(state, aobj, aobj->length, true);
+  vm_return(state, info, OBJ2VAL((Object*)aobj));
   gc_enable(state);
 }
 
@@ -1202,10 +1198,10 @@ Object *create_root(VMState *state) {
   object_set(state, xml_obj, "node", OBJ2VAL(node_obj));
   
   Object *element_node_obj = AS_OBJ(make_object(state, node_obj));
-  object_set(state, element_node_obj, "nodeName", make_string_foreign(state, ""));
+  object_set(state, element_node_obj, "nodeName", make_string_static(state, ""));
   object_set(state, element_node_obj, "nodeType", INT2VAL(1));
   object_set(state, element_node_obj, "attr", make_object(state, NULL));
-  object_set(state, element_node_obj, "children", make_array(state, NULL, 0, false));
+  object_set(state, element_node_obj, "children", make_array(state, NULL, 0, true));
   object_set(state, xml_obj, "element_node", OBJ2VAL(element_node_obj));
   
   Object *text_node_obj = AS_OBJ(make_object(state, node_obj));

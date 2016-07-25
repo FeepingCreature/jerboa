@@ -17,6 +17,8 @@ void *cache_alloc(int size);
 
 void cache_free(int size, void *ptr);
 
+void free_cache(VMState *state);
+
 void save_profile_output(char *file, TextRange source, VMProfileState *profile_state);
 
 Value *object_lookup_ref(Object *obj, const char *key);
@@ -125,14 +127,16 @@ typedef struct {
 
 typedef struct {
   Object base;
+  bool static_ptr;
   char *value;
 } StringObject;
 
 typedef struct {
   Object base;
   Value *ptr;
-  int length;
   bool owned;
+  int length;
+  int capacity;
 } ArrayObject;
 
 // used internally
@@ -151,11 +155,13 @@ Value make_float(VMState *state, float value);
 
 Value make_string(VMState *state, const char *ptr, int len);
 
-Value make_string_foreign(VMState *state, char *value);
+Value make_string_static(VMState *state, char *value);
 
 Value make_bool(VMState *state, bool value);
 
 Value make_array(VMState *state, Value *ptr, int length, bool owned);
+
+void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_len);
 
 Value make_ptr(VMState *state, void *ptr);
 

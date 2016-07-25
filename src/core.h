@@ -290,6 +290,8 @@ typedef struct {
   bool non_ssa, optimized;
 } UserFunction;
 
+void free_function(UserFunction *uf);
+
 struct _Callframe {
   UserFunction *uf;
   Value *slots_ptr; int slots_len;

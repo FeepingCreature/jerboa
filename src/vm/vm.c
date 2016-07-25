@@ -296,7 +296,7 @@ static FnWrap vm_instr_alloc_float_object(VMState *state) {
 
 static FnWrap vm_instr_alloc_array_object(VMState *state) {
   AllocArrayObjectInstr *alloc_array_obj_instr = (AllocArrayObjectInstr*) state->instr;
-  set_arg(state, alloc_array_obj_instr->target, make_array(state, NULL, 0, false));
+  set_arg(state, alloc_array_obj_instr->target, make_array(state, NULL, 0, true));
   state->instr = (Instr*)(alloc_array_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -304,7 +304,7 @@ static FnWrap vm_instr_alloc_array_object(VMState *state) {
 static FnWrap vm_instr_alloc_string_object(VMState *state) {
   AllocStringObjectInstr *alloc_string_obj_instr = (AllocStringObjectInstr*) state->instr;
   char *value = alloc_string_obj_instr->value;
-  set_arg(state, alloc_string_obj_instr->target, make_string(state, value, strlen(value)));
+  set_arg(state, alloc_string_obj_instr->target, make_string_static(state, value));
   state->instr = (Instr*)(alloc_string_obj_instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
@@ -370,7 +370,8 @@ static FnWrap vm_instr_access(VMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   bool object_found = false;
   if (skey) {
-    key_obj->flags |= OBJ_IMMORTAL; // TODO better way
+    // otherwise, skey->value is independent of skey
+    if (!skey->static_ptr) key_obj->flags |= OBJ_IMMORTAL;
     key = skey->value;
     set_arg(state, access_instr->target, object_lookup(obj, key, &object_found));
   }
