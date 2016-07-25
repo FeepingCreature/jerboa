@@ -59,8 +59,8 @@ typedef enum {
   INSTR_LAST
 } InstrType;
 
-#define UNLIKELY(X) __builtin_expect(X, 0)
-#define LIKELY(X) __builtin_expect(X, 1)
+#define UNLIKELY(X) __builtin_expect(!!(X), 0)
+#define LIKELY(X) __builtin_expect(!!(X), 1)
 
 struct _HashTable {
   TableEntry *entries_ptr;

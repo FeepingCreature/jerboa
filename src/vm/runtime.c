@@ -1004,7 +1004,7 @@ static void sin_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   float f;
-  if (IS_FLOAT(val)) f = AS_FLOAT(val);
+  if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.sin()");
   vm_return(state, info, FLOAT2VAL(sinf(f)));
@@ -1014,7 +1014,7 @@ static void cos_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   float f;
-  if (IS_FLOAT(val)) f = AS_FLOAT(val);
+  if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.cos()");
   vm_return(state, info, FLOAT2VAL(cosf(f)));
@@ -1024,17 +1024,27 @@ static void tan_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   float f;
-  if (IS_FLOAT(val)) f = AS_FLOAT(val);
+  if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.tan()");
   vm_return(state, info, FLOAT2VAL(tanf(f)));
+}
+
+static void log_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
+  float f;
+  if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
+  else if (IS_INT(val)) f = AS_INT(val);
+  else VM_ASSERT(false, "unexpected type for math.tan()");
+  vm_return(state, info, FLOAT2VAL(logf(f)));
 }
 
 static void sqrt_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   float f;
   Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  if (IS_FLOAT(val)) f = AS_FLOAT(val);
+  if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
   else VM_ASSERT(false, "unexpected type for math.sqrt()");
   vm_return(state, info, FLOAT2VAL(sqrtf(f)));
@@ -1045,7 +1055,7 @@ static void pow_fn(VMState *state, CallInfo *info) {
   Value val1 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
   float a, b;
-  if (IS_FLOAT(val1)) a = AS_FLOAT(val1);
+  if (LIKELY(IS_FLOAT(val1))) a = AS_FLOAT(val1);
   else if (IS_INT(val1)) a = AS_INT(val1);
   else VM_ASSERT(false, "unexpected type for math.pow()");
   if (IS_FLOAT(val2)) b = AS_FLOAT(val2);
@@ -1238,6 +1248,7 @@ Object *create_root(VMState *state) {
   object_set(state, math_obj, "sin", make_fn(state, sin_fn));
   object_set(state, math_obj, "cos", make_fn(state, cos_fn));
   object_set(state, math_obj, "tan", make_fn(state, tan_fn));
+  object_set(state, math_obj, "log", make_fn(state, log_fn));
   object_set(state, math_obj, "sqrt", make_fn(state, sqrt_fn));
   object_set(state, math_obj, "pow", make_fn(state, pow_fn));
   math_obj->flags |= OBJ_FROZEN;
