@@ -92,6 +92,19 @@ var XmlResults = {
     }
     return res;
   };
+  on = method(key, fn) {
+    assert(this.array.length > 0, "called on() on empty result set");
+    for (var i = 0; i < this.array.length; i++) {
+      this.array[i].on(key, fn);
+    }
+    return this;
+  };
+  trigger = method(key, ...) {
+    for (var i = 0; i < this.array.length; i++) {
+      this.array[i].trigger_(key, arguments);
+    }
+    return this;
+  };
 };
 xml.node["find"] = method(pred) {
   if (pred instanceof string) return this.findByName(pred);
@@ -119,9 +132,37 @@ xml.node["append"] = method(arg) {
   if (array_arg) {
     for (var i = 0; i < array_arg.length; i++) {
       this.children.push(array_arg[i]);
+      array_arg[i].parent = this;
     }
   } else {
     this.children.push(arg);
+    arg.parent = this;
   }
 };
-
+const EventHandlers = {
+  fns = [];
+  call = method(base, arguments) {
+    for (var i = 0; i < this.fns.length; i++) {
+      var obj = this.fns[i];
+      if (!obj.fn.apply(obj.obj, arguments)) return false;
+    }
+    return true;
+  };
+};
+// TODO figure out a better performing way to do this
+xml.node["on"] = method(key, obj) {
+  if (obj instanceof function) obj = { fn = obj; obj = this; };
+  if (!("_handlers" in this)) this["_handlers"] = {};
+  if (!("key" in this._handlers)) this._handlers[key] = new EventHandlers;
+  this._handlers[key].fns.push(obj);
+  if (this.parent) this.parent.on(key, obj);
+};
+xml.node["trigger_"] = method(key, arguments) {
+  if ("_handlers" in this && key in this._handlers) {
+    if (!this._handlers[key].call(this, arguments)) return false;
+  }
+  return true;
+};
+xml.node["trigger"] = method(key, ...) {
+  this.trigger_(key, arguments);
+};

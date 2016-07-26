@@ -13,10 +13,17 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+/* why does 'apply' take 'this' as an explicit first parameter?
+ * well, consider foo.bar.apply()
+ * by the time apply gets called, its parameter is just 'bar'
+ * the lookup on foo is done and gone
+ * there is no way to reconstruct 'foo' from apply's position
+ * hence, we explicitly pass it in*/
 static void fn_apply_fn(VMState *state, CallInfo *info) {
-  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
+  Value this_value = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *args_array = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), array_base);
+  ArrayObject *args_array = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), array_base);
   VM_ASSERT(args_array, "argument to apply() must be array!");
   int len = args_array->length;
   Value fn_value = load_arg(state->frame, info->this_arg);
@@ -29,7 +36,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   
   CallInfo *info2 = alloca(sizeof(CallInfo) + sizeof(Arg) * len);
   info2->args_len = len;
-  info2->this_arg = (Arg) { .kind = ARG_VALUE, .value = VNULL };
+  info2->this_arg = (Arg) { .kind = ARG_VALUE, .value = this_value };
   info2->fn = (Arg) { .kind = ARG_VALUE, .value = fn_value };
   info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = len }; // len is the return slot
   for (int i = 0; i < len; ++i) {
@@ -37,6 +44,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   }
   // passthrough call to actual function
   // note: may set its own errors
+  state->frame->instr_ptr = state->instr;
   setup_call(state, info2);
 }
 
@@ -694,7 +702,7 @@ static void keys_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, make_array(state, res_ptr, res_len, true));
 }
 
-static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node_base, Object *element_node_base) {
+static Object *xml_to_object(VMState *state, Object *parent, xmlNode *element, Object *text_node_base, Object *element_node_base) {
   Object *res;
   if (element->type == 1) {
     res = AS_OBJ(make_object(state, element_node_base));
@@ -704,7 +712,7 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
     Value *children_ptr = malloc(sizeof(Value) * children_len);
     int i = 0;
     for (child = element->children; child; child = child->next) {
-      children_ptr[i++] = OBJ2VAL(xml_to_object(state, child, text_node_base, element_node_base));
+      children_ptr[i++] = OBJ2VAL(xml_to_object(state, res, child, text_node_base, element_node_base));
     }
     Object *attr = AS_OBJ(make_object(state, NULL));
     xmlAttr *xml_attr = element->properties;
@@ -725,6 +733,8 @@ static Object *xml_to_object(VMState *state, xmlNode *element, Object *text_node
     object_set(state, res, "nodeName", make_string(state, (char*) element->name, strlen((char*) element->name)));
     object_set(state, res, "attr", OBJ2VAL(attr));
     object_set(state, res, "children", make_array(state, children_ptr, children_len, true));
+    // otherwise VNULL via prototype
+    if (parent) object_set(state, res, "parent", OBJ2VAL(parent));
   } else if (element->type == 3) {
     res = AS_OBJ(make_object(state, text_node_base));
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
@@ -754,7 +764,7 @@ static void xml_load_fn(VMState *state, CallInfo *info) {
   xmlNode *root_element = xmlDocGetRootElement(doc);
   
   gc_disable(state);
-  vm_return(state, info, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
+  vm_return(state, info, OBJ2VAL(xml_to_object(state, NULL, root_element, text_node_base, element_node_base)));
   gc_enable(state);
   
   xmlFreeDoc(doc);
@@ -781,7 +791,7 @@ static void xml_parse_fn(VMState *state, CallInfo *info) {
   xmlNode *root_element = xmlDocGetRootElement(doc);
   
   gc_disable(state);
-  vm_return(state, info, OBJ2VAL(xml_to_object(state, root_element, text_node_base, element_node_base)));
+  vm_return(state, info, OBJ2VAL(xml_to_object(state, NULL, root_element, text_node_base, element_node_base)));
   gc_enable(state);
   
   xmlFreeDoc(doc);
@@ -1088,8 +1098,8 @@ char *get_type_info(VMState *state, Value val) {
   if (obj == state->shared->vcache.int_base) return "int";
   if (obj == state->shared->vcache.bool_base) return "bool";
   if (obj == state->shared->vcache.float_base) return "float";
-  if (obj == state->shared->vcache.closure_base) return "closure";
-  if (obj == state->shared->vcache.function_base) return "function";
+  if (obj == state->shared->vcache.closure_base) return "function";
+  if (obj == state->shared->vcache.function_base) return "sysfun";
   if (obj == state->shared->vcache.array_base) return "array";
   if (obj == state->shared->vcache.string_base) return "string";
   if (obj == state->shared->vcache.pointer_base) return "pointer";
@@ -1109,7 +1119,7 @@ Object *create_root(VMState *state) {
   
   Object *function_obj = AS_OBJ(make_object(state, NULL));
   function_obj->flags |= OBJ_NOINHERIT;
-  object_set(state, root, "function", OBJ2VAL(function_obj));
+  object_set(state, root, "sysfun", OBJ2VAL(function_obj));
   state->shared->vcache.function_base = function_obj;
   object_set(state, function_obj, "apply", make_fn(state, fn_apply_fn));
   
@@ -1149,7 +1159,7 @@ Object *create_root(VMState *state) {
   
   Object *closure_obj = AS_OBJ(make_object(state, NULL));
   closure_obj->flags |= OBJ_NOINHERIT;
-  object_set(state, root, "closure", OBJ2VAL(closure_obj));
+  object_set(state, root, "function", OBJ2VAL(closure_obj));
   object_set(state, closure_obj, "apply", make_fn(state, fn_apply_fn));
   state->shared->vcache.closure_base = closure_obj;
   
@@ -1212,6 +1222,7 @@ Object *create_root(VMState *state) {
   object_set(state, element_node_obj, "nodeType", INT2VAL(1));
   object_set(state, element_node_obj, "attr", make_object(state, NULL));
   object_set(state, element_node_obj, "children", make_array(state, NULL, 0, true));
+  object_set(state, element_node_obj, "parent", VNULL);
   object_set(state, xml_obj, "element_node", OBJ2VAL(element_node_obj));
   
   Object *text_node_obj = AS_OBJ(make_object(state, node_obj));

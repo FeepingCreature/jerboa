@@ -9,7 +9,7 @@
 // mark slots whose value is only
 // used as parameter to other instructions and does not escape
 // such as string keys
-static void slot_is_primitive(UserFunction *uf, bool** slots_p) {
+void slot_is_primitive(UserFunction *uf, bool** slots_p) {
   *slots_p = malloc(sizeof(bool) * uf->slots);
   bool *slots = *slots_p;
   for (int i = 0; i < uf->slots; ++i) slots[i] = true; // default assumption
@@ -129,15 +129,13 @@ typedef struct {
 
 int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_ptr) {
   assert(rec->static_object);
-  int field = -1;
   for (int k = 0; k < rec->fields_len; ++k) {
     int field_len = strlen(rec->names_ptr[k]);
     if (field_len == name_len && strncmp(rec->names_ptr[k], name_ptr, name_len) == 0) {
-      field = k;
-      break;
+      return k;
     }
   }
-  return field;
+  return -1;
 }
 
 #include "vm/dump.h"
@@ -146,11 +144,34 @@ int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_pt
 static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_p) {
   *slots_p = calloc(sizeof(SlotIsStaticObjInfo), uf->slots);
   
+  CFG cfg;
+  cfg_build(&cfg, uf);
+  
   Value *constant_slots = find_constant_slots(uf);
+  int *field_for_refslot = calloc(sizeof(int), uf->refslots);
+  int *objslot_for_refslot = calloc(sizeof(int), uf->refslots);
+  for (int i = 0; i < uf->refslots; ++i) {
+    field_for_refslot[i] = -1;
+    objslot_for_refslot[i] = -1;
+  }
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr != instr_end) {
+      if (instr->type == INSTR_DEFINE_REFSLOT) {
+        DefineRefslotInstr *dri = (DefineRefslotInstr*) instr;
+        instr = (Instr*) (dri + 1);
+        int obj_slot = dri->obj_slot;
+        SlotIsStaticObjInfo *rec = &((*slots_p)[obj_slot]);
+        if (rec->static_object) {
+          int field = static_info_find_field(rec, dri->key_len, dri->key_ptr);
+          if (field != -1) {
+            objslot_for_refslot[dri->target_refslot] = obj_slot;
+            field_for_refslot[dri->target_refslot] = field;
+          }
+        }
+        continue;
+      }
       if (instr->type == INSTR_ALLOC_OBJECT) {
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
         instr = (Instr*) (alobi + 1);
@@ -222,10 +243,53 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
           continue;
         }
       }
+      
+      // 3 instance of: %27 = &0 instanceof <obj: 0x1985e90>
+      // 3 test-branch: %27 ? <7> : <9>
+      // and <7> is only targeted by one block
+      // thus, impose a type constraint on &0 in <7>
+      if (instr->type == INSTR_INSTANCEOF) {
+        InstanceofInstr *ins = (InstanceofInstr*) instr;
+        instr = (Instr*) (ins + 1);
+        if (instr->type == INSTR_TESTBR) {
+          TestBranchInstr *tbr = (TestBranchInstr*) instr;
+          instr = (Instr*) (tbr + 1);
+          if (ins->target.kind == ARG_SLOT && tbr->test.kind == ARG_SLOT
+            && ins->target.slot == tbr->test.slot
+            && ins->proto.kind == ARG_VALUE && IS_OBJ(ins->proto.value)
+            && ins->obj.kind == ARG_REFSLOT
+            && cfg.nodes_ptr[tbr->true_blk].pred_len == 1)
+          {
+            assert(cfg.nodes_ptr[tbr->true_blk].pred_ptr[0] == i);
+            Object *constraint = AS_OBJ(ins->proto.value);
+            int refslot = ins->obj.refslot;
+            if (objslot_for_refslot[refslot] != -1) {
+              SlotIsStaticObjInfo *rec = &(*slots_p)[objslot_for_refslot[refslot]];
+              int field = field_for_refslot[refslot];
+              assert(field != -1);
+              if (rec->static_object) {
+                Instr *trueblk_start = BLOCK_START(uf, tbr->true_blk);
+                ConstraintInfo *info = &rec->constraints_ptr[field];
+                info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
+                info->constraint_ptr[info->constraint_len - 1] = constraint;
+                info->constraint_imposed_here_ptr = realloc(info->constraint_imposed_here_ptr, sizeof(Instr*) * info->constraint_len);
+                info->constraint_imposed_here_ptr[info->constraint_len - 1] = trueblk_start;
+              }
+            }
+          }
+        }
+        continue;
+      }
+      
       instr = (Instr*)((char*) instr + instr_size(instr));
     }
   }
+  
+  cfg_destroy(&cfg);
+  
   free(constant_slots);
+  free(objslot_for_refslot);
+  free(field_for_refslot);
 }
 
 static void copy_fn_stats(UserFunction *from, UserFunction *to) {
@@ -237,7 +301,7 @@ static void copy_fn_stats(UserFunction *from, UserFunction *to) {
   to->variadic_tail = from->variadic_tail;
 }
 
-static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
+UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   SlotIsStaticObjInfo *info;
   slot_is_static_object(uf, &info);
   
@@ -300,7 +364,7 @@ static UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
   return fn;
 }
 
-static UserFunction *access_vars_via_refslots(UserFunction *uf) {
+UserFunction *access_vars_via_refslots(UserFunction *uf) {
   SlotIsStaticObjInfo *info;
   slot_is_static_object(uf, &info);
   
@@ -417,7 +481,7 @@ static UserFunction *access_vars_via_refslots(UserFunction *uf) {
   return fn;
 }
 
-static UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
+UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
   
@@ -538,7 +602,7 @@ Value lookup_statically(Object *obj, char *key_ptr, int key_len, size_t hashv, b
   return VNULL; // no hits.
 }
 
-static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
+UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   bool *slot_live = calloc(sizeof(bool), uf->slots);
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
@@ -587,6 +651,7 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             if (instr->proto.kind == ARG_SLOT) slot_live[instr->proto.slot] = true;
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
             if (instr->constraint.kind == ARG_SLOT) slot_live[instr->constraint.slot] = true;
           CASE(INSTR_CALL, CallInstr)
             if (instr->info.fn.kind == ARG_SLOT) slot_live[instr->info.fn.slot] = true;
@@ -653,7 +718,7 @@ static UserFunction *remove_dead_slot_writes(UserFunction *uf) {
   return fn;
 }
 
-static UserFunction *call_functions_directly(VMState *state, UserFunction *uf) {
+UserFunction *call_functions_directly(VMState *state, UserFunction *uf) {
 FunctionBuilder builder = {0};
   builder.block_terminated = true;
   
@@ -717,6 +782,36 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
   known_values_table[1] = OBJ2VAL(context);
   
   ConstraintInfo **slot_constraints = calloc(sizeof(ConstraintInfo*), uf->slots);
+  ConstraintInfo **refslot_constraints = calloc(sizeof(ConstraintInfo*), uf->slots);
+  
+  // prepass: gather constraints
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr != instr_end) {
+      if (instr->type == INSTR_ACCESS_STRING_KEY) {
+        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+        if (aski->obj.kind == ARG_SLOT && aski->target.kind == ARG_SLOT) {
+          SlotIsStaticObjInfo *rec = &static_info[aski->obj.slot];
+          if (rec->static_object) {
+            int field = static_info_find_field(rec, aski->key_len, aski->key_ptr);
+            assert(field != -1);
+            slot_constraints[aski->target.slot] = &rec->constraints_ptr[field];
+          }
+        }
+      }
+      if (instr->type == INSTR_DEFINE_REFSLOT) {
+        DefineRefslotInstr *dri = (DefineRefslotInstr*) instr;
+        SlotIsStaticObjInfo *rec = &static_info[dri->obj_slot];
+        if (rec->static_object) {
+          int field = static_info_find_field(rec, dri->key_len, dri->key_ptr);
+          if (field != -1) {
+            refslot_constraints[dri->target_refslot] = &rec->constraints_ptr[field];
+          }
+        }
+      }
+      instr = (Instr*) ((char*) instr + instr_size(instr));
+    }
+  }
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     Instr *instr = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
@@ -729,8 +824,8 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
         }
       }
       
-      if (instr->type == INSTR_ACCESS_STRING_KEY) {
-        AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+      AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
+      if (instr->type == INSTR_ACCESS_STRING_KEY && aski->target.kind == ARG_SLOT) {
         if (aski->obj.kind == ARG_SLOT && aski->target.kind == ARG_SLOT) {
           if (object_known[aski->obj.slot]) {
             Value known_val = known_values_table[aski->obj.slot];
@@ -743,35 +838,36 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
               known_values_table[aski->target.slot] = static_lookup;
             }
           }
-          
-          SlotIsStaticObjInfo *rec = &static_info[aski->obj.slot];
-          if (rec->static_object) {
-            int field = static_info_find_field(rec, aski->key_len, aski->key_ptr);
-            assert(field != -1);
-            slot_constraints[aski->target.slot] = &rec->constraints_ptr[field];
-          }
-          
-          if (slot_constraints[aski->obj.slot]) {
-            ConstraintInfo *constraints = slot_constraints[aski->obj.slot];
-            int num_dominant = 0;
-            // fprintf(stderr, "typed object go! %i constraints\n", constraints->constraint_len);
-            for (int k = 0; k < constraints->constraint_len; ++k) {
-              Object *constraint = constraints->constraint_ptr[k];
-              Instr *location = constraints->constraint_imposed_here_ptr[k];
-              if (constraint == int_base || constraint == float_base) { // primitives, always closed
-                if (dominates(uf, node2rpost, sfidoms_ptr, location, instr)) {
-                  object_known[aski->target.slot] = true;
-                  bool key_found = false;
-                  known_values_table[aski->target.slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
-                  if (!key_found) {
-                    fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", aski->key_len, aski->key_ptr);
-                    abort();
-                  }
-                  num_dominant ++;
+        }
+        
+        ConstraintInfo *constraints = NULL;
+        if (aski->obj.kind == ARG_SLOT && slot_constraints[aski->obj.slot]) {
+          constraints = slot_constraints[aski->obj.slot];
+        }
+        if (aski->obj.kind == ARG_REFSLOT && refslot_constraints[aski->obj.refslot]) {
+          constraints = refslot_constraints[aski->obj.refslot];
+        }
+        if (constraints) {
+          int num_dominant = 0;
+          // fprintf(stderr, "typed object go! %i constraints\n", constraints->constraint_len);
+          for (int k = 0; k < constraints->constraint_len; ++k) {
+            Object *constraint = constraints->constraint_ptr[k];
+            Instr *location = constraints->constraint_imposed_here_ptr[k];
+            if (constraint == int_base || constraint == float_base) { // primitives, always closed
+              if (dominates(uf, node2rpost, sfidoms_ptr, location, instr)) {
+                object_known[aski->target.slot] = true;
+                bool key_found = false;
+                known_values_table[aski->target.slot] = object_lookup_with_hash(constraint, aski->key_ptr, aski->key_len, aski->key_hash, &key_found);
+                if (!key_found) {
+                  fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", aski->key_len, aski->key_ptr);
+                  abort();
                 }
+                num_dominant ++;
               }
             }
-            assert(num_dominant <= 1);
+            if (num_dominant > 1) {
+              fprintf(stderr, "WARN multiple dominant constraints on the same field. TODO merge?");
+            }
           }
         }
       }
@@ -920,7 +1016,7 @@ bool dominates(UserFunction *uf, Node2RPost node2rpost, int *sfidoms_ptr, Instr 
 }
 
 // pattern: %0 = instr; &0 = %0;     -> &0 = instr;
-static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
+UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
   
@@ -1000,7 +1096,7 @@ static UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
   return fn;
 }
 
-static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
+UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
   Value *constant_slots = find_constant_slots(uf);
@@ -1326,7 +1422,7 @@ static UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
   return fn;
 }
 
-static UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
+UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
   
@@ -1474,7 +1570,7 @@ static void reassign_slot(int *slot_p, int numslots, Instr *instr_cur, Instr **f
 // WARNING
 // this function makes the IR **NON-SSA**
 // and thus it **MUST** come completely last!!
-static UserFunction *compactify_registers(UserFunction *uf) {
+UserFunction *compactify_registers(UserFunction *uf) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
   
@@ -1556,6 +1652,89 @@ static UserFunction *compactify_registers(UserFunction *uf) {
   return fn;
 }
 
+UserFunction *remove_pointless_blocks(UserFunction *uf) {
+  CFG cfg;
+  cfg_build(&cfg, uf);
+  
+  bool *blk_live = calloc(sizeof(bool), uf->body.blocks_len);
+  blk_live[0] = true;
+  
+  bool changed;
+  do {
+    changed = false;
+    // yes yes, you can construct a pathological graph of blocks, who cares
+    // the language doesn't have goto anyways
+    for (int i = 0; i < uf->body.blocks_len; ++i) {
+      if (blk_live[i]) {
+        for (int k = 0; k < cfg.nodes_ptr[i].succ_len; ++k) {
+          bool *liveflag = &blk_live[cfg.nodes_ptr[i].succ_ptr[k]];
+          if (!*liveflag) {
+            *liveflag = true;
+            changed = true;
+          }
+        }
+      }
+    }
+  } while (changed);
+  
+  int *blk_map = calloc(sizeof(int), uf->body.blocks_len);
+  
+  int k = 0;
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    if (blk_live[i]) blk_map[i] = k++;
+    else blk_map[i] = -1;
+  }
+  
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    if (!blk_live[i]) continue;
+    
+    new_block(&builder);
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      if (instr_cur->type == INSTR_BR) {
+        BranchInstr *instr = (BranchInstr*) instr_cur;
+        instr_cur = (Instr*) (instr + 1);
+        BranchInstr bri = *instr;
+        bri.blk = blk_map[bri.blk];
+        addinstr_like(&builder, instr_cur, sizeof(bri), (Instr*) &bri);
+        continue;
+      }
+      if (instr_cur->type == INSTR_TESTBR) {
+        TestBranchInstr *instr = (TestBranchInstr*) instr_cur;
+        instr_cur = (Instr*) (instr + 1);
+        TestBranchInstr tbri = *instr;
+        tbri.true_blk = blk_map[tbri.true_blk];
+        tbri.false_blk = blk_map[tbri.false_blk];
+        addinstr_like(&builder, instr_cur, sizeof(tbri), (Instr*) &tbri);
+        continue;
+      }
+      if (instr_cur->type == INSTR_PHI) {
+        PhiInstr *instr = (PhiInstr*) instr_cur;
+        instr_cur = (Instr*) (instr + 1);
+        PhiInstr phi = *instr;
+        phi.block1 = blk_map[phi.block1];
+        phi.block2 = blk_map[phi.block2];
+        addinstr_like(&builder, instr_cur, sizeof(phi), (Instr*) &phi);
+        continue;
+      }
+      addinstr_like(&builder, instr_cur, instr_size(instr_cur), instr_cur);
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  
+  cfg_destroy(&cfg);
+  free(blk_live);
+  free(blk_map);
+  
+  UserFunction *fn = build_function(&builder);
+  copy_fn_stats(uf, fn);
+  free_function(uf);
+  return fn;
+}
+
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
   if (uf->non_ssa != false) {
     fprintf(stderr, "called optimizer on function that is non-ssa!\n");
@@ -1573,6 +1752,26 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   uf = inline_static_lookups_to_constants(state, uf, context, true);
   
   uf = access_vars_via_refslots(uf);
+  
+  uf = inline_constant_slots(state, uf);
+  
+  // run a third time, to pick up on instanceof patterns
+  uf = inline_static_lookups_to_constants(state, uf, context, true);
+  uf = inline_constant_slots(state, uf);
+  
+  uf = slot_refslot_fuse(state, uf);
+  
+  // must be late!
+  uf = fuse_static_object_alloc(state, uf);
+  uf = remove_dead_slot_writes(uf);
+  uf = call_functions_directly(state, uf);
+  
+  uf = remove_pointless_blocks(uf);
+  
+  // must be very very *very* last!
+  uf = compactify_registers(uf);
+  
+  uf->optimized = true; // will be optimized no further
   
   if (state->shared->verbose) {
     CFG cfg;
@@ -1605,20 +1804,6 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     }
     cfg_destroy(&cfg);
   }
-  
-  uf = inline_constant_slots(state, uf);
-  
-  uf = slot_refslot_fuse(state, uf);
-  
-  // must be late!
-  uf = fuse_static_object_alloc(state, uf);
-  uf = remove_dead_slot_writes(uf);
-  uf = call_functions_directly(state, uf);
-  
-  // must be very very *very* last!
-  uf = compactify_registers(uf);
-  
-  uf->optimized = true; // will be optimized no further
   
   if (state->shared->verbose) {
     fprintf(stderr, "runtime optimized %s to\n", uf->name);

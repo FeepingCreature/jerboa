@@ -42,6 +42,11 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     fprintf(fh, "(void*) %p", ((PointerObject*)obj)->ptr);
     return;
   }
+  if (obj->flags & OBJ_PRINT_HACK) {
+    fprintf(fh, "already printed!");
+    return;
+  }
+  obj->flags |= OBJ_PRINT_HACK;
   if (aobj) {
     fprintf(fh, "[");
     ArrayObject *a_obj = (ArrayObject*) aobj;
@@ -53,6 +58,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
       if (state->runstate == VM_ERRORED) return;
     }
     fprintf(fh, " ]");
+    obj->flags &= ~OBJ_PRINT_HACK;
     return;
   }
   Value toString_fn = object_lookup(obj, "toString", NULL);
@@ -78,8 +84,9 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     
     if (NOT_NULL(str)) {
       print_recursive(state, fh, str, allow_tostring);
-      return;
     }
+    obj->flags &= ~OBJ_PRINT_HACK;
+    return;
   }
   fprintf(fh, "[object %p ", (void*) obj);
   if (obj->flags == OBJ_NONE) { }
@@ -119,6 +126,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
   }
   fprintf(fh, "]");
   // vm_error(state, "don't know how to print %p", obj);
+  obj->flags &= ~OBJ_PRINT_HACK;
   return;
 }
 

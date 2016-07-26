@@ -13,6 +13,11 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
   cf->slots_ptr[1] = OBJ2VAL(context);
   cf->target = info->target;
   
+  // enforced in build_function
+  assert(fn->body.blocks_len > 0);
+  // do this early so that the backtrace contains the called function
+  state->instr = fn->body.instrs_ptr;
+  
   if (UNLIKELY(fn->variadic_tail)) {
     VM_ASSERT(info->args_len >= fn->arity, "arity violation in call!");
   } else {
@@ -22,10 +27,6 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
   for (int i = 0; i < info->args_len; ++i) {
     cf->slots_ptr[2 + i] = load_arg(callf, INFO_ARGS_PTR(info)[i]);
   }
-  
-  // enforced in build_function
-  assert(fn->body.blocks_len > 0);
-  state->instr = fn->body.instrs_ptr;
 }
 
 static void closure_mark_fn(VMState *state, Object *obj) {
@@ -50,6 +51,7 @@ bool setup_call(VMState *state, CallInfo *info) {
   Object *fn_obj_n = AS_OBJ(fn);
   if (fn_obj_n->parent == function_base) {
     ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
+    state->frame->backtrace_belongs_to_p = NULL; // we didn't need it after all
     return state->runstate != VM_ERRORED;
   }
   

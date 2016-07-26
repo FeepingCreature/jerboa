@@ -79,6 +79,7 @@ typedef enum {
                        // you can still prototype the objects themselves though.
   OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
   OBJ_IMMORTAL = 0x10, // will never be freed
+  OBJ_PRINT_HACK = 0x20, // lol
 } ObjectFlags;
 
 // for debugging specific objects
@@ -298,6 +299,8 @@ struct _Callframe {
   Value *slots_ptr; int slots_len;
   TableEntry **refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots; // gc entries
+  // this is set from state->instr as the callframe becomes "not the top frame"
+  // if a callframe is the top frame, you should always be using state->instr.
   Instr *instr_ptr;
   // overrides instr_ptr->belongs_to, used when in a call
   // double pointer due to Dark Magic

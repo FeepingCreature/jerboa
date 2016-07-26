@@ -292,6 +292,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
   } else if (ret_type == ffi->int_obj || ret_type == ffi->uint_obj
     || ret_type == ffi->int32_obj || ret_type == ffi->uint32_obj
     || ret_type == ffi->long_obj || ret_type == ffi->ulong_obj
+    || ret_type == ffi->int8_obj || ret_type == ffi->uint8_obj
   ) { // all types that are <= long
     data = (char*) data + sizeof(long);
   } else if (ret_type == ffi->int64_obj || ret_type == ffi->uint64_obj) {
@@ -302,7 +303,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     data = (char*) data + ((sizeof(double)>sizeof(long))?sizeof(double):sizeof(long));
   } else if (ret_type == ffi->char_pointer_obj || ret_type == ffi->pointer_obj) {
     data = (char*) data + sizeof(void*);
-  } else abort();
+  } else VM_ASSERT(false, "unhandled return type");
   // fprintf(stderr, "::");
   for (int i = 0; i < info->args_len; ++i) {
     Object *type = OBJ_OR_NULL(par_types_array->ptr[i]);
@@ -384,6 +385,12 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
   if (ret_type == ffi->void_obj) {
     // fprintf(stderr, "v");
     vm_return(state, info, VNULL);
+  } else if (ret_type == ffi->int8_obj) {
+    // fprintf(stderr, "b");
+    vm_return(state, info, INT2VAL(*(int8_t*) ret_ptr));
+  } else if (ret_type == ffi->uint8_obj) {
+    // fprintf(stderr, "ub");
+    vm_return(state, info, INT2VAL(*(uint8_t*) ret_ptr));
   } else if (ret_type == ffi->int_obj) {
     // fprintf(stderr, "i");
     vm_return(state, info, INT2VAL(*(int*) ret_ptr));

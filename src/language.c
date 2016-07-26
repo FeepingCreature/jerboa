@@ -240,16 +240,6 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   
   FileRange *range = alloc_and_record_start(text);
   
-  char *ident_name = parse_identifier(&text);
-  if (ident_name) {
-    *textp = text;
-    record_end(text, range);
-    use_range_start(builder, range);
-    *rv = get_scope(builder, ident_name);
-    use_range_end(builder, range);
-    return PARSE_OK;
-  }
-  
   float f_value;
   if (parse_float(&text, &f_value)) {
     *textp = text;
@@ -331,19 +321,22 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     UserFunction *fn;
     ParseResult res = parse_function_expr(&text, &fn);
     if (res == PARSE_ERROR) return res;
-    assert(res == PARSE_OK);
-    *textp = text;
-    
-    fn->is_method = is_method;
-    
-    int slot = 0;
-    if (builder) {
-      use_range_start(builder, range); // count the closure allocation under 'function'
-      slot = addinstr_alloc_closure_object(builder, fn);
-      use_range_end(builder, range);
+    if (res == PARSE_NONE) { text = *textp; record_start(text, range); }
+    else {
+      assert(res == PARSE_OK);
+      *textp = text;
+      
+      fn->is_method = is_method;
+      
+      int slot = 0;
+      if (builder) {
+        use_range_start(builder, range); // count the closure allocation under 'function'
+        slot = addinstr_alloc_closure_object(builder, fn);
+        use_range_end(builder, range);
+      }
+      *rv = ref_simple(slot);
+      return PARSE_OK;
     }
-    *rv = ref_simple(slot);
-    return PARSE_OK;
   }
   
   if (eat_keyword(&text, "new")) {
@@ -369,8 +362,18 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     *rv = ref_simple(obj_slot);
     return PARSE_OK;
   }
-  free(range);
   
+  char *ident_name = parse_identifier(&text);
+  if (ident_name) {
+    *textp = text;
+    record_end(text, range);
+    use_range_start(builder, range);
+    *rv = get_scope(builder, ident_name);
+    use_range_end(builder, range);
+    return PARSE_OK;
+  }
+  
+  free(range);
   log_parser_error(text, "expected expression");
   return PARSE_ERROR;
 }
@@ -390,7 +393,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
   
   while (!eat_string(&text, ")")) {
     if (args_len && !eat_string(&text, ",")) {
-      log_parser_error(text, "comma expected");
+      log_parser_error(text, "comma expected for call");
       return PARSE_ERROR;
     }
     RefValue arg;
@@ -1430,9 +1433,12 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   */
   FileRange *fnframe_range = alloc_and_record_start(text);
   if (!eat_string(&text, "(")) {
-    log_parser_error(text, "opening paren for parameter list expected");
-    free(fnframe_range);
-    return PARSE_ERROR;
+    // log_parser_error(text, "opening paren for parameter list expected");
+    // free(fnframe_range);
+    // return PARSE_ERROR;
+    
+    // "function" is an identifier as well; consider foo instanceof function
+    return PARSE_NONE;
   }
   
   char **arg_list_ptr = NULL, arg_list_len = 0;
@@ -1440,7 +1446,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   bool variadic_tail = false;
   while (!eat_string(&text, ")")) {
     if (arg_list_len && !eat_string(&text, ",")) {
-      log_parser_error(text, "comma expected");
+      log_parser_error(text, "comma expected for argument list");
       free(fnframe_range);
       return PARSE_ERROR;
     }

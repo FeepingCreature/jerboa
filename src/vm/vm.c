@@ -93,19 +93,17 @@ void vm_remove_frame(VMState *state) {
 void setup_stub_frame(VMState *state, int slots) {
   if (state->frame) state->frame->instr_ptr = state->instr;
   vm_alloc_frame(state, slots + 1, 0);
-  Callframe *cf = state->frame;
   ReturnInstr *ret = calloc(sizeof(ReturnInstr), 1);
   ret->base.type = INSTR_RETURN;
   ret->ret = (Arg) { .kind = ARG_SLOT, .slot = slots };
   state->instr = (Instr*) ret;
-  cf->instr_ptr = (Instr*) ret;
 }
 
 void vm_print_backtrace(VMState *state) {
   int k = state->backtrace_depth;
   if (state->backtrace) fprintf(stderr, "%s", state->backtrace);
-  if (state->frame) state->frame->instr_ptr = state->instr;
   while (state) {
+    if (state->frame) state->frame->instr_ptr = state->instr;
     for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
       FileRange *belongs_to;
@@ -135,6 +133,7 @@ void vm_print_backtrace(VMState *state) {
 }
 
 char *vm_record_backtrace(VMState *state, int *depth) {
+  if (state->frame) state->frame->instr_ptr = state->instr;
   char *res_ptr = NULL; int res_len = 0;
   int k = state->backtrace_depth;
   if (state->backtrace) {
@@ -174,6 +173,7 @@ void vm_record_profile(VMState *state) {
   // vm_print_backtrace(state);
   int k = 0;
   while (curstate) {
+    if (curstate->frame) curstate->frame->instr_ptr = curstate->instr;
     for (Callframe *curf = curstate->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
       FileRange **belongs_to_p = curf->backtrace_belongs_to_p;
@@ -370,9 +370,9 @@ static FnWrap vm_instr_access(VMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   bool object_found = false;
   if (skey) {
-    // otherwise, skey->value is independent of skey
-    if (!skey->static_ptr) key_obj->flags |= OBJ_IMMORTAL;
+    has_char_key = true;
     key = skey->value;
+    // otherwise, skey->value is independent of skey
     set_arg(state, access_instr->target, object_lookup(obj, key, &object_found));
   }
   if (!object_found) {
@@ -402,8 +402,7 @@ static FnWrap vm_instr_access(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
-static bool vm_instr_access_string_key_index_fallback(VMState *state) {
-  AccessStringKeyInstr *aski = (AccessStringKeyInstr*) state->instr;
+static bool vm_instr_access_string_key_index_fallback(VMState *state, AccessStringKeyInstr *aski) {
   Value val = load_arg(state->frame, aski->obj);
   Object *obj = closest_obj(state, val);
   Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
@@ -418,6 +417,7 @@ static bool vm_instr_access_string_key_index_fallback(VMState *state) {
     info->target = aski->target;
     INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = aski->key_slot };
     
+    state->instr = (Instr*)(aski + 1);
     FileRange **prev_instr = &state->instr->belongs_to;
     return call_internal(state, info, prev_instr);
   } else {
@@ -437,10 +437,11 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   set_arg(state, aski->target, object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found));
   
   if (UNLIKELY(!object_found)) {
-    if (!vm_instr_access_string_key_index_fallback(state)) return (FnWrap) { vm_halt };
+    if (!vm_instr_access_string_key_index_fallback(state, aski)) return (FnWrap) { vm_halt };
+  } else {
+    state->instr = (Instr*)(aski + 1);
   }
   
-  state->instr = (Instr*)(aski + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
@@ -449,8 +450,8 @@ static FnWrap vm_instr_assign(VMState *state) {
   int target_slot = assign_instr->target_slot;
   VM_ASSERT2_SLOT(target_slot < state->frame->slots_len, "slot numbering error");
   VM_ASSERT2(NOT_NULL(load_arg(state->frame, assign_instr->key)), "key slot null"); // TODO see above
-  Value val = load_arg(state->frame, assign_instr->obj);
-  Object *obj = closest_obj(state, val);
+  Value obj_val = load_arg(state->frame, assign_instr->obj);
+  Object *obj = closest_obj(state, obj_val);
   Value value_val = load_arg(state->frame, assign_instr->value);
   Object *string_base = state->shared->vcache.string_base;
   Value key_val = load_arg(state->frame, assign_instr->key);
@@ -461,7 +462,7 @@ static FnWrap vm_instr_assign(VMState *state) {
     if (NOT_NULL(index_assign_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
       info->args_len = 2;
-      info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
+      info->this_arg = (Arg) { .kind = ARG_VALUE, .value = obj_val };
       info->fn = (Arg) { .kind = ARG_VALUE, .value = index_assign_op };
       info->target = (WriteArg) { .kind = ARG_SLOT, .slot = target_slot };
       INFO_ARGS_PTR(info)[0] = assign_instr->key;
@@ -487,14 +488,14 @@ static FnWrap vm_instr_assign(VMState *state) {
     }
     case ASSIGN_EXISTING:
     {
-      char *error = object_set_existing(state, obj, key, val);
+      char *error = object_set_existing(state, obj, key, value_val);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_SHADOWING:
     {
       bool key_set;
-      char *error = object_set_shadowing(state, obj, key, val, &key_set);
+      char *error = object_set_shadowing(state, obj, key, value_val, &key_set);
       VM_ASSERT2(error == NULL, "while assigning: %s", error);
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
@@ -793,10 +794,12 @@ void vm_update_frame(VMState *state) {
 static void vm_step(VMState *state) {
   state->instr = state->frame->instr_ptr;
   VMInstrFn fn = (VMInstrFn) instr_fns[state->instr->type];
+  // fuzz to prevent profiler aliasing
+  int limit = 128 + (state->shared->cyclecount % 64);
   int i;
-  for (i = 0; i < 128 && fn != vm_halt; i++) {
+  for (i = 0; i < limit && fn != vm_halt; i++) {
     /*{
-      fprintf(stderr, "run <%i> {%p, %i, %i} ", state->frame->block, (void*) state->instr, state->frame->slots_len, state->frame->refslots_len);
+      fprintf(stderr, "run [%p] <%i> {%p, %i, %i} ", (void*) state->instr, state->frame->block, (void*) state->frame, state->frame->slots_len, state->frame->refslots_len);
       Instr *instr = state->instr;
       dump_instr(state, &instr);
     }*/

@@ -68,7 +68,8 @@ char *parse_identifier(char **textp) {
   char *res = parse_identifier_all(&text);
   if (res == NULL) return res;
   
-  if (strcmp(res, "function") == 0 || strcmp(res, "method") == 0 || strcmp(res, "new") == 0) {
+  // TODO extend
+  if (strcmp(res, "new") == 0) {
     // reserved identifier
     free(res);
     return NULL;
