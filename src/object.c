@@ -464,6 +464,20 @@ char *get_val_info(Value val) {
   else return my_asprintf("<obj: %p>", (void*) AS_OBJ(val));
 }
 
+char *get_val_info_ext(VMState *state, Value val) {
+  if (IS_NULL(val)) return "<null>";
+  else if (IS_INT(val)) return my_asprintf("<int: %i>", AS_INT(val));
+  else if (IS_BOOL(val)) return my_asprintf("<bool: %s>", AS_BOOL(val)?"true":"false");
+  else if (IS_FLOAT(val)) return my_asprintf("<float: %f>", AS_FLOAT(val));
+  else {
+    StringObject *sobj = (StringObject*) obj_instance_of(AS_OBJ(val), state->shared->vcache.string_base);
+    if (sobj) {
+      return my_asprintf("<obj:string: '%s'>", sobj->value);
+    }
+    return my_asprintf("<obj: %p>", (void*) AS_OBJ(val));
+  }
+}
+
 void free_function(UserFunction *uf) {
   free(uf->body.blocks_ptr);
   free(uf->body.instrs_ptr);

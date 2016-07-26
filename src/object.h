@@ -63,6 +63,8 @@ char *get_type_info(VMState*, Value);
 
 char *get_val_info(Value val);
 
+char *get_val_info_ext(VMState *state, Value val);
+
 static inline Value load_arg(Callframe *frame, Arg arg) {
   if (arg.kind == ARG_SLOT) {
     assert(arg.slot < frame->slots_len);
