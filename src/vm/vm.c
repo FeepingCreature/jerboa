@@ -673,9 +673,12 @@ static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallFunctionDirectInstr *instr = (CallFunctionDirectInstr*) state->instr;
   CallInfo *info = &instr->info;
   
+  Callframe *cf = state->frame;
+  cf->backtrace_belongs_to_p = &instr->base.belongs_to;
   state->instr = (Instr*) ((char*) instr + instr->size);
   instr->fn(state, info);
   if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
+  if (LIKELY(state->frame == cf)) cf->backtrace_belongs_to_p = NULL;
   
   return (FnWrap) { instr_fns[state->instr->type] };
 }

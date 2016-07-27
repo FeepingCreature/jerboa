@@ -123,6 +123,7 @@ typedef struct {
   
   int fields_len;
   char **names_ptr;
+  int *names_len_ptr;
   ConstraintInfo *constraints_ptr;
   
   FileRange *belongs_to;
@@ -133,7 +134,7 @@ typedef struct {
 int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, char *name_ptr) {
   assert(rec->static_object);
   for (int k = 0; k < rec->fields_len; ++k) {
-    int field_len = strlen(rec->names_ptr[k]);
+    int field_len = rec->names_len_ptr[k];
     if (field_len == name_len && strncmp(rec->names_ptr[k], name_ptr, name_len) == 0) {
       return k;
     }
@@ -179,7 +180,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         AllocObjectInstr *alobi = (AllocObjectInstr*) instr;
         instr = (Instr*) (alobi + 1);
         bool failed = false;
-        char **names_ptr = 0; int fields_len = 0;
+        char **names_ptr = NULL; int *names_len_ptr = NULL; int fields_len = 0;
         while (instr != instr_end) {
           if (instr->type == INSTR_ASSIGN_STRING_KEY) {
             AssignStringKeyInstr *aski = (AssignStringKeyInstr*) instr;
@@ -189,7 +190,9 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
             
             instr = (Instr*) (aski + 1);
             names_ptr = realloc(names_ptr, sizeof(char*) * ++fields_len);
+            names_len_ptr = realloc(names_len_ptr, sizeof(int) * fields_len);
             names_ptr[fields_len - 1] = aski->key;
+            names_len_ptr[fields_len - 1] = strlen(aski->key);
           } else if (instr->type == INSTR_CLOSE_OBJECT) {
             break;
           } else {
@@ -207,6 +210,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
         (*slots_p)[target_slot].fields_len = fields_len;
         (*slots_p)[target_slot].names_ptr = names_ptr;
+        (*slots_p)[target_slot].names_len_ptr = names_len_ptr;
         (*slots_p)[target_slot].constraints_ptr = calloc(sizeof(ConstraintInfo), fields_len);
         (*slots_p)[target_slot].belongs_to = instr->belongs_to;
         (*slots_p)[target_slot].context_slot = instr->context_slot;

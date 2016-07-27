@@ -54,7 +54,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
       Value child = a_obj->ptr[i];
       if (i) fprintf(fh, ", ");
       else fprintf(fh, " ");
-      print_recursive(state, fh, child, allow_tostring);
+      print_recursive_indent(state, fh, child, allow_tostring, indent + 1);
       if (state->runstate == VM_ERRORED) return;
     }
     fprintf(fh, " ]");
