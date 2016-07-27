@@ -1,0 +1,6 @@
+var a = 5, b = 5;
+assert(a is b);
+var c = {}, d = {};
+assert(!(c is d));
+c = d;
+assert(c is d);

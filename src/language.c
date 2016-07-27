@@ -631,7 +631,7 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
  * 4: * /
  * 5: |
  * 6: &
- * 7: in
+ * 7: in, is
  * 8: instanceof
  */
 static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv) {
@@ -683,6 +683,20 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       if (builder) in_slot = addinstr_key_in_obj(builder, key_slot, obj_slot);
       use_range_end(builder, range);
       *rv = ref_simple(in_slot);
+      continue;
+    }
+    if (eat_keyword(&text, "is")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 8, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR;
+      assert(res == PARSE_OK);
+      int obj1_slot = ref_access(builder, *rv);
+      int obj2_slot = ref_access(builder, rhs_expr);
+      int is_slot = 0;
+      use_range_start(builder, range);
+      if (builder) is_slot = addinstr_identical(builder, obj1_slot, obj2_slot);
+      use_range_end(builder, range);
+      *rv = ref_simple(is_slot);
       continue;
     }
     free(range);

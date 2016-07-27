@@ -89,6 +89,13 @@ void dump_instr(VMState *state, Instr **instr_p) {
               get_arg_info_ext(state, ((KeyInObjInstr*) instr)->obj));
       *instr_p = (Instr*) ((KeyInObjInstr*) instr + 1);
       break;
+    case INSTR_IDENTICAL:
+      fprintf(stderr, "%s = %s == %s\n",
+              get_write_arg_info(((IdenticalInstr*) instr)->target),
+              get_arg_info_ext(state, ((IdenticalInstr*) instr)->obj1),
+              get_arg_info_ext(state, ((IdenticalInstr*) instr)->obj2));
+      *instr_p = (Instr*) ((IdenticalInstr*) instr + 1);
+      break;
     case INSTR_INSTANCEOF:
       fprintf(stderr, "instance of: %s = %s instanceof %s\n",
               get_write_arg_info(((InstanceofInstr*) instr)->target),

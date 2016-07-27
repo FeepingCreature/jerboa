@@ -41,6 +41,11 @@ CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
   if (instr->key.kind == ARG_SLOT) CHKSLOT(instr->key.slot);
   if (instr->obj.kind == ARG_SLOT) CHKSLOT(instr->obj.slot);
   if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
+CASE(INSTR_IDENTICAL, IdenticalInstr)
+  CHKSLOT(instr->base.context_slot);
+  if (instr->obj1.kind == ARG_SLOT) CHKSLOT(instr->obj1.slot);
+  if (instr->obj2.kind == ARG_SLOT) CHKSLOT(instr->obj2.slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT(instr->target.slot);
 CASE(INSTR_INSTANCEOF, InstanceofInstr)
   CHKSLOT(instr->base.context_slot);
   if (instr->obj.kind == ARG_SLOT) CHKSLOT(instr->obj.slot);

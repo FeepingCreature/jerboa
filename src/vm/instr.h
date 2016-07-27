@@ -101,6 +101,12 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  Arg obj1, obj2;
+  WriteArg target;
+} IdenticalInstr;
+
+typedef struct {
+  Instr base;
   Arg obj, proto; WriteArg target;
 } InstanceofInstr;
 

@@ -143,6 +143,17 @@ int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot) {
   return instr.target.slot;
 }
 
+int addinstr_identical(FunctionBuilder *builder, int slot1, int slot2) {
+  IdenticalInstr instr = {
+    .base = { .type = INSTR_IDENTICAL },
+    .obj1 = (Arg) { .kind = ARG_SLOT, .slot = slot1 },
+    .obj2 = (Arg) { .kind = ARG_SLOT, .slot = slot2 },
+    .target = (WriteArg) { .kind = ARG_SLOT, .slot = builder->slot_base++ }
+  };
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+  return instr.target.slot;
+}
+
 int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot) {
   InstanceofInstr instr = {
     .base = { .type = INSTR_INSTANCEOF },

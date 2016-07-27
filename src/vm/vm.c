@@ -524,6 +524,27 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
   return (FnWrap) { instr_fns[state->instr->type] };
 }
 
+static FnWrap vm_instr_identical(VMState *state) {
+  IdenticalInstr *instr= (IdenticalInstr*) state->instr;
+  Value arg1 = load_arg(state->frame, instr->obj1);
+  Value arg2 = load_arg(state->frame, instr->obj2);
+  bool res;
+  if (arg1.type != arg2.type) res = false;
+  else if (arg1.type == TYPE_NULL) res = true;
+  else if (arg1.type == TYPE_OBJECT) {
+    res = arg1.obj == arg2.obj;
+  } else if (arg1.type == TYPE_BOOL) {
+    res = arg1.b == arg2.b;
+  } else if (arg1.type == TYPE_INT) {
+    res = arg1.i == arg2.i;
+  } else if (arg1.type == TYPE_FLOAT) {
+    res = arg1.f == arg2.f;
+  } else assert(false);
+  set_arg(state, instr->target, BOOL2VAL(res));
+  state->instr = (Instr*)(instr + 1);
+  return (FnWrap) { instr_fns[state->instr->type] };
+}
+
 static FnWrap vm_instr_instanceof(VMState *state) {
   InstanceofInstr *instr = (InstanceofInstr*) state->instr;
   
@@ -832,6 +853,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ACCESS] = vm_instr_access;
   instr_fns[INSTR_ASSIGN] = vm_instr_assign;
   instr_fns[INSTR_KEY_IN_OBJ] = vm_instr_key_in_obj;
+  instr_fns[INSTR_IDENTICAL] = vm_instr_identical;
   instr_fns[INSTR_INSTANCEOF] = vm_instr_instanceof;
   instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
   instr_fns[INSTR_CALL] = vm_instr_call;

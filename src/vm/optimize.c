@@ -41,6 +41,9 @@ void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             if (instr->key.kind == ARG_SLOT) slots[instr->key.slot] = false;
             if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
+          CASE(INSTR_IDENTICAL, IdenticalInstr)
+            if (instr->obj1.kind == ARG_SLOT) slots[instr->obj1.slot] = false;
+            if (instr->obj2.kind == ARG_SLOT) slots[instr->obj2.slot] = false;
           CASE(INSTR_INSTANCEOF, InstanceofInstr)
             if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
             if (instr->proto.kind == ARG_SLOT) slots[instr->proto.slot] = false;
@@ -645,6 +648,10 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->target.kind == ARG_SLOT) slot_live[instr->target.slot] = true;
+          CASE(INSTR_IDENTICAL, IdenticalInstr)
+            if (instr->obj1.kind == ARG_SLOT) slot_live[instr->obj1.slot] = true;
+            if (instr->obj2.kind == ARG_SLOT) slot_live[instr->obj2.slot] = true;
             if (instr->target.kind == ARG_SLOT) slot_live[instr->target.slot] = true;
           CASE(INSTR_INSTANCEOF, InstanceofInstr)
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
