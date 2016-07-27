@@ -48,14 +48,6 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   setup_call(state, info2);
 }
 
-// TODO add "IS_TRUTHY" instr so we can promote, say, null, to bool before calling this
-static void bool_not_fn(VMState *state, CallInfo *info) {
-  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
-  Value this_val = load_arg(state->frame, info->this_arg);
-  VM_ASSERT(IS_BOOL(this_val), "internal error: bool negation called on wrong type of object");
-  vm_return(state, info, make_bool(state, !AS_BOOL(this_val)));
-}
-
 static void bool_eq_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
@@ -1166,7 +1158,6 @@ Object *create_root(VMState *state) {
   Object *bool_obj = AS_OBJ(make_object(state, NULL));
   bool_obj->flags |= OBJ_NOINHERIT;
   object_set(state, root, "bool", OBJ2VAL(bool_obj));
-  object_set(state, bool_obj, "!", make_fn(state, bool_not_fn));
   object_set(state, bool_obj, "==", make_fn(state, bool_eq_fn));
   state->shared->vcache.bool_base = bool_obj;
   bool_obj->flags |= OBJ_FROZEN;

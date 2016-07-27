@@ -1,0 +1,8 @@
+var foo = { bar = 5; };
+assert("baz" !in foo);
+
+var bar = 5, bar2 = 6;
+assert(bar !is bar2);
+
+var baz = {};
+assert(baz !instanceof foo);
