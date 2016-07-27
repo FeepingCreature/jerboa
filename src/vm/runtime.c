@@ -589,6 +589,55 @@ static void array_compare_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, BOOL2VAL(res));
 }
 
+static void array_splice_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len >= 1, "wrong arity: expected 1 or more, got %i", info->args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
+  VM_ASSERT(arr_obj, "internal error: array 'splice()' called on object that is not an array");
+  int len = arr_obj->length;
+  
+  Value start_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
+  VM_ASSERT(IS_INT(start_val), "array 'splice()' called with non-int");
+  int start = AS_INT(start_val);
+  VM_ASSERT(start >= 0 && (len == 0 || start < len), "start out of bounds");
+  
+  int deleteCount = len - start;
+  if (info->args_len > 1) {
+    Value deleteCount_val = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
+    VM_ASSERT(IS_INT(deleteCount_val), "array 'splice()' called with non-int argument 2");
+    deleteCount = AS_INT(deleteCount_val);
+  }
+  VM_ASSERT(deleteCount >= 0, "deleteCount out of bounds");
+  if (start + deleteCount > len) deleteCount = len - start;
+  
+  int new_items = info->args_len - 2;
+  new_items = (new_items >= 0) ? new_items : 0;
+  
+  int newlen = len - deleteCount + new_items;
+  int kept_right_items = len - start - deleteCount;
+  
+  if (new_items > deleteCount) {
+    array_resize(state, arr_obj, newlen, true);
+    // shift up
+    // 2, 3, 4: .slice(1, 1, 6, 7) => 2, 6, 7, 4
+    for (int i = 0; i < kept_right_items; i++) {
+      arr_obj->ptr[newlen - 1 - i] = arr_obj->ptr[len - 1 - i];
+    }
+  }
+  for (int i = 0; i < new_items; i++) {
+    arr_obj->ptr[start + i] = load_arg(state->frame, INFO_ARGS_PTR(info)[2 + i]);
+  }
+  if (new_items < deleteCount) {
+    // shift down
+    // 1, 2, 3, 4: .slice(1, 2, 6) => 1, 6, 4
+    for (int i = 0; i < kept_right_items; i++) {
+      arr_obj->ptr[start + new_items + i] = arr_obj->ptr[start + deleteCount + i];
+    }
+    array_resize(state, arr_obj, newlen, true);
+  }
+  vm_return(state, info, OBJ2VAL((Object*) arr_obj));
+}
+
 static void array_join_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
@@ -1218,6 +1267,7 @@ Object *create_root(VMState *state) {
   object_set(state, array_obj, "[]", make_fn(state, array_index_fn));
   object_set(state, array_obj, "[]=", make_fn(state, array_index_assign_fn));
   object_set(state, array_obj, "==", make_fn(state, array_compare_fn));
+  object_set(state, array_obj, "splice", make_fn(state, array_splice_fn));
   object_set(state, array_obj, "join", make_fn(state, array_join_fn));
   state->shared->vcache.array_base = array_obj;
   
