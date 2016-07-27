@@ -1,0 +1,11 @@
+assert([2, 3] == [2, 3]);
+assert([2, 3, 4] != [2, 3]);
+assert([] == []);
+assert([] != [2]);
+
+assert([2, 3] !is [2, 3]);
+var a = [2, 3];
+assert(a is a);
+
+// TODO
+// assert([2, [3, 4]] == [2, [3, 4]]);

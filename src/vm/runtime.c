@@ -559,6 +559,36 @@ static void array_index_assign_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, VNULL);
 }
 
+// TODO runtime eq(a, b) function
+static void array_compare_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *arr_obj1 = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
+  ArrayObject *arr_obj2 = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), array_base);
+  VM_ASSERT(arr_obj1, "internal error: array '==' called on object that is not an array");
+  VM_ASSERT(arr_obj2, "internal error: right-side argument to array '==' is not an array");
+  bool res = true;
+  if (arr_obj1->length != arr_obj2->length) res = false;
+  else {
+    for (int i = 0; i < arr_obj1->length; i++) {
+      // TODO recurse
+      Value val1 = arr_obj1->ptr[i], val2 = arr_obj2->ptr[i];
+      if (val1.type != val2.type) res = false;
+      else if (val1.type == TYPE_NULL) res = true;
+      else if (val1.type == TYPE_OBJECT) {
+        res = val1.obj == val2.obj;
+      } else if (val1.type == TYPE_BOOL) {
+        res = val1.b == val2.b;
+      } else if (val1.type == TYPE_INT) {
+        res = val1.i == val2.i;
+      } else if (val1.type == TYPE_FLOAT) {
+        res = val1.f == val2.f;
+      } else assert(false);
+    }
+  }
+  vm_return(state, info, BOOL2VAL(res));
+}
+
 static void array_join_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
@@ -1187,6 +1217,7 @@ Object *create_root(VMState *state) {
   object_set(state, array_obj, "pop", make_fn(state, array_pop_fn));
   object_set(state, array_obj, "[]", make_fn(state, array_index_fn));
   object_set(state, array_obj, "[]=", make_fn(state, array_index_assign_fn));
+  object_set(state, array_obj, "==", make_fn(state, array_compare_fn));
   object_set(state, array_obj, "join", make_fn(state, array_join_fn));
   state->shared->vcache.array_base = array_obj;
   
