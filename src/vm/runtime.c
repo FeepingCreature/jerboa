@@ -31,16 +31,16 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   setup_stub_frame(state, len);
   state->frame->target = info->target;
   for (int i = 0; i < len; ++i) {
-    state->frame->slots_ptr[i] = args_array->ptr[i];
+    state->frame->slots_ptr[i + 1] = args_array->ptr[i];
   }
   
   CallInfo *info2 = alloca(sizeof(CallInfo) + sizeof(Arg) * len);
   info2->args_len = len;
   info2->this_arg = (Arg) { .kind = ARG_VALUE, .value = this_value };
   info2->fn = (Arg) { .kind = ARG_VALUE, .value = fn_value };
-  info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = len }; // len is the return slot
+  info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = 0 }; // 0 is the return slot
   for (int i = 0; i < len; ++i) {
-    INFO_ARGS_PTR(info2)[i] = (Arg) { .kind = ARG_SLOT, .slot = i };
+    INFO_ARGS_PTR(info2)[i] = (Arg) { .kind = ARG_SLOT, .slot = i + 1 };
   }
   // passthrough call to actual function
   // note: may set its own errors
@@ -539,7 +539,7 @@ static void array_index_fn(VMState *state, CallInfo *info) {
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
   Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  if (!IS_INT(arg)) { vm_return(state, info, VNULL); return; }
+  VM_ASSERT(IS_INT(arg), "array '[]' overload called with non-int");
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = AS_INT(arg);
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");

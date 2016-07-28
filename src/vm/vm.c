@@ -90,13 +90,12 @@ void vm_remove_frame(VMState *state) {
   vm_stack_free(state, cf, sizeof(Callframe));
 }
 
+static __thread ReturnInstr stub_ret0 = { { .type = INSTR_RETURN }, .ret = { .kind = ARG_SLOT, .slot = 0 } };
+
 void setup_stub_frame(VMState *state, int slots) {
   if (state->frame) state->frame->instr_ptr = state->instr;
   vm_alloc_frame(state, slots + 1, 0);
-  ReturnInstr *ret = calloc(sizeof(ReturnInstr), 1);
-  ret->base.type = INSTR_RETURN;
-  ret->ret = (Arg) { .kind = ARG_SLOT, .slot = slots };
-  state->instr = (Instr*) ret;
+  state->instr = (Instr*) &stub_ret0;
 }
 
 void vm_print_backtrace(VMState *state) {
@@ -646,18 +645,17 @@ static FnWrap vm_instr_call(VMState *state) {
   
   // inline call_internal/setup_call hotpath
   Value fn = load_arg(state->frame, info->fn);
+  VM_ASSERT2(!IS_NULL(fn), "function was null");
   VM_ASSERT2(IS_OBJ(fn), "this is not a thing I can call.");
   Object *fn_obj_n = AS_OBJ(fn);
   
   if (fn_obj_n->parent == state->shared->vcache.function_base) {
     state->instr = next_instr;
+    state->frame->backtrace_belongs_to_p = &call_instr->base.belongs_to;
     ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
-    FnWrap next_instr[] = {
-      (FnWrap) { vm_halt },
-      (FnWrap) { instr_fns[state->instr->type] },
-      (FnWrap) { vm_halt }
-    };
-    return next_instr[state->runstate];
+    if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
+    state->frame->backtrace_belongs_to_p = NULL;
+    return (FnWrap) { instr_fns[state->instr->type] };
   } else {
     // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
     // solve explicitly

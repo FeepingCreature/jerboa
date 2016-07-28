@@ -375,5 +375,6 @@ UserFunction *build_function(FunctionBuilder *builder) {
   fn->is_method = false;
   fn->non_ssa = false;
   fn->optimized = false;
+  fn->num_optimized = 0;
   return fn;
 }

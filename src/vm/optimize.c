@@ -1654,6 +1654,10 @@ UserFunction *compactify_registers(UserFunction *uf) {
   
   int maxslot = 0;
   for (int i = 0; i < uf->slots; ++i) if (slot_map[i] > maxslot) maxslot = slot_map[i];
+  free(first_use);
+  free(last_use);
+  free(newslot_in_use);
+  free(slot_map);
   
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
@@ -1747,6 +1751,14 @@ UserFunction *remove_pointless_blocks(UserFunction *uf) {
 }
 
 UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context) {
+  if (uf->num_optimized > 5) {
+    return uf;
+  }
+  if (uf->num_optimized == 5) {
+    fprintf(stderr, "function optimized too many times.\n");
+  }
+  uf->num_optimized ++;
+  
   if (uf->non_ssa != false) {
     fprintf(stderr, "called optimizer on function that is non-ssa!\n");
     abort();

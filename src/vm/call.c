@@ -87,7 +87,6 @@ bool setup_call(VMState *state, CallInfo *info) {
   if (UNLIKELY(cl_obj->num_called == 10)) {
     assert(!vmfun->optimized);
     vmfun = cl_obj->vmfun = optimize_runtime(state, vmfun, context);
-    assert(vmfun->optimized);
   }
   call_function(state, context, vmfun, info);
   // gc_enable(state);

@@ -291,6 +291,7 @@ typedef struct {
   bool is_method, variadic_tail;
   FunctionBody body;
   bool non_ssa, optimized;
+  int num_optimized;
 } UserFunction;
 
 void free_function(UserFunction *uf);
