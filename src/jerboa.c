@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
   vm_update_frame(&vmstate);
   vm_run(&vmstate);
   
-  save_profile_output("profile.html", source, &vmstate.shared->profstate);
+  save_profile_output("profile.html", &vmstate.shared->profstate);
   
   int resvalue = 0;
   if (vmstate.runstate == VM_ERRORED) {

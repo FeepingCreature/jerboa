@@ -485,8 +485,9 @@ void free_function(UserFunction *uf) {
 }
 
 // TODO move elsewhere
+
 typedef struct {
-  const char *text_from, *text_to;
+  FileRange *range;
   int num_samples;
   bool direct;
 } ProfilerRecord;
@@ -494,11 +495,11 @@ typedef struct {
 int prec_sort_outside_in_fn(const void *a, const void *b) {
   const ProfilerRecord *rec_a = a, *rec_b = b;
   // ranges that start earlier
-  if (rec_a->text_from < rec_b->text_from) return -1;
-  if (rec_a->text_from > rec_b->text_from) return 1;
+  if (rec_a->range->text_from < rec_b->range->text_from) return -1;
+  if (rec_a->range->text_from > rec_b->range->text_from) return 1;
   // then ranges that end later (outermost)
-  if (rec_a->text_to > rec_b->text_to) return -1;
-  if (rec_a->text_to < rec_b->text_to) return 1;
+  if (rec_a->range->text_to > rec_b->range->text_to) return -1;
+  if (rec_a->range->text_to < rec_b->range->text_to) return 1;
   // otherwise they're identical (direct/indirect collision)
   return 0;
 }
@@ -519,11 +520,13 @@ static void push_record(OpenRange **range_p, ProfilerRecord *rec) {
 }
 
 static void drop_record(OpenRange **range_p) {
-  *range_p = (*range_p)->prev;
+  OpenRange *prev_range = (*range_p)->prev;
+  free(*range_p);
+  *range_p = prev_range;
 }
 
 // TODO move into separate file
-void save_profile_output(char *file, TextRange source, VMProfileState *profile_state) {
+void save_profile_output(char *file, VMProfileState *profile_state) {
   int fd = creat(file, 0644);
   if (fd == -1) {
     fprintf(stderr, "error creating profiler output file: %s\n", strerror(errno));
@@ -550,7 +553,7 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_direct) max_samples_direct = samples;
       sum_samples_direct += samples;
-      record_entries[k++] = (ProfilerRecord) { range->text_from, range->text_to, samples, true };
+      record_entries[k++] = (ProfilerRecord) { range, samples, true };
     }
   }
   for (int i = 0; i < indirect_table->entries_num; ++i) {
@@ -561,96 +564,113 @@ void save_profile_output(char *file, TextRange source, VMProfileState *profile_s
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_indirect) max_samples_indirect = samples;
       sum_samples_indirect += samples;
-      record_entries[k++] = (ProfilerRecord) { range->text_from, range->text_to, samples, false };
+      record_entries[k++] = (ProfilerRecord) { range, samples, false };
     }
   }
   assert(k == num_records);
   
   qsort(record_entries, num_records, sizeof(ProfilerRecord), prec_sort_outside_in_fn);
   
-  int cur_entry_id = 0;
-#define CUR_ENTRY record_entries[cur_entry_id]
-  
-  OpenRange *open_range_head = NULL;
+#define CUR_ENTRY (&record_entries[cur_entry_id])
   
   dprintf(fd, "<!DOCTYPE html>\n");
-  dprintf(fd, "<html><head>\n");
+  dprintf(fd, "<html lang=\"\"><head><title>Profiler</title>\n");
   // dprintf(fd, "<style>span { border-left: 1px solid #eee; border-right: 1px solid #ddd; border-bottom: 1px solid #fff; }</style>\n");
   dprintf(fd, "<style>span { position: relative; }</style>\n");
-  dprintf(fd, "</head><body>\n");
-  dprintf(fd, "<pre>\n");
+  dprintf(fd, "<script src=\"https://code.jquery.com/jquery-3.1.0.min.js\"></script>\n");
+  dprintf(fd, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css\" crossorigin=\"anonymous\">\n");
+  dprintf(fd, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css\" crossorigin=\"anonymous\">\n");
+  dprintf(fd, "<script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js\" crossorigin=\"anonymous\"></script>\n");
+  dprintf(fd, "</head><body style=\"margin: 20px;\">\n");
   
-  char *cur_char = source.start;
-  int zindex = 100000; // if there's more spans than this we are anyways fucked
-  while (cur_char != source.end) {
-    // close all extant
-    while (open_range_head && open_range_head->record->text_to == cur_char) {
-      // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
-      drop_record(&open_range_head);
-      dprintf(fd, "</span>");
-    }
-    // skip any preceding
-    while (cur_entry_id < num_records && CUR_ENTRY.text_from < cur_char) {
-      cur_entry_id ++;
-    }
-    // open any new
-    while (cur_entry_id < num_records && CUR_ENTRY.text_from == cur_char) {
-      // fprintf(stderr, "%li with %li: open tag\n", CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from);
-      push_record(&open_range_head, &CUR_ENTRY);
-      int *samples_dir_p = NULL, *samples_indir_p = NULL;
-      OpenRange *cur = open_range_head;
-      // find the last (innermost) set dir/indir values
-      while (cur && (!samples_dir_p || !samples_indir_p)) {
-        if (!samples_dir_p && cur->record->direct) samples_dir_p = &cur->record->num_samples;
-        if (!samples_indir_p && !cur->record->direct) samples_indir_p = &cur->record->num_samples;
-        cur = cur->prev;
+  dprintf(fd, "<div class=\"accordion\" id=\"file_accordion\">\n");
+  
+  int num_files = 0;
+  FileEntry *files = get_files(&num_files);
+  for (int i = 0; i < num_files; i++) {
+    TextRange source = files[i].range;
+    OpenRange *open_range_head = NULL;
+    
+    dprintf(fd, "<div class=\"accordion-group\">\n");
+    dprintf(fd, "<div class=\"accordion-heading\"><a class=\"accordion-toggle\" data-toggle=\"collapse\" data-parent=\"#file_accordion\" href=\"#filecollapse%i\">\n", i);
+    dprintf(fd, "%s\n", files[i].file);
+    dprintf(fd, "</a></div>\n");
+    dprintf(fd, "<div id=\"filecollapse%i\" class=\"accordion-body collapse\"><div class=\"accordion-inner\">\n", i);
+    dprintf(fd, "<pre>");
+    char *cur_char = source.start;
+    int cur_entry_id = 0;
+    int zindex = 100000; // if there's more spans than this we are anyways fucked
+    while (cur_char != source.end) {
+      // close all extant
+      while (open_range_head && open_range_head->record->range->text_to == cur_char) {
+        // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
+        drop_record(&open_range_head);
+        dprintf(fd, "</span>");
       }
-      int samples_dir = samples_dir_p ? *samples_dir_p : 0;
-      int samples_indir = samples_indir_p ? *samples_indir_p : 0;
-      double percent_dir = (samples_dir * 100.0) / sum_samples_direct;
-      int hex_dir = 255 - (samples_dir * 255LL) / max_samples_direct;
-      // sum direct == max indirect
-      double percent_indir = (samples_indir * 100.0) / sum_samples_direct;
-      // int hex_indir = 255 - (samples_indir * 255LL) / sum_samples_direct;
-      int weight_indir = 100 + 100 * ((samples_indir * 8LL) / sum_samples_direct);
-      float border_indir = samples_indir * 3.0 / sum_samples_direct;
-      int fontsize_indir = 100 + (samples_indir * 10LL) / sum_samples_direct;
-      int bordercol_indir = 15 - (int)(15*((border_indir < 1)?border_indir:1));
-      /*printf("%li with %li: open tag %i and %i over (%i, %i) and (%i, %i): %02x and %i / %f\n",
-             CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from,
-             samples_dir, samples_indir,
-             max_samples_direct, sum_samples_direct,
-             max_samples_indirect, sum_samples_indirect,
-             hex_dir, weight_indir, border_indir);*/
-      dprintf(fd, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
-        " style=\"",
-        percent_dir, percent_indir);
-      if (hex_dir <= 250/* || hex_dir <= 250*/) {
-        dprintf(fd, "background-color:#ff%02x%02x;",
-          hex_dir, hex_dir);
+      // skip any preceding
+      while (cur_entry_id < num_records && CUR_ENTRY->range->text_from < cur_char) {
+        cur_entry_id ++;
       }
-      dprintf(fd, "font-weight:%i;border-bottom:%fpx solid #%1x%1x%1x;font-size: %i%%;",
-              weight_indir, border_indir, bordercol_indir, bordercol_indir, bordercol_indir, fontsize_indir);
-      dprintf(fd, "z-index: %i;", --zindex);
-      dprintf(fd, "\">");
-      cur_entry_id ++;
+      // open any new
+      while (cur_entry_id < num_records && CUR_ENTRY->range->text_from == cur_char) {
+        // fprintf(stderr, "%li with %li: open tag\n", CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from);
+        push_record(&open_range_head, CUR_ENTRY);
+        int *samples_dir_p = NULL, *samples_indir_p = NULL;
+        OpenRange *cur = open_range_head;
+        // find the last (innermost) set dir/indir values
+        while (cur && (!samples_dir_p || !samples_indir_p)) {
+          if (!samples_dir_p && cur->record->direct) samples_dir_p = &cur->record->num_samples;
+          if (!samples_indir_p && !cur->record->direct) samples_indir_p = &cur->record->num_samples;
+          cur = cur->prev;
+        }
+        int samples_dir = samples_dir_p ? *samples_dir_p : 0;
+        int samples_indir = samples_indir_p ? *samples_indir_p : 0;
+        double percent_dir = (samples_dir * 100.0) / sum_samples_direct;
+        int hex_dir = 255 - (samples_dir * 255LL) / max_samples_direct;
+        // sum direct == max indirect
+        double percent_indir = (samples_indir * 100.0) / sum_samples_direct;
+        // int hex_indir = 255 - (samples_indir * 255LL) / sum_samples_direct;
+        int weight_indir = 100 + 100 * ((samples_indir * 8LL) / sum_samples_direct);
+        float border_indir = samples_indir * 3.0 / sum_samples_direct;
+        int fontsize_indir = 100 + (samples_indir * 10LL) / sum_samples_direct;
+        int bordercol_indir = 15 - (int)(15*((border_indir < 1)?border_indir:1));
+        /*printf("%li with %li: open tag %i and %i over (%i, %i) and (%i, %i): %02x and %i / %f\n",
+              CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from,
+              samples_dir, samples_indir,
+              max_samples_direct, sum_samples_direct,
+              max_samples_indirect, sum_samples_indirect,
+              hex_dir, weight_indir, border_indir);*/
+        dprintf(fd, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
+          " style=\"",
+          percent_dir, percent_indir);
+        if (hex_dir <= 250/* || hex_dir <= 250*/) {
+          dprintf(fd, "background-color:#ff%02x%02x;",
+            hex_dir, hex_dir);
+        }
+        dprintf(fd, "font-weight:%i;border-bottom:%fpx solid #%1x%1x%1x;font-size: %i%%;",
+                weight_indir, border_indir, bordercol_indir, bordercol_indir, bordercol_indir, fontsize_indir);
+        dprintf(fd, "z-index: %i;", --zindex);
+        dprintf(fd, "\">");
+        cur_entry_id ++;
+      }
+      // close all 0-size new
+      while (open_range_head && open_range_head->record->range->text_to == cur_char) {
+        // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
+        drop_record(&open_range_head);
+        dprintf(fd, "</span>");
+      }
+      if (*cur_char == '<') dprintf(fd, "&lt;");
+      else if (*cur_char == '>') dprintf(fd, "&gt;");
+      // else if (*cur_char == '\n') dprintf(fd, "</pre>\n<pre>");
+      else dprintf(fd, "%c", *cur_char);
+      cur_char ++;
     }
-    // close all 0-size new
-    while (open_range_head && open_range_head->record->text_to == cur_char) {
-      // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
-      drop_record(&open_range_head);
-      dprintf(fd, "</span>");
-    }
-    if (*cur_char == '<') dprintf(fd, "&lt;");
-    else if (*cur_char == '>') dprintf(fd, "&gt;");
-    // else if (*cur_char == '\n') dprintf(fd, "</pre>\n<pre>");
-    else dprintf(fd, "%c", *cur_char);
-    cur_char ++;
+    dprintf(fd, "</pre>\n");
+    dprintf(fd, "</div></div></div>\n");
   }
-  
 #undef CUR_ENTRY
   
-  dprintf(fd, "</pre>");
+  dprintf(fd, "</div>\n");
   dprintf(fd, "</body></html>");
   close(fd);
 }

@@ -19,7 +19,7 @@ void cache_free(int size, void *ptr);
 
 void free_cache(VMState *state);
 
-void save_profile_output(char *file, TextRange source, VMProfileState *profile_state);
+void save_profile_output(char *file, VMProfileState *profile_state);
 
 Value *object_lookup_ref(Object *obj, const char *key);
 

@@ -51,6 +51,24 @@ void register_file(TextRange text, const char *name, int row_start, int col_star
   record = newrecord;
 }
 
+FileEntry *get_files(int *length_p) {
+  int num_records = 0;
+  FileRecord *cur = record;
+  while (cur) {
+    num_records ++;
+    cur = cur->prev;
+  }
+  FileEntry *res = calloc(sizeof(FileEntry), num_records);
+  int i = 0;
+  cur = record;
+  while (cur) {
+    res[i++] = (FileEntry) { .file = cur->name, .range = cur->text };
+    cur = cur->prev;
+  }
+  *length_p = num_records;
+  return res;
+}
+
 // most find_text_pos calls are in the same line as last time
 static __thread TextRange last_line = {0};
 static __thread FileRecord *last_record = NULL;
