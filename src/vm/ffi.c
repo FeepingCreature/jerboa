@@ -64,14 +64,6 @@ static void ffi_ptr_dereference(VMState *state, CallInfo *info) {
   
   FFIObject *ffi = (FFIObject*) AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
   Object *ffi_type = AS_OBJ(OBJECT_LOOKUP_STRING((Object*) ffi, "type", NULL));
-  Object *ffi_short = ffi->short_obj;
-  Object *ffi_int = ffi->int_obj;
-  Object *ffi_ushort = ffi->ushort_obj;
-  Object *ffi_int8 = ffi->int8_obj;
-  Object *ffi_uint8 = ffi->uint8_obj;
-  // Object *ffi_uint32 = ffi->uint32_obj;
-  Object *ffi_pointer = ffi->pointer_obj;
-  Object *ffi_charptr = ffi->char_pointer_obj;
   
   Object *thisptr = AS_OBJ(load_arg(state->frame, info->this_arg));
   VM_ASSERT(thisptr->parent == pointer_base, "internal error");
@@ -81,30 +73,39 @@ static void ffi_ptr_dereference(VMState *state, CallInfo *info) {
   Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
-  assert(ffi_type_obj);
+  VM_ASSERT(ffi_type_obj, "type is not a FFI type");
   char *offset_ptr = (char*) thisptr_obj->ptr + offs;
-  if (ffi_type_obj == ffi_short) {
+  if (ffi_type_obj == ffi->short_obj) {
     short s = *(short*) offset_ptr;
     vm_return(state, info, INT2VAL(s));
-  } else if (ffi_type_obj == ffi_ushort) {
+  } else if (ffi_type_obj == ffi->ushort_obj) {
     unsigned short us = *(unsigned short*) offset_ptr;
     vm_return(state, info, INT2VAL(us));
-  } else if (ffi_type_obj == ffi_int) {
+  } else if (ffi_type_obj == ffi->int_obj) {
     int i = *(int*) offset_ptr;
     vm_return(state, info, INT2VAL(i));
-  } else if (ffi_type_obj == ffi_uint8) {
-    uint8_t u8 = *(uint8_t*) offset_ptr;
-    vm_return(state, info, INT2VAL(u8));
-  } else if (ffi_type_obj == ffi_int8) {
+  } else if (ffi_type_obj == ffi->uint_obj) {
+    unsigned int u = *(unsigned int*) offset_ptr;
+    vm_return(state, info, INT2VAL(u));
+  } else if (ffi_type_obj == ffi->int8_obj) {
     int8_t i8 = *(int8_t*) offset_ptr;
     vm_return(state, info, INT2VAL(i8));
-  } else if (ffi_type_obj == ffi_pointer) {
+  } else if (ffi_type_obj == ffi->uint8_obj) {
+    uint8_t u8 = *(uint8_t*) offset_ptr;
+    vm_return(state, info, INT2VAL(u8));
+  } else if (ffi_type_obj == ffi->int32_obj) {
+    int32_t i32 = *(int32_t*) offset_ptr;
+    vm_return(state, info, INT2VAL(i32));
+  } else if (ffi_type_obj == ffi->uint32_obj) {
+    uint32_t u32 = *(uint32_t*) offset_ptr;
+    vm_return(state, info, INT2VAL(u32));
+  } else if (ffi_type_obj == ffi->pointer_obj) {
     void *ptr = *(void**) offset_ptr;
     vm_return(state, info, make_ffi_pointer(state, ptr));
-  } else if (ffi_type_obj == ffi_charptr) {
+  } else if (ffi_type_obj == ffi->char_pointer_obj) {
     char *ptr = *(char**) offset_ptr;
     vm_return(state, info, make_string_static(state, ptr));
-  } else assert("TODO" && false);
+  } else { fprintf(stderr, "TODO\n"); abort(); }
 }
 
 bool ffi_pointer_write(VMState *state, Object *type, void *ptr, Value val) {
@@ -137,10 +138,18 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
     unsigned int i = *(unsigned int*) ptr;
     return INT2VAL(i);
   } else {
-    Object *c_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(type, "c_type", NULL));
-    StringObject *c_type = (StringObject*) obj_instance_of_or_equal(c_type_obj, string_base);
-    VM_ASSERT(c_type, "internal type error") VNULL;
-    VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) VNULL;
+    bool has_pointer = false;
+    OBJECT_LOOKUP_STRING(type, "pointer", &has_pointer);
+    if (!has_pointer) {
+      Object *c_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(type, "c_type", NULL));
+      StringObject *c_type = (StringObject*) obj_instance_of_or_equal(c_type_obj, string_base);
+      VM_ASSERT(c_type, "internal type error") VNULL;
+      VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) VNULL;
+    }
+    Value res = make_object(state, type);
+    char *error = object_set(state, AS_OBJ(res), "pointer", make_ffi_pointer(state, ptr));
+    VM_ASSERT(!error, error) VNULL;
+    return res;
   }
 }
 

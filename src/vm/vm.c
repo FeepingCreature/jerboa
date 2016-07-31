@@ -538,7 +538,7 @@ static FnWrap vm_instr_identical(VMState *state) {
     res = arg1.i == arg2.i;
   } else if (arg1.type == TYPE_FLOAT) {
     res = arg1.f == arg2.f;
-  } else assert(false);
+  } else abort();
   set_arg(state, instr->target, BOOL2VAL(res));
   state->instr = (Instr*)(instr + 1);
   return (FnWrap) { instr_fns[state->instr->type] };
