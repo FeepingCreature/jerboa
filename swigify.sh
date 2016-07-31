@@ -17,6 +17,11 @@ do
       swigargs+=("$2")
       shift
       ;;
+    -i|--include)
+      swigargs+=("-i")
+      swigargs+=("$2")
+      shift
+      ;;
     -h)
       usage
       exit 1

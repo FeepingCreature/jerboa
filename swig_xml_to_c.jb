@@ -6,14 +6,16 @@ if (arguments.length < 2) {
 }
 
 var xmlfile = arguments[0], libfile = arguments[1];
-var prefixes = [];
-var excludes = [];
+var modifiers = [];
 for (var i = 2; i < arguments.length; i++) {
   if (arguments[i] == "-x") {
     i++;
-    excludes.push(arguments[i]);
+    modifiers.push({ kind = "exclude"; value = arguments[i]; });
+  } else if (arguments[i] == "-i") {
+    i++;
+    modifiers.push({ kind = "include"; value = arguments[i]; });
   } else {
-    prefixes.push(arguments[i]);
+    modifiers.push({ kind = "prefix"; value = arguments[i]; });
   }
 }
 
@@ -43,18 +45,28 @@ function startswithnum(str) {
 }
 
 function short_name(str) {
-  for (var i = 0; i < prefixes.length; i++) {
-    var rest = str.startsWith(prefixes[i]);
-    // don't accidentally turn it into a bad identifier
-    if (rest && !startswithnum(rest)) { str = rest; }
+  for (var i = 0; i < modifiers.length; i++) {
+    if (modifiers[i].kind == "prefix") {
+      var rest = str.startsWith(modifiers[i].value);
+      // don't accidentally turn it into a bad identifier
+      if (rest && !startswithnum(rest)) { str = rest; }
+    }
   }
   return str;
 }
 
 function exclude(str) {
-  str = short_name(str);
-  for (var i = 0; i < excludes.length; i++) {
-    if (str.startsWith(excludes[i])) return true;
+  for (var i = 0; i < modifiers.length; i++) {
+    if (modifiers[i].kind == "prefix") {
+      var rest = str.startsWith(modifiers[i].value);
+      // don't accidentally turn it into a bad identifier
+      if (rest && !startswithnum(rest)) { str = rest; }
+    } else if (modifiers[i].kind == "include") {
+      if (str.startsWith(modifiers[i].value)) return false;
+    } else {
+      assert(modifiers[i].kind == "exclude");
+      if (str.startsWith(modifiers[i].value)) return true;
+    }
   }
   return false;
 }

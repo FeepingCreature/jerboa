@@ -9,5 +9,5 @@ mkdir -p c
 ./swigify.sh -p hb_ -p HB_ /usr/include/harfbuzz/hb.h libharfbuzz.so c/harfbuzz.jb $(pkg-config harfbuzz --cflags --libs)
 ./swigify.sh -p hb_ -p HB_ c/harfbuzz_ft.h libharfbuzz.so c/harfbuzz_ft.jb $(pkg-config harfbuzz --cflags --libs) $(pkg-config freetype2 --cflags --libs) -I.
 ./swigify.sh -p cairo_ -p CAIRO_ /usr/include/cairo/cairo.h libcairo.so c/cairo.jb
-./swigify.sh -p pango_ -p PANGO_ /usr/include/pango*/pango/pangocairo.h libpangocairo-1.0.so c/pangocairo.jb $(pkg-config pango --cflags --libs) $(pkg-config cairo --cflags --libs)
+./swigify.sh -x G_ -i g_object_unref -x g_ -x cairo_ -p pango_ -p PANGO_ /usr/include/pango*/pango/pangocairo.h libpangocairo-1.0.so c/pangocairo.jb $(pkg-config pango --cflags --libs) $(pkg-config cairo --cflags --libs)
 ./swigify.sh -p glfwq -p GLFWQ_ -p GLFWQ -x gl -x GL -x PFNGL /usr/include/glfwq.h libglfwq.so c/glfwq.jb
