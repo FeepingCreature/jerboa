@@ -271,8 +271,6 @@ typedef struct {
   FileRange *belongs_to;
 } Instr;
 
-// Note: the IR is *lexically ordered*.
-// That means, any use of a slot must come after its initialization *in iteration order*.
 typedef struct {
   int offset, size;
 } InstrBlock;

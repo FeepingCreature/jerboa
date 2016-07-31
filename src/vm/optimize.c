@@ -1034,7 +1034,8 @@ UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
   int *num_slot_use = calloc(sizeof(int), uf->slots);
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
-#define CHKSLOT(SLOT) num_slot_use[SLOT]++;
+#define CHKSLOT_READ(SLOT) num_slot_use[SLOT]++;
+#define CHKSLOT_WRITE(SLOT) num_slot_use[SLOT]++;
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
 #define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
@@ -1046,7 +1047,8 @@ UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
         default: assert("Unhandled Instruction Type!" && false);
       }
 #undef CASE
-#undef CHKSLOT
+#undef CHKSLOT_READ
+#undef CHKSLOT_WRITE
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
@@ -1560,21 +1562,183 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
   return fn;
 }
 
-static void reassign_slot(int *slot_p, int numslots, Instr *instr_cur, Instr **first_use, Instr **last_use, bool *newslot_in_use, int *slot_map) {
-  int slot = *slot_p;
-  if (instr_cur == first_use[slot]) {
-    int selected_slot = -1;
-    for (int k = 0; k < numslots; ++k) if (!newslot_in_use[k]) {
-      selected_slot = k;
-      break;
-    }
-    assert(selected_slot != -1);
-    newslot_in_use[selected_slot] = true;
-    slot_map[slot] = selected_slot;
+typedef struct _SortedUniqList SortedUniqList;
+struct _SortedUniqList {
+  int value;
+  SortedUniqList *next;
+};
+
+void sl_print(FILE *file, SortedUniqList *list) {
+  fprintf(file, "{");
+  bool first = true;
+  while (list) {
+    if (first) { first = false; } else { fprintf(file, ", "); }
+    fprintf(file, "%i", list->value);
+    list = list->next;
   }
+  fprintf(file, "}");
+}
+
+bool sl_add_to(SortedUniqList **target, SortedUniqList *source) {
+  bool changed = false;
+  SortedUniqList **cursor = target;
+  while (source) {
+    while (*cursor && (*cursor)->value < source->value) cursor = &(*cursor)->next;
+    // now cursor->value >= source->value, insert source
+    if (*cursor && (*cursor)->value == source->value) { } // already in target
+    else {
+      SortedUniqList *next = *cursor;
+      *cursor = malloc(sizeof(SortedUniqList));
+      (*cursor)->value = source->value;
+      (*cursor)->next = next;
+      changed = true;
+    }
+    source = source->next;
+  }
+  return changed;
+}
+
+bool sl_add_value_to(SortedUniqList **target, int value) {
+  SortedUniqList entry = { .value = value };
+  return sl_add_to(target, &entry);
+}
+
+bool sl_subtract_from(SortedUniqList **target, SortedUniqList *source) {
+  bool changed = false;
+  SortedUniqList **cursor = target;
+  while (source) {
+    while (*cursor && (*cursor)->value < source->value) cursor = &(*cursor)->next;
+    // now cursor->value >= source->value, insert source
+    if (*cursor && (*cursor)->value == source->value) {
+      SortedUniqList *old_ptr = *cursor;
+      *cursor = (*cursor)->next;
+      changed = true;
+      free(old_ptr);
+    }
+    source = source->next;
+  }
+  return changed;
+}
+
+bool sl_subtract_value(SortedUniqList **target, int value) {
+  SortedUniqList entry = { .value = value };
+  return sl_subtract_from(target, &entry);
+}
+
+bool sl_contains(SortedUniqList *slist, int value) {
+  while (slist) {
+    if (slist->value > value) return false;
+    if (slist->value == value) return true;
+    slist = slist->next;
+  }
+  return false;
+}
+
+void sl_free(SortedUniqList *slist) {
+  while (slist) {
+    SortedUniqList *next = slist->next;
+    free(slist);
+    slist = next;
+  }
+}
+
+static void reassign_slot(int *slot_p, bool read, int numslots, bool last_access_blk, bool *slot_inuse, int *slot_map, SortedUniqList *slot_outlist) {
+  int slot = *slot_p;
+  if (read) {
+    *slot_p = slot_map[slot];
+    if (slot != 0 && !sl_contains(slot_outlist, slot) && last_access_blk) {
+      slot_inuse[slot_map[slot]] = false;
+      // fprintf(stderr, "open slot %i for access\n", slot_map[slot]);
+    }
+    return;
+  }
+  
+  assert(write);
+  int selected_slot = -1;
+  for (int k = 0; k < numslots; ++k) if (!slot_inuse[k]) {
+    selected_slot = k;
+    break;
+  }
+  assert(selected_slot != -1);
+  slot_inuse[selected_slot] = true;
+  // fprintf(stderr, "map: %i => %i\n", slot, selected_slot);
+  slot_map[slot] = selected_slot;
+  
   *slot_p = slot_map[slot];
-  if (instr_cur == last_use[slot]) {
-    newslot_in_use[slot_map[slot]] = false;
+}
+
+// gather all blocks that we read that we don't write
+bool update_block_inlist(UserFunction *uf, int block, SortedUniqList **target, SortedUniqList *out_list) {
+  SortedUniqList *read_list = NULL;
+  SortedUniqList *write_list = NULL;
+  
+  Instr *instr_cur = BLOCK_START(uf, block), *instr_end = BLOCK_END(uf, block);
+  while (instr_cur != instr_end) {
+    switch (instr_cur->type) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+#define CHKSLOT_READ(S) sl_add_value_to(&read_list, S);
+#define CHKSLOT_WRITE(S) sl_add_value_to(&write_list, S);
+        case INSTR_INVALID: { abort();
+#include "vm/slots.txt"
+          CASE(INSTR_LAST, Instr) abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+
+#undef CHKSLOT_READ
+#undef CHKSLOT_WRITE
+#undef CASE
+    }
+    instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+  }
+  SortedUniqList *in_list = read_list;
+  sl_add_to(&in_list, out_list); // will be read later
+  sl_subtract_from(&in_list, write_list);
+  sl_free(write_list);
+  bool res = sl_add_to(target, in_list);
+  sl_free(in_list);
+  return res;
+}
+
+void determine_slot_liveness(UserFunction *uf, SortedUniqList ***slot_inlist, SortedUniqList ***slot_outlist) {
+  // fprintf(stderr, "for:\n");
+  // dump_fn(NULL, uf);
+  CFG cfg;
+  cfg_build(&cfg, uf);
+  // perform flow analysis; see https://en.wikipedia.org/wiki/Live_variable_analysis
+  SortedUniqList *workqueue = NULL;
+  for (int i = 0; i < cfg.nodes_len; i++) {
+    if (cfg.nodes_ptr[i].succ_len == 0) {
+      sl_add_value_to(&workqueue, i);
+    }
+  }
+  *slot_inlist = calloc(uf->slots, sizeof(SortedUniqList*));
+  *slot_outlist = calloc(uf->slots, sizeof(SortedUniqList*));
+  while (workqueue) {
+    int blk = workqueue->value;
+    sl_subtract_value(&workqueue, blk);
+    
+    bool changed_outlist = false;
+    // outlist = for succ: union(inlist[succ])
+    for (int i = 0; i < cfg.nodes_ptr[blk].succ_len; i++) {
+      changed_outlist |= sl_add_to(&(*slot_outlist)[blk], (*slot_inlist)[cfg.nodes_ptr[blk].succ_ptr[i]]);
+    }
+    if (changed_outlist) {
+      // fprintf(stderr, "%i updated outlist to ", blk);
+      // sl_print(stderr, (*slot_outlist)[blk]);
+      // fprintf(stderr, "\n");
+    }
+    
+    bool changed_inlist = update_block_inlist(uf, blk, &(*slot_inlist)[blk], (*slot_outlist)[blk]);
+    if (changed_inlist) {
+      // fprintf(stderr, "%i updated inlist to ", blk);
+      // sl_print(stderr, (*slot_inlist)[blk]);
+      // fprintf(stderr, "\n");
+      
+      // update our preds
+      for (int i = 0; i < cfg.nodes_ptr[blk].pred_len; i++) {
+        sl_add_value_to(&workqueue, cfg.nodes_ptr[blk].pred_ptr[i]);
+      }
+    }
   }
 }
 
@@ -1585,42 +1749,44 @@ UserFunction *compactify_registers(UserFunction *uf) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
   
-  // use the lexical orderedness assumption
-  Instr **first_use = calloc(sizeof(Instr*), uf->slots);
-  Instr **last_use = calloc(sizeof(Instr*), uf->slots);
+  SortedUniqList **slot_inlist, **slot_outlist;
+  determine_slot_liveness(uf, &slot_inlist, &slot_outlist);
   
-  for (int i = 0; i < uf->body.blocks_len; ++i) {
-#define CHKSLOT(VAL) if (!first_use[VAL]) first_use[VAL] = instr_cur; last_use[VAL] = instr_cur
-    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
-    while (instr_cur != instr_end) {
-#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
-      switch (instr_cur->type) {
-        case INSTR_INVALID: { abort();
-#include "vm/slots.txt"
-          CASE(INSTR_LAST, Instr) abort();
-        } break;
-        default: assert("Unhandled Instruction Type!" && false);
-      }
-#undef CASE
-#undef CHKSLOT
-      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
-    }
-  }
-  
-  bool *newslot_in_use = calloc(sizeof(bool), uf->slots);
+  bool *slot_inuse = calloc(sizeof(bool), uf->slots);
   int *slot_map = calloc(sizeof(int), uf->slots);
+  Instr **blk_last_access = calloc(sizeof(Instr*), uf->slots);
   
   // specials
   for (int i = 0; i < 2 + uf->arity; ++i) {
-    first_use[i] = NULL;
-    last_use[i] = NULL;
-    newslot_in_use[i] = true;
+    slot_inuse[i] = true;
     slot_map[i] = i;
   }
   
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(&builder);
     
+    // precomp first/last access per instr inside the block, for slots that don't escape the block
+    {
+      Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+      while (instr_cur != instr_end) {
+        switch (instr_cur->type) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+#define CHKSLOT_READ(S) blk_last_access[S] = instr_cur;
+#define CHKSLOT_WRITE(S) blk_last_access[S] = instr_cur;
+          case INSTR_INVALID: { abort(); Instr *instr = NULL; (void) instr;
+#include "vm/slots.txt"
+            CASE(INSTR_LAST, Instr) abort();
+          } break;
+          default: assert("Unhandled Instruction Type!" && false);
+#undef CHKSLOT_READ
+#undef CHKSLOT_WRITE
+#undef CASE
+        }
+        instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+      }
+    }
+    
+    // fprintf(stderr, "updating block %i:\n", i);
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
       switch (instr_cur->type) {
@@ -1638,7 +1804,10 @@ UserFunction *compactify_registers(UserFunction *uf) {
           TY *instr = (TY*) alloca(sz);\
           memcpy(instr, instr_cur, sz);
 
-#define CHKSLOT(S) reassign_slot(&S, uf->slots, instr_cur, first_use, last_use, newslot_in_use, slot_map)
+#define CHKSLOT_READ(S) reassign_slot(&S, true, uf->slots, instr_cur == blk_last_access[S], slot_inuse, slot_map,\
+                                      slot_outlist[i])
+#define CHKSLOT_WRITE(S) reassign_slot(&S, false, uf->slots, instr_cur == blk_last_access[S], slot_inuse, slot_map,\
+                                       slot_outlist[i])
 
         case INSTR_INVALID: { abort(); Instr *instr = NULL; int sz = 0;
 #include "vm/slots.txt"
@@ -1646,24 +1815,30 @@ UserFunction *compactify_registers(UserFunction *uf) {
         } break;
         default: assert("Unhandled Instruction Type!" && false);
 
-#undef CHKSLOT
+#undef CHKSLOT_READ
+#undef CHKSLOT_WRITE
 #undef CASE
       }
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
   
   int maxslot = 0;
   for (int i = 0; i < uf->slots; ++i) if (slot_map[i] > maxslot) maxslot = slot_map[i];
-  free(first_use);
-  free(last_use);
-  free(newslot_in_use);
+  free(blk_last_access);
+  free(slot_inuse);
   free(slot_map);
+  for (int i = 0; i < uf->slots; i++) {
+    sl_free(slot_inlist[i]);
+    sl_free(slot_outlist[i]);
+  }
   
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
   free_function(uf);
   fn->slots = maxslot + 1;
   fn->non_ssa = true;
+  // dump_fn(NULL, fn);
   return fn;
 }
 
