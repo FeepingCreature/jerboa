@@ -1653,7 +1653,7 @@ static void reassign_slot(int *slot_p, bool read, int numslots, bool last_access
     return;
   }
   
-  assert(write);
+  assert(!read);
   int selected_slot = -1;
   for (int k = 0; k < numslots; ++k) if (!slot_inuse[k]) {
     selected_slot = k;

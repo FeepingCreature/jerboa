@@ -528,9 +528,9 @@ static void drop_record(OpenRange **range_p) {
 }
 
 // TODO move into separate file
-void save_profile_output(char *file, VMProfileState *profile_state) {
-  int fd = creat(file, 0644);
-  if (fd == -1) {
+void save_profile_output(char *filename, VMProfileState *profile_state) {
+  FILE *file = fopen(filename, "w");
+  if (file == NULL) {
     fprintf(stderr, "error creating profiler output file: %s\n", strerror(errno));
     abort();
   }
@@ -575,17 +575,17 @@ void save_profile_output(char *file, VMProfileState *profile_state) {
   
 #define CUR_ENTRY (&record_entries[cur_entry_id])
   
-  dprintf(fd, "<!DOCTYPE html>\n");
-  dprintf(fd, "<html lang=\"\"><head><title>Profiler</title>\n");
-  // dprintf(fd, "<style>span { border-left: 1px solid #eee; border-right: 1px solid #ddd; border-bottom: 1px solid #fff; }</style>\n");
-  dprintf(fd, "<style>span { position: relative; }</style>\n");
-  dprintf(fd, "<script src=\"https://code.jquery.com/jquery-3.1.0.min.js\"></script>\n");
-  dprintf(fd, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css\" crossorigin=\"anonymous\">\n");
-  dprintf(fd, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css\" crossorigin=\"anonymous\">\n");
-  dprintf(fd, "<script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js\" crossorigin=\"anonymous\"></script>\n");
-  dprintf(fd, "</head><body style=\"margin: 20px;\">\n");
+  fprintf(file, "<!DOCTYPE html>\n");
+  fprintf(file, "<html lang=\"\"><head><title>Profiler</title>\n");
+  // fprintf(file, "<style>span { border-left: 1px solid #eee; border-right: 1px solid #ddd; border-bottom: 1px solid #fff; }</style>\n");
+  fprintf(file, "<style>span { position: relative; }</style>\n");
+  fprintf(file, "<script src=\"https://code.jquery.com/jquery-3.1.0.min.js\"></script>\n");
+  fprintf(file, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css\" crossorigin=\"anonymous\">\n");
+  fprintf(file, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css\" crossorigin=\"anonymous\">\n");
+  fprintf(file, "<script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js\" crossorigin=\"anonymous\"></script>\n");
+  fprintf(file, "</head><body style=\"margin: 20px;\">\n");
   
-  dprintf(fd, "<div class=\"accordion\" id=\"file_accordion\">\n");
+  fprintf(file, "<div class=\"accordion\" id=\"file_accordion\">\n");
   
   int num_files = 0;
   FileEntry *files = get_files(&num_files);
@@ -593,12 +593,12 @@ void save_profile_output(char *file, VMProfileState *profile_state) {
     TextRange source = files[i].range;
     OpenRange *open_range_head = NULL;
     
-    dprintf(fd, "<div class=\"accordion-group\">\n");
-    dprintf(fd, "<div class=\"accordion-heading\"><a class=\"accordion-toggle\" data-toggle=\"collapse\" data-parent=\"#file_accordion\" href=\"#filecollapse%i\">\n", i);
-    dprintf(fd, "%s\n", files[i].file);
-    dprintf(fd, "</a></div>\n");
-    dprintf(fd, "<div id=\"filecollapse%i\" class=\"accordion-body collapse\"><div class=\"accordion-inner\">\n", i);
-    dprintf(fd, "<pre>");
+    fprintf(file, "<div class=\"accordion-group\">\n");
+    fprintf(file, "<div class=\"accordion-heading\"><a class=\"accordion-toggle\" data-toggle=\"collapse\" data-parent=\"#file_accordion\" href=\"#filecollapse%i\">\n", i);
+    fprintf(file, "%s\n", files[i].file);
+    fprintf(file, "</a></div>\n");
+    fprintf(file, "<div id=\"filecollapse%i\" class=\"accordion-body collapse\"><div class=\"accordion-inner\">\n", i);
+    fprintf(file, "<pre>");
     char *cur_char = source.start;
     int cur_entry_id = 0;
     int zindex = 100000; // if there's more spans than this we are anyways fucked
@@ -607,7 +607,7 @@ void save_profile_output(char *file, VMProfileState *profile_state) {
       while (open_range_head && open_range_head->record->range->text_to == cur_char) {
         // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
         drop_record(&open_range_head);
-        dprintf(fd, "</span>");
+        fprintf(file, "</span>");
       }
       // skip any preceding
       while (cur_entry_id < num_records && CUR_ENTRY->range->text_from < cur_char) {
@@ -642,37 +642,37 @@ void save_profile_output(char *file, VMProfileState *profile_state) {
               max_samples_direct, sum_samples_direct,
               max_samples_indirect, sum_samples_indirect,
               hex_dir, weight_indir, border_indir);*/
-        dprintf(fd, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
+        fprintf(file, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
           " style=\"",
           percent_dir, percent_indir);
         if (hex_dir <= 250/* || hex_dir <= 250*/) {
-          dprintf(fd, "background-color:#ff%02x%02x;",
+          fprintf(file, "background-color:#ff%02x%02x;",
             hex_dir, hex_dir);
         }
-        dprintf(fd, "font-weight:%i;border-bottom:%fpx solid #%1x%1x%1x;font-size: %i%%;",
+        fprintf(file, "font-weight:%i;border-bottom:%fpx solid #%1x%1x%1x;font-size: %i%%;",
                 weight_indir, border_indir, bordercol_indir, bordercol_indir, bordercol_indir, fontsize_indir);
-        dprintf(fd, "z-index: %i;", --zindex);
-        dprintf(fd, "\">");
+        fprintf(file, "z-index: %i;", --zindex);
+        fprintf(file, "\">");
         cur_entry_id ++;
       }
       // close all 0-size new
       while (open_range_head && open_range_head->record->range->text_to == cur_char) {
         // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
         drop_record(&open_range_head);
-        dprintf(fd, "</span>");
+        fprintf(file, "</span>");
       }
-      if (*cur_char == '<') dprintf(fd, "&lt;");
-      else if (*cur_char == '>') dprintf(fd, "&gt;");
-      // else if (*cur_char == '\n') dprintf(fd, "</pre>\n<pre>");
-      else dprintf(fd, "%c", *cur_char);
+      if (*cur_char == '<') fprintf(file, "&lt;");
+      else if (*cur_char == '>') fprintf(file, "&gt;");
+      // else if (*cur_char == '\n') fprintf(file, "</pre>\n<pre>");
+      else fprintf(file, "%c", *cur_char);
       cur_char ++;
     }
-    dprintf(fd, "</pre>\n");
-    dprintf(fd, "</div></div></div>\n");
+    fprintf(file, "</pre>\n");
+    fprintf(file, "</div></div></div>\n");
   }
 #undef CUR_ENTRY
   
-  dprintf(fd, "</div>\n");
-  dprintf(fd, "</body></html>");
-  close(fd);
+  fprintf(file, "</div>\n");
+  fprintf(file, "</body></html>");
+  fclose(file);
 }
