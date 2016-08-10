@@ -1087,7 +1087,7 @@ static void sin_fn(VMState *state, CallInfo *info) {
   float f;
   if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
-  else VM_ASSERT(false, "unexpected type for math.sin()");
+  else VM_ASSERT(false, "unexpected type for Math.sin()");
   vm_return(state, info, FLOAT2VAL(sinf(f)));
 }
 
@@ -1097,7 +1097,7 @@ static void cos_fn(VMState *state, CallInfo *info) {
   float f;
   if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
-  else VM_ASSERT(false, "unexpected type for math.cos()");
+  else VM_ASSERT(false, "unexpected type for Math.cos()");
   vm_return(state, info, FLOAT2VAL(cosf(f)));
 }
 
@@ -1107,7 +1107,7 @@ static void tan_fn(VMState *state, CallInfo *info) {
   float f;
   if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
-  else VM_ASSERT(false, "unexpected type for math.tan()");
+  else VM_ASSERT(false, "unexpected type for Math.tan()");
   vm_return(state, info, FLOAT2VAL(tanf(f)));
 }
 
@@ -1117,7 +1117,7 @@ static void log_fn(VMState *state, CallInfo *info) {
   float f;
   if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
-  else VM_ASSERT(false, "unexpected type for math.tan()");
+  else VM_ASSERT(false, "unexpected type for Math.tan()");
   vm_return(state, info, FLOAT2VAL(logf(f)));
 }
 
@@ -1127,7 +1127,7 @@ static void sqrt_fn(VMState *state, CallInfo *info) {
   Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   if (LIKELY(IS_FLOAT(val))) f = AS_FLOAT(val);
   else if (IS_INT(val)) f = AS_INT(val);
-  else VM_ASSERT(false, "unexpected type for math.sqrt()");
+  else VM_ASSERT(false, "unexpected type for Math.sqrt()");
   vm_return(state, info, FLOAT2VAL(sqrtf(f)));
 }
 
@@ -1138,11 +1138,53 @@ static void pow_fn(VMState *state, CallInfo *info) {
   float a, b;
   if (LIKELY(IS_FLOAT(val1))) a = AS_FLOAT(val1);
   else if (IS_INT(val1)) a = AS_INT(val1);
-  else VM_ASSERT(false, "unexpected type for math.pow()");
+  else VM_ASSERT(false, "unexpected type for Math.pow()");
   if (IS_FLOAT(val2)) b = AS_FLOAT(val2);
   else if (IS_INT(val2)) b = AS_INT(val2);
-  else VM_ASSERT(false, "unexpected type for math.pow()");
+  else VM_ASSERT(false, "unexpected type for Math.pow()");
   vm_return(state, info, FLOAT2VAL(powf(a, b)));
+}
+
+static void max_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len >= 1, "wrong arity: expected >=1, got %i", info->args_len);
+  float maxval = -INFINITY;
+  int maxval_i = INT_MIN;
+  bool all_ints = true;
+  for (int i = 0; i < info->args_len; i++) {
+    float f;
+    Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
+    if (LIKELY(IS_FLOAT(arg))) { f = AS_FLOAT(arg); all_ints = false; }
+    else if (IS_INT(arg)) {
+      int k = AS_INT(arg);
+      f = k;
+      if (k > maxval_i) maxval_i = k;
+    }
+    else VM_ASSERT(false, "unexpected type for Math.max()");
+    if (f > maxval) maxval = f;
+  }
+  if (all_ints) vm_return(state, info, INT2VAL(maxval_i));
+  else vm_return(state, info, FLOAT2VAL(maxval));
+}
+
+static void min_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len >= 1, "wrong arity: expected >=1, got %i", info->args_len);
+  float minval = INFINITY;
+  int minval_i = INT_MAX;
+  bool all_ints = true;
+  for (int i = 0; i < info->args_len; i++) {
+    float f;
+    Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
+    if (LIKELY(IS_FLOAT(arg))) { f = AS_FLOAT(arg); all_ints = false; }
+    else if (IS_INT(arg)) {
+      int k = AS_INT(arg);
+      f = k;
+      if (k < minval_i) minval_i = k;
+    }
+    else VM_ASSERT(false, "unexpected type for Math.min()");
+    if (f < minval) minval = f;
+  }
+  if (all_ints) vm_return(state, info, INT2VAL(minval_i));
+  else vm_return(state, info, FLOAT2VAL(minval));
 }
 
 static void assert_fn(VMState *state, CallInfo *info) {
@@ -1334,8 +1376,10 @@ Object *create_root(VMState *state) {
   object_set(state, math_obj, "log", make_fn(state, log_fn));
   object_set(state, math_obj, "sqrt", make_fn(state, sqrt_fn));
   object_set(state, math_obj, "pow", make_fn(state, pow_fn));
+  object_set(state, math_obj, "max", make_fn(state, max_fn));
+  object_set(state, math_obj, "min", make_fn(state, min_fn));
   math_obj->flags |= OBJ_FROZEN;
-  object_set(state, root, "math", OBJ2VAL(math_obj));
+  object_set(state, root, "Math", OBJ2VAL(math_obj));
   
   Object *obj_tools = AS_OBJ(make_object(state, NULL));
   obj_tools->flags |= OBJ_NOINHERIT;

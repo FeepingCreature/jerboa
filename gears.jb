@@ -61,7 +61,7 @@ function gear(inner_radius:float, outer_radius:float, width:float, teeth:int, to
   const r0:float = inner_radius;
   const r1:float = outer_radius - tooth_depth / 2.0;
   const r2:float = outer_radius + tooth_depth / 2.0;
-  const cos = math.cos, sin = math.sin, sqrt = math.sqrt;
+  const cos = Math.cos, sin = Math.sin, sqrt = Math.sqrt;
   const da:float = 2.0 * M_PI / teeth / 4.0;
   
   gl.ShadeModel(gl.FLAT);
