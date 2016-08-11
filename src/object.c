@@ -270,7 +270,7 @@ char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value v
       }
       // so create it in obj (not current!)
       object_set(state, obj, key, value);
-      if (entry->constraint) {
+      if (current != obj && entry->constraint) {
         // propagate constraint
         char *error = object_set_constraint(state, obj, key, len, entry->constraint);
         if (error) return error;
