@@ -897,7 +897,7 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   return value_is_truthy(res);
 }
 
-static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayObject *aobj)
+static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayObject *aobj, Object *element_node_obj)
 {
   Object *array_base = state->shared->vcache.array_base;
   bool res = xml_node_check_pred(state, node, pred);
@@ -907,14 +907,16 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayO
     aobj->ptr[aobj->length - 1] = node;
   }
   
-  Object *children_obj = AS_OBJ(OBJECT_LOOKUP_STRING(closest_obj(state, node), "children", NULL));
-  VM_ASSERT(children_obj, "missing 'children' property in node");
-  ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
-  VM_ASSERT(children_aobj, "'children' property in node is not an array");
-  for (int i = 0; i < children_aobj->length; ++i) {
-    Value child = children_aobj->ptr[i];
-    xml_node_find_recurse(state, child, pred, aobj);
-    if (state->runstate == VM_ERRORED) return;
+  if (obj_instance_of(closest_obj(state, node), element_node_obj)) {
+    Object *children_obj = AS_OBJ(OBJECT_LOOKUP_STRING(closest_obj(state, node), "children", NULL));
+    VM_ASSERT(children_obj, "missing 'children' property in node");
+    ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
+    VM_ASSERT(children_aobj, "'children' property in node is not an array");
+    for (int i = 0; i < children_aobj->length; ++i) {
+      Value child = children_aobj->ptr[i];
+      xml_node_find_recurse(state, child, pred, aobj, element_node_obj);
+      if (state->runstate == VM_ERRORED) return;
+    }
   }
 }
 
@@ -922,8 +924,10 @@ static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
+  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "xml", NULL));
+  Object *elembase = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL));
   gc_disable(state);
-  xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), aobj);
+  xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), aobj, elembase);
   array_resize(state, aobj, aobj->length, true);
   vm_return(state, info, OBJ2VAL((Object*) aobj));
   gc_enable(state);
