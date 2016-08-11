@@ -1,0 +1,6 @@
+var α = 1, β = 2;
+var aαbβ = 3;
+function γ() {}
+γ();
+var foo = { δ3 = "δ3"; };
+foo[foo.δ3] = "hi";

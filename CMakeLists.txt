@@ -5,6 +5,7 @@ project(jerboa)
 set(FLAGS "-g" "-O2" "-Wall" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE")
 
 find_package(PkgConfig)
+pkg_check_modules (LIBXML REQUIRED icu-uc)
 pkg_check_modules (LIBFFI REQUIRED libffi)
 pkg_check_modules (LIBXML REQUIRED libxml-2.0)
 
@@ -17,8 +18,8 @@ add_executable(repl src/repl.c ${BASE_SRC} ${VM_SRC})
 
 target_compile_options(jerboa PRIVATE ${FLAGS})
 target_compile_options(repl PRIVATE ${FLAGS})
-target_link_libraries (jerboa dl ffi xml2 m)
-target_link_libraries (repl dl ffi xml2 m)
+target_link_libraries (jerboa dl ffi icuuc xml2 m)
+target_link_libraries (repl dl ffi icuuc xml2 m)
 install(TARGETS jerboa RUNTIME DESTINATION bin)
 install(TARGETS repl RUNTIME DESTINATION bin)
 

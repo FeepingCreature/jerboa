@@ -7,6 +7,9 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#include <unicode/utf8.h>
+#include <unicode/uchar.h>
+
 static bool starts_with(char **textp, char *cmp) {
   char *text = *textp;
   while (*cmp) {
@@ -50,9 +53,26 @@ char *parse_identifier_all(char **textp) {
   char *text = *textp;
   eat_filler(&text);
   char *start = text;
-  if (text[0] && ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z') || text[0] == '_')) text++;
+  if ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z') || text[0] == '_') text++;
+  else if ((unsigned char)text[0] > 0x7f) {
+    UChar32 cp;
+    int i = 0;
+    U8_NEXT_UNSAFE(text, i, cp);
+    text += i;
+    if (!u_isalpha(cp)) return NULL;
+  }
   else return NULL;
-  while (text[0] && ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z') || (text[0] >= '0' && text[0] <= '9') || text[0] == '_')) text++;
+  while (text[0]) {
+    if ((text[0] >= 'a' && text[0] <= 'z') || (text[0] >= 'A' && text[0] <= 'Z') || (text[0] >= '0' && text[0] <= '9') || text[0] == '_') text++;
+    else if ((unsigned char)text[0] > 0x7f) {
+      UChar32 cp;
+      int i = 0;
+      U8_NEXT_UNSAFE(text, i, cp);
+      if (!u_isalnum(cp)) break;
+      text += i;
+    }
+    else break;
+  }
   
   int len = text - start;
   char *res = malloc(len + 1);
