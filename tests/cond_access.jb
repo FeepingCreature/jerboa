@@ -1,0 +1,27 @@
+var foo = { bar = method() { return 5; }; naz = null; };
+
+assert(foo.bar() == 5);
+assert(foo?.bar() == 5);
+
+null?();
+
+assert(foo.bar?() == 5);
+assert(foo?.bar?() == 5);
+
+assert(!foo?.baz());
+assert(!foo?.baz?.baz?.baz);
+foo?.baz?();
+null?.baz?();
+foo.naz?();
+foo?.naz?();
+
+// ?. is short-circuiting!
+null?.baz();
+null?.baz().bla;
+var n = null;
+n?().bla();
+
+var baz = foo?.baz;
+assert(!baz);
+assert(!baz?());
+baz?();

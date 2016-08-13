@@ -82,6 +82,8 @@ static void end_lex_scope(FunctionBuilder *builder, int backup) {
 
 static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv);
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv);
+static ParseResult parse_expr_continuation(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range);
+static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
   if (!builder) return (RefValue) {0, 0, REFMODE_VARIABLE, NULL};
@@ -425,6 +427,57 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
   return PARSE_OK;
 }
 
+static ParseResult parse_cond_cont_call(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range) {
+  char *text = *textp;
+  
+  char *text2 = text;
+  if (!eat_string(&text2, "?") || !eat_string(&text2, "(")) {
+    return PARSE_NONE;
+  }
+  if (!eat_string(&text, "?")) abort(); // ... what
+  // text is now at (, which means we can reuse regular parse_expr_continuation
+  
+  int start_blk, call_blk, end_blk;
+  int branch_start_call, branch_start_end;
+  if (builder) {
+    int rv_slot = ref_access(builder, *rv);
+    
+    start_blk = get_block(builder);
+    
+    use_range_start(builder, expr_range);
+    
+    addinstr_test_branch(builder, rv_slot, &branch_start_call, &branch_start_end);
+    use_range_end(builder, expr_range);
+    
+    call_blk = new_block(builder);
+    set_int_var(builder, branch_start_call, call_blk);
+    
+  }
+  
+  ParseResult res = parse_expr_continuation(&text, builder, rv, expr_range);
+  if (res == PARSE_ERROR) return res;
+  assert(res == PARSE_OK);
+  
+  if (builder) {
+    use_range_start(builder, expr_range);
+    int rv_slot = ref_access(builder, *rv);
+    
+    int branch_call_end;
+    addinstr_branch(builder, &branch_call_end);
+    
+    end_blk = new_block(builder);
+    set_int_var(builder, branch_start_end, end_blk);
+    set_int_var(builder, branch_call_end, end_blk);
+    
+    rv_slot = addinstr_phi(builder, start_blk, 0, call_blk, rv_slot);
+    use_range_end(builder, expr_range);
+    
+    *rv = ref_simple(rv_slot);
+  } else *rv = ref_simple(0);
+  *textp = text;
+  return PARSE_OK;
+}
+
 static ParseResult parse_array_access(char **textp, FunctionBuilder *builder, RefValue *expr) {
   char *text = *textp;
   FileRange *access_range = alloc_and_record_start(text);
@@ -476,6 +529,87 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
   *expr = (RefValue) {expr_slot, key_slot, REFMODE_OBJECT, prop_range};
   use_range_end(builder, prop_range);
   
+  return PARSE_OK;
+}
+
+static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range) {
+  char *text = *textp;
+  
+  FileRange *cprop_range = alloc_and_record_start(text);
+  if (!eat_string(&text, "?") || !eat_string(&text, ".")) {
+    free(cprop_range);
+    return PARSE_NONE;
+  }
+  
+  char *keyname = parse_identifier(&text);
+  record_end(text, cprop_range);
+  *textp = text;
+  
+  int lhs_slot = 0;
+  if (builder) lhs_slot = ref_access(builder, *rv);
+  
+  use_range_start(builder, cprop_range);
+  
+  // test if lhs is null, if true null, else test if rhs is in lhs, if false null, else continue
+  int start_blk, lhs_nonnull_blk, rhs_in_lhs_blk, rhs_in_lhs_end_blk, end1_blk, end2_blk;
+  if (builder) start_blk = get_block(builder);
+  
+  int branch_start_lhs_nonnull, branch_start_end1;
+  if (builder) {
+    addinstr_test_branch(builder, lhs_slot, &branch_start_lhs_nonnull, &branch_start_end1);
+    lhs_nonnull_blk = new_block(builder);
+    set_int_var(builder, branch_start_lhs_nonnull, lhs_nonnull_blk);
+  }
+  
+  int key_slot = 0;
+  int key_in_slot = 0;
+  int branch_lhs_nonnull_rhs_in_lhs, branch_lhs_nonnull_end2;
+  if (builder) {
+    key_slot = addinstr_alloc_string_object(builder, keyname);
+    key_in_slot = addinstr_key_in_obj(builder, key_slot, lhs_slot);
+    
+    addinstr_test_branch(builder, key_in_slot, &branch_lhs_nonnull_rhs_in_lhs, &branch_lhs_nonnull_end2);
+    
+    rhs_in_lhs_blk = new_block(builder);
+    set_int_var(builder, branch_lhs_nonnull_rhs_in_lhs, rhs_in_lhs_blk);
+    
+    use_range_end(builder, cprop_range);
+  }
+  
+  *rv = (RefValue) {lhs_slot, key_slot, REFMODE_OBJECT, cprop_range};
+  
+  ParseResult res = parse_expr_continuation(&text, builder, rv, expr_range);
+  if (res == PARSE_ERROR) return res;
+  assert(res == PARSE_OK);
+  int res_slot = ref_access(builder, *rv);
+  
+  int branch_rhs_in_lhs_end2;
+  if (builder) {
+    rhs_in_lhs_end_blk = get_block(builder);
+  
+    use_range_start(builder, cprop_range);
+    addinstr_branch(builder, &branch_rhs_in_lhs_end2);
+    
+    end2_blk = new_block(builder);
+    set_int_var(builder, branch_lhs_nonnull_end2, end2_blk);
+    set_int_var(builder, branch_rhs_in_lhs_end2, end2_blk);
+    res_slot = addinstr_phi(builder, lhs_nonnull_blk, 0, rhs_in_lhs_end_blk, res_slot);
+  }
+  
+  int branch_end2_end1;
+  if (builder) {
+    addinstr_branch(builder, &branch_end2_end1);
+    
+    end1_blk = new_block(builder);
+    set_int_var(builder, branch_end2_end1, end1_blk);
+    set_int_var(builder, branch_start_end1, end1_blk);
+    res_slot = addinstr_phi(builder, start_blk, 0, end2_blk, res_slot);
+    use_range_end(builder, cprop_range);
+  }
+  
+  *rv = ref_simple(res_slot);
+  
+  *textp = text;
   return PARSE_OK;
 }
 
@@ -563,6 +697,30 @@ static void negate(FunctionBuilder *builder, FileRange *range, RefValue *rv) {
   *rv = ref_simple(negate_slot);
 }
 
+static ParseResult parse_expr_continuation(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range) {
+  char *text = *textp;
+  while (true) {
+    record_end(text, expr_range);
+    ParseResult res;
+    if ((res = parse_cont_call(&text, builder, rv, expr_range)) == PARSE_OK) continue;
+    if (res == PARSE_ERROR) return res;
+    if ((res = parse_prop_access(&text, builder, rv)) == PARSE_OK) continue;
+    if (res == PARSE_ERROR) return res;
+    if ((res = parse_array_access(&text, builder, rv)) == PARSE_OK) continue;
+    if (res == PARSE_ERROR) return res;
+    if ((res = parse_postincdec(&text, builder, rv)) == PARSE_OK) continue;
+    if (res == PARSE_ERROR) return res;
+    if ((res = parse_cond_prop_access(&text, builder, rv, expr_range)) == PARSE_OK) break; // eats the tail
+    if (res == PARSE_ERROR) return res;
+    if ((res = parse_cond_cont_call(&text, builder, rv, expr_range)) == PARSE_OK) break; // eats the tail
+    if (res == PARSE_ERROR) return res;
+    break;
+  }
+  
+  *textp = text;
+  return PARSE_OK;
+}
+
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv) {
   char *text = *textp;
   
@@ -608,21 +766,14 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
   }
   assert(res == PARSE_OK);
   
-  while (true) {
-    record_end(text, expr_range);
-    if ((res = parse_cont_call(&text, builder, rv, expr_range)) == PARSE_OK) continue;
-    if (res == PARSE_ERROR) return res;
-    if ((res = parse_prop_access(&text, builder, rv)) == PARSE_OK) continue;
-    if (res == PARSE_ERROR) return res;
-    if ((res = parse_array_access(&text, builder, rv)) == PARSE_OK) continue;
-    if (res == PARSE_ERROR) return res;
-    if ((res = parse_postincdec(&text, builder, rv)) == PARSE_OK) continue;
-    if (res == PARSE_ERROR) return res;
-    break;
+  res = parse_expr_continuation(&text, builder, rv, expr_range);
+  if (res == PARSE_ERROR) {
+    free(expr_range);
+    return PARSE_ERROR;
   }
-  
+  assert(res == PARSE_OK);
   *textp = text;
-  return PARSE_OK;
+  return res;
 }
 
 /*
@@ -1347,9 +1498,12 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
       if (res == PARSE_NONE) {
         return PARSE_NONE;
       }
-      if (rv.key != -1) {
-        log_parser_error(text, "property access discarded without effect");
-        return PARSE_ERROR;
+      char *text2 = text;
+      if (eat_string(&text2, ";")) { // otherwise it was just a syntax error after all
+        if (rv.key != -1) {
+          log_parser_error(text, "property access discarded without effect");
+          return PARSE_ERROR;
+        }
       }
     }
   }
