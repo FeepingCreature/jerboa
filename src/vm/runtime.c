@@ -638,6 +638,18 @@ static void array_splice_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, OBJ2VAL((Object*) arr_obj));
 }
 
+static void array_dup_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
+  VM_ASSERT(arr_obj, "internal error: array 'splice()' called on object that is not an array");
+  
+  ArrayObject *new_arr = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
+  array_resize(state, new_arr, arr_obj->length, true);
+  memcpy(new_arr->ptr, arr_obj->ptr, sizeof(Value) * arr_obj->length);
+  vm_return(state, info, OBJ2VAL((Object*) new_arr));
+}
+
 static void array_join_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
@@ -1315,6 +1327,7 @@ Object *create_root(VMState *state) {
   object_set(state, array_obj, "==", make_fn(state, array_compare_fn));
   object_set(state, array_obj, "splice", make_fn(state, array_splice_fn));
   object_set(state, array_obj, "join", make_fn(state, array_join_fn));
+  object_set(state, array_obj, "dup", make_fn(state, array_dup_fn));
   state->shared->vcache.array_base = array_obj;
   
   Object *ptr_obj = AS_OBJ(make_object(state, NULL));

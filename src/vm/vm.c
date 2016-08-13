@@ -495,7 +495,7 @@ static FnWrap vm_instr_assign(VMState *state) {
     {
       bool key_set;
       char *error = object_set_shadowing(state, obj, key, value_val, &key_set);
-      VM_ASSERT2(error == NULL, "while assigning: %s", error);
+      VM_ASSERT2(error == NULL, "while shadow-assigning: %s", error);
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
     }
@@ -608,7 +608,7 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
       VM_ASSERT2(IS_OBJ(obj_val), "can't assign to primitive");
       bool key_set;
       char *error = object_set_shadowing(state, AS_OBJ(obj_val), key, value, &key_set);
-      VM_ASSERT2(error == NULL, "while assigning '%s': %s", key, error);
+      VM_ASSERT2(error == NULL, "while shadow-assigning '%s': %s", key, error);
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
     }
