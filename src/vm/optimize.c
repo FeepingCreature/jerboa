@@ -1642,11 +1642,11 @@ void sl_free(SortedUniqList *slist) {
   }
 }
 
-static void reassign_slot(int *slot_p, bool read, int numslots, bool last_access_blk, bool *slot_inuse, int *slot_map, SortedUniqList *slot_outlist) {
+static void reassign_slot(int *slot_p, bool read, int numslots, int special_slots, bool last_access_blk, bool *slot_inuse, int *slot_map, SortedUniqList *slot_outlist) {
   int slot = *slot_p;
   if (read) {
     *slot_p = slot_map[slot];
-    if (slot != 0 && !sl_contains(slot_outlist, slot) && last_access_blk) {
+    if (slot >= special_slots && !sl_contains(slot_outlist, slot) && last_access_blk) {
       slot_inuse[slot_map[slot]] = false;
       // fprintf(stderr, "open slot %i for access\n", slot_map[slot]);
     }
@@ -1757,7 +1757,8 @@ UserFunction *compactify_registers(UserFunction *uf) {
   Instr **blk_last_access = calloc(sizeof(Instr*), uf->slots);
   
   // specials
-  for (int i = 0; i < 2 + uf->arity; ++i) {
+  int special_slots = 2 + uf->arity;
+  for (int i = 0; i < special_slots; ++i) {
     slot_inuse[i] = true;
     slot_map[i] = i;
   }
@@ -1765,6 +1766,16 @@ UserFunction *compactify_registers(UserFunction *uf) {
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(&builder);
     
+    memset(slot_inuse + special_slots, 0, sizeof(bool) * (uf->slots - special_slots));
+    for (int k = special_slots; k < uf->slots; k++) {
+      if (sl_contains(slot_inlist[i], k)) slot_inuse[slot_map[k]] = true;
+    }
+    /*
+    printf(stderr, "updating block %i:\n", i);
+    for (int k = special_slots; k < uf->slots; k++) {
+      if (slot_inuse[k]) fprintf(stderr, "| %i in use.\n", k);
+    }
+    */
     // precomp first/last access per instr inside the block, for slots that don't escape the block
     {
       Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
@@ -1786,11 +1797,9 @@ UserFunction *compactify_registers(UserFunction *uf) {
       }
     }
     
-    // fprintf(stderr, "updating block %i:\n", i);
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
       switch (instr_cur->type) {
-
 #define CASE(KEY, TY) \
           use_range_start(&builder, instr_cur->belongs_to);\
           builder.scope = ((Instr*) instr)->context_slot;\
@@ -1804,9 +1813,9 @@ UserFunction *compactify_registers(UserFunction *uf) {
           TY *instr = (TY*) alloca(sz);\
           memcpy(instr, instr_cur, sz);
 
-#define CHKSLOT_READ(S) reassign_slot(&S, true, uf->slots, instr_cur == blk_last_access[S], slot_inuse, slot_map,\
+#define CHKSLOT_READ(S) reassign_slot(&S, true, uf->slots, special_slots, instr_cur == blk_last_access[S], slot_inuse, slot_map,\
                                       slot_outlist[i])
-#define CHKSLOT_WRITE(S) reassign_slot(&S, false, uf->slots, instr_cur == blk_last_access[S], slot_inuse, slot_map,\
+#define CHKSLOT_WRITE(S) reassign_slot(&S, false, uf->slots, special_slots, instr_cur == blk_last_access[S], slot_inuse, slot_map,\
                                        slot_outlist[i])
 
         case INSTR_INVALID: { abort(); Instr *instr = NULL; int sz = 0;
