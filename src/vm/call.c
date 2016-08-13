@@ -5,7 +5,10 @@
 #include "util.h"
 #include "gc.h"
 
+void vm_resolve(UserFunction *uf);
+
 void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *info) {
+  if (UNLIKELY(!fn->resolved)) vm_resolve(fn);
   Callframe *callf = state->frame;
   vm_alloc_frame(state, fn->slots, fn->refslots);
   Callframe *cf = state->frame;

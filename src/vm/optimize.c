@@ -212,7 +212,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         (*slots_p)[target_slot].names_ptr = names_ptr;
         (*slots_p)[target_slot].names_len_ptr = names_len_ptr;
         (*slots_p)[target_slot].constraints_ptr = calloc(sizeof(ConstraintInfo), fields_len);
-        (*slots_p)[target_slot].belongs_to = instr->belongs_to;
+        (*slots_p)[target_slot].belongs_to = *instr_belongs_to_p(&uf->body, instr);
         (*slots_p)[target_slot].context_slot = instr->context_slot;
         
         instr = (Instr*)((CloseObjectInstr*) instr + 1);
@@ -336,7 +336,7 @@ UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
           // so instead look up in the (known) parent object from the start
           aski_new.obj = (Arg) { .kind = ARG_SLOT, .slot = info[obj_slot].parent_slot };
         }
-        addinstr_like(&builder, instr, sizeof(aski_new), (Instr*) &aski_new);
+        addinstr_like(&builder, &uf->body, instr, sizeof(aski_new), (Instr*) &aski_new);
         instr = (Instr*) (aski + 1);
         continue;
       }
@@ -353,14 +353,14 @@ UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {
               if (field != -1) break; // key was found, we're at the right object
               aski_new.obj.slot = info[obj_slot].parent_slot;
             }
-            addinstr_like(&builder, instr, sizeof(aski_new), (Instr*) &aski_new);
+            addinstr_like(&builder, &uf->body, instr, sizeof(aski_new), (Instr*) &aski_new);
             instr = (Instr*) (aski + 1);
             continue;
           }
         }
       }
       
-      addinstr_like(&builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, &uf->body, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
@@ -427,12 +427,12 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
               char *name = info[obj_slot].names_ptr[k];
               if (strcmp(key, name) == 0) {
                 int refslot = ref_slots_ptr[obj_slot][k];
-                use_range_start(&builder, instr->belongs_to);
+                use_range_start(&builder, *instr_belongs_to_p(&uf->body, instr));
                 builder.scope = instr->context_slot;
                 addinstr_move(&builder,
                               (Arg){.kind=ARG_REFSLOT,.refslot=refslot},
                               aski->target);
-                use_range_end(&builder, instr->belongs_to);
+                use_range_end(&builder, *instr_belongs_to_p(&uf->body, instr));
                 instr = (Instr*) (aski + 1);
                 continue_outer = true;
                 break;
@@ -454,10 +454,10 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
               char *name = info[obj_slot].names_ptr[k];
               if (strcmp(key, name) == 0) {
                 int refslot = ref_slots_ptr[obj_slot][k];
-                use_range_start(&builder, instr->belongs_to);
+                use_range_start(&builder, *instr_belongs_to_p(&uf->body, instr));
                 builder.scope = instr->context_slot;
                 addinstr_move(&builder, aski->value, (WriteArg){.kind=ARG_REFSLOT,.refslot=refslot});
-                use_range_end(&builder, instr->belongs_to);
+                use_range_end(&builder, *instr_belongs_to_p(&uf->body, instr));
                 instr = (Instr*) (aski + 1);
                 continue_outer = true;
                 break;
@@ -468,7 +468,7 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
         }
       }
       
-      addinstr_like(&builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, &uf->body, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
@@ -534,7 +534,7 @@ UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
           .key_len = key_len,
           .key_hash = hash(key_ptr, key_len)
         };
-        addinstr_like(&builder, instr, sizeof(aski), (Instr*) &aski);
+        addinstr_like(&builder, &uf->body, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(acci + 1);
         continue;
       }
@@ -549,7 +549,7 @@ UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
           .key = slot_table_ptr[assi->key.slot],
           .type = assi->type
         };
-        addinstr_like(&builder, instr, sizeof(aski), (Instr*) &aski);
+        addinstr_like(&builder, &uf->body, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(assi + 1);
         continue;
       }
@@ -564,11 +564,11 @@ UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
           .key_ptr = key_ptr,
           .key_len = strlen(key_ptr)
         };
-        addinstr_like(&builder, instr, sizeof(scski), (Instr*) &scski);
+        addinstr_like(&builder, &uf->body, instr, sizeof(scski), (Instr*) &scski);
         instr = (Instr*)(sci + 1);
         continue;
       }
-      addinstr_like(&builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, &uf->body, instr, instr_size(instr), instr);
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
@@ -718,7 +718,7 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           add = false;
         }
       }
-      if (add) addinstr_like(&builder, instr, instr_size(instr), instr);
+      if (add) addinstr_like(&builder, &uf->body, instr, instr_size(instr), instr);
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
@@ -747,7 +747,6 @@ FunctionBuilder builder = {0};
             CallFunctionDirectInstr *cfdi = alloca(size);
             cfdi->base = (Instr) {
               .type = INSTR_CALL_FUNCTION_DIRECT,
-              .belongs_to = instr->base.belongs_to
             };
             cfdi->size = size;
             cfdi->fn = ((FunctionObject*)fn_obj_n)->fn_ptr;
@@ -755,14 +754,14 @@ FunctionBuilder builder = {0};
             for (int i = 0; i < instr->info.args_len; ++i) {
               ((Arg*)(&cfdi->info + 1))[i] = ((Arg*)(&instr->info + 1))[i];
             }
-            addinstr_like(&builder, instr_cur, size, (Instr*) cfdi);
+            addinstr_like(&builder, &uf->body, instr_cur, size, (Instr*) cfdi);
             instr_cur = (Instr*) ((char*) instr + instr->size);
             continue;
           }
         }
       }
       
-      addinstr_like(&builder, instr_cur, instr_size(instr_cur), instr_cur);
+      addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
@@ -955,9 +954,9 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
           .target = target,
           .opt_info = opt_info
         };
-        addinstr_like(&builder, instr, sizeof(mi), (Instr*) &mi);
+        addinstr_like(&builder, &uf->body, instr, sizeof(mi), (Instr*) &mi);
       } else {
-        addinstr_like(&builder, instr, instr_size(instr), instr);
+        addinstr_like(&builder, &uf->body, instr, instr_size(instr), instr);
       }
       
       instr = (Instr*) ((char*) instr + instr_size(instr));
@@ -1073,7 +1072,7 @@ UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
               ((Arg*)(&ci->info + 1))[k] = ((Arg*)(&instr->info + 1))[k];
             }
             ci->info.target = mi_next->target;
-            addinstr_like(&builder, instr_cur, size, (Instr*)ci);
+            addinstr_like(&builder, &uf->body, instr_cur, size, (Instr*)ci);
             instr_cur = (Instr*) (mi_next + 1);
             continue;
           }
@@ -1090,7 +1089,7 @@ UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
           ) {
             AccessStringKeyInstr aski = *instr;
             aski.target = mi_next->target;
-            addinstr_like(&builder, instr_cur, sizeof(aski), (Instr*)&aski);
+            addinstr_like(&builder, &uf->body, instr_cur, sizeof(aski), (Instr*)&aski);
             instr_cur = (Instr*) (mi_next + 1);
             continue;
           }
@@ -1098,7 +1097,7 @@ UserFunction *slot_refslot_fuse(VMState *state, UserFunction *uf) {
       }
       
       int sz = instr_size(instr_cur);
-      addinstr_like(&builder, instr_cur, sz, (Instr*) instr_cur);
+      addinstr_like(&builder, &uf->body, instr_cur, sz, (Instr*) instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + sz);
     }
   }
@@ -1165,7 +1164,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
           }
           ((Arg*)(&ci->info + 1))[k] = arg;
         }
-        addinstr_like(&builder, instr_cur, size, (Instr*)ci);
+        addinstr_like(&builder, &uf->body, instr_cur, size, (Instr*)ci);
         instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
         continue;
       }
@@ -1195,7 +1194,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1218,7 +1217,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1232,7 +1231,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.source = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.source.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1246,7 +1245,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.test = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.test.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1276,7 +1275,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.arg2 = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.arg2.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1290,7 +1289,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.ret = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.ret.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1311,7 +1310,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.constraint = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.constraint.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1341,7 +1340,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.key = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.key.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1371,7 +1370,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.target = (WriteArg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.target.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1399,7 +1398,7 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.key = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.key.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
@@ -1420,12 +1419,12 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
             instr.value = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.value.slot] };
           }
         }
-        addinstr_like(&builder, instr_cur, sizeof(instr), (Instr*) &instr);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
         continue;
       }
       
-      addinstr_like(&builder, instr_cur, instr_size(instr_cur), instr_cur);
+      addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }
@@ -1546,13 +1545,13 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
           for (int k = 0; k < info_len; ++k) {
             ASOI_INFO(asoi)[k] = info_ptr[k];
           }
-          addinstr_like(&builder, instr, instr_size((Instr*) asoi), (Instr*) asoi);
+          addinstr_like(&builder, &uf->body, instr, instr_size((Instr*) asoi), (Instr*) asoi);
           instr = instr_reading;
           continue;
         }
       }
       
-      addinstr_like(&builder, instr, instr_size(instr), instr);
+      addinstr_like(&builder, &uf->body, instr, instr_size(instr), instr);
       instr = (Instr*) ((char*) instr + instr_size(instr));
     }
   }
@@ -1801,10 +1800,10 @@ UserFunction *compactify_registers(UserFunction *uf) {
     while (instr_cur != instr_end) {
       switch (instr_cur->type) {
 #define CASE(KEY, TY) \
-          use_range_start(&builder, instr_cur->belongs_to);\
+          use_range_start(&builder, *instr_belongs_to_p(&uf->body, instr_cur));\
           builder.scope = ((Instr*) instr)->context_slot;\
           addinstr(&builder, sz, (Instr*) instr);\
-          use_range_end(&builder, instr_cur->belongs_to);\
+          use_range_end(&builder, *instr_belongs_to_p(&uf->body, instr_cur));\
           instr_cur = (Instr*) ((char*) instr_cur + sz);\
           continue;\
         }\
@@ -1898,7 +1897,7 @@ UserFunction *remove_pointless_blocks(UserFunction *uf) {
         instr_cur = (Instr*) (instr + 1);
         BranchInstr bri = *instr;
         bri.blk = blk_map[bri.blk];
-        addinstr_like(&builder, instr_cur, sizeof(bri), (Instr*) &bri);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(bri), (Instr*) &bri);
         continue;
       }
       if (instr_cur->type == INSTR_TESTBR) {
@@ -1907,7 +1906,7 @@ UserFunction *remove_pointless_blocks(UserFunction *uf) {
         TestBranchInstr tbri = *instr;
         tbri.true_blk = blk_map[tbri.true_blk];
         tbri.false_blk = blk_map[tbri.false_blk];
-        addinstr_like(&builder, instr_cur, sizeof(tbri), (Instr*) &tbri);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(tbri), (Instr*) &tbri);
         continue;
       }
       if (instr_cur->type == INSTR_PHI) {
@@ -1916,10 +1915,10 @@ UserFunction *remove_pointless_blocks(UserFunction *uf) {
         PhiInstr phi = *instr;
         phi.block1 = blk_map[phi.block1];
         phi.block2 = blk_map[phi.block2];
-        addinstr_like(&builder, instr_cur, sizeof(phi), (Instr*) &phi);
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(phi), (Instr*) &phi);
         continue;
       }
-      addinstr_like(&builder, instr_cur, instr_size(instr_cur), instr_cur);
+      addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
     }
   }

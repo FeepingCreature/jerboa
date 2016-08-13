@@ -41,7 +41,7 @@ void terminate(FunctionBuilder *builder);
 
 void addinstr(FunctionBuilder *builder, int size, Instr *instr);
 
-void addinstr_like(FunctionBuilder *builder, Instr *basis, int size, Instr *instr);
+void addinstr_like(FunctionBuilder *builder, FunctionBody *body, Instr *basis, int size, Instr *instr);
 
 void set_int_var(FunctionBuilder *builder, int offset, int value);
 

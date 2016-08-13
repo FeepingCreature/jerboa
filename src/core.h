@@ -265,10 +265,23 @@ typedef struct {
   int last_cycle_seen;
 } FileRange;
 
+struct _FnWrap;
+typedef struct _FnWrap FnWrap;
+
+typedef FnWrap (*VMInstrFn)(VMState *state);
+struct _FnWrap {
+  VMInstrFn self;
+};
+
 typedef struct {
-  InstrType type;
-  int context_slot;
-  FileRange *belongs_to;
+  union {
+    void *filler; // Instr must be at least (void*) sized
+    struct {
+      VMInstrFn fn; // cache
+      InstrType type;
+      int context_slot;
+    };
+  };
 } Instr;
 
 typedef struct {
@@ -277,10 +290,13 @@ typedef struct {
 
 typedef struct {
   InstrBlock* blocks_ptr; int blocks_len;
+  FileRange **ranges_ptr; // indexed by "(char*)current instr - (char*) first instr", on the premise that Instr is at least void*
   // first instruction of first block to last instruction of last block
   // (linear because cache)
   Instr *instrs_ptr, *instrs_ptr_end;
 } FunctionBody;
+
+FileRange **instr_belongs_to_p(FunctionBody *body, Instr *instr);
 
 typedef struct {
   int arity; // first n slots are reserved for parameters
@@ -288,7 +304,7 @@ typedef struct {
   char *name;
   bool is_method, variadic_tail;
   FunctionBody body;
-  bool non_ssa, optimized;
+  bool non_ssa, optimized, resolved;
   int num_optimized;
 } UserFunction;
 

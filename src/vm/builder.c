@@ -59,6 +59,12 @@ void terminate(FunctionBuilder *builder) {
   addinstr_return(builder, 0);
 }
 
+FileRange **instr_belongs_to_p(FunctionBody *body, Instr *instr) {
+  int offset = (char*) instr - (char*) body->instrs_ptr;
+  assert(offset >= 0 && offset < (char*) body->instrs_ptr_end - (char*) body->instrs_ptr);
+  return (FileRange**)((char*) body->ranges_ptr + offset);
+}
+
 void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   assert(!builder->block_terminated);
   if (!builder->current_range) abort();
@@ -71,7 +77,11 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   block->size += size;
   Instr *new_instr = (Instr*) ((char*) body->instrs_ptr + current_len);
   memcpy((void*) new_instr, instr, size);
-  new_instr->belongs_to = builder->current_range;
+  
+  int new_len_ranges = current_len + sizeof(FileRange*);
+  body->ranges_ptr = realloc(body->ranges_ptr, new_len_ranges);
+  *instr_belongs_to_p(body, new_instr) = builder->current_range;
+  
   new_instr->context_slot = builder->scope;
   if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
     builder->block_terminated = true;
@@ -79,12 +89,12 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
 }
 
 #include <stdio.h>
-void addinstr_like(FunctionBuilder *builder, Instr *basis, int size, Instr *instr) {
+void addinstr_like(FunctionBuilder *builder, FunctionBody *body, Instr *basis, int size, Instr *instr) {
   int backup = builder->scope;
-  use_range_start(builder, basis->belongs_to);
+  use_range_start(builder, *instr_belongs_to_p(body, basis));
   builder->scope = basis->context_slot;
   addinstr(builder, size, instr);
-  use_range_end(builder, basis->belongs_to);
+  use_range_end(builder, *instr_belongs_to_p(body, basis));
   builder->scope = backup;
 }
 
@@ -264,7 +274,6 @@ int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr
   int size = sizeof(CallInstr) + sizeof(Arg) * args_len;
   CallInstr *instr = alloca(size);
   instr->base.type = INSTR_CALL;
-  instr->base.belongs_to = NULL;
   instr->size = size;
   instr->info.fn = (Arg) { .kind = ARG_SLOT, .slot = fn };
   instr->info.this_arg = (Arg) { .kind = ARG_SLOT, .slot = this_slot };
@@ -375,6 +384,7 @@ UserFunction *build_function(FunctionBuilder *builder) {
   fn->is_method = false;
   fn->non_ssa = false;
   fn->optimized = false;
+  fn->resolved = false;
   fn->num_optimized = 0;
   return fn;
 }
