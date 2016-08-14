@@ -12,7 +12,7 @@
 
 void *freelist[FREELIST_LIMIT] = {0};
 
-void *cache_alloc(int size) {
+void *cache_alloc_uninitialized(int size) {
   if (UNLIKELY(size == 0)) return NULL;
   size = (size + 15) & ~15; // align to 16
   // printf(": %i\n", size);
@@ -31,14 +31,13 @@ void *cache_alloc(int size) {
     }
     freelist[slot] = needle;
   }
-  if (slot < FREELIST_LIMIT && freelist[slot]) {
+  if (LIKELY(slot < FREELIST_LIMIT && freelist[slot])) {
     res = freelist[slot];
     freelist[slot] = *(void**) freelist[slot];
   } else {
     // printf(": alloc %i\n", size);
     res = malloc(size);
   }
-  bzero(res, size);
   return res;
 }
 
@@ -319,16 +318,18 @@ char *object_set(VMState *state, Object *obj, const char *key, Value value) {
 
 void vm_record_profile(VMState *state);
 void *alloc_object_internal(VMState *state, int size) {
-  Object *res = cache_alloc(size);
+  Object *res = cache_alloc_uninitialized(size);
+  *res = (Object) {
 #if COUNT_OBJECTS
-  res->alloc_id = state->shared->gcstate.num_obj_allocated_total++;
+    .alloc_id = state->shared->gcstate.num_obj_allocated_total++,
+#endif
+    .prev = state->shared->gcstate.last_obj_allocated,
+    .size = size,
+  };
   // for debugging
   /*if (res->alloc_id == 535818) {
     __asm__("int $3");
   }*/
-#endif
-  res->prev = state->shared->gcstate.last_obj_allocated;
-  res->size = size;
   state->shared->gcstate.last_obj_allocated = res;
   state->shared->gcstate.num_obj_allocated ++;
   

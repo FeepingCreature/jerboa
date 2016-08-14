@@ -13,7 +13,13 @@
 #include "vm/vm.h"
 #include "vm/instr.h"
 
-void *cache_alloc(int size);
+void *cache_alloc_uninitialized(int size);
+
+static inline void *cache_alloc(int size) {
+  void *res = cache_alloc_uninitialized(size);
+  bzero(res, size);
+  return res;
+}
 
 void cache_free(int size, void *ptr);
 

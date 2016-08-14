@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stddef.h>
 
-void *cache_alloc(int size);
+void *cache_alloc_uninitialized(int size);
 
 void cache_free(int size, void *ptr);
 
@@ -53,7 +53,7 @@ TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) {
 
 void create_table_with_single_entry(HashTable *tbl, const char *key_ptr, size_t key_len, size_t key_hash, Value value) {
   assert(tbl->entries_num == 0);
-  tbl->entries_ptr = cache_alloc(sizeof(TableEntry) * 1);
+  tbl->entries_ptr = cache_alloc_uninitialized(sizeof(TableEntry) * 1);
   tbl->entries_num = 1;
   tbl->entries_stored = 1;
   tbl->bloom = key_hash;
@@ -106,7 +106,8 @@ static TableEntry *table_lookup_alloc_with_hash_internal(HashTable *tbl, const c
     newlen = entries_num * 2;
   }
   HashTable newtable;
-  newtable.entries_ptr = cache_alloc(sizeof(TableEntry) * newlen);
+  newtable.entries_ptr = cache_alloc_uninitialized(sizeof(TableEntry) * newlen);
+  bzero(newtable.entries_ptr, sizeof(TableEntry) * newlen);
   newtable.entries_num = newlen;
   newtable.entries_stored = 0;
   newtable.bloom = 0;

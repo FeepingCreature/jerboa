@@ -178,7 +178,7 @@ static inline int as_int_(Value v) { assert(v.type == TYPE_INT); return v.i; }
 static inline bool as_bool_(Value v) { assert(v.type == TYPE_BOOL); return v.b; }
 static inline float as_float_(Value v) { assert(v.type == TYPE_FLOAT); return v.f; }
 static inline Object *as_obj_(Value v) { assert(v.type == TYPE_OBJECT); return v.obj; }
-static inline Object *obj_or_null_(Value v) { return (v.type == TYPE_OBJECT)?v.obj:NULL; }
+static inline Object *obj_or_null_(Value v) { Object *sel[] = { NULL, v.obj }; return sel[v.type == TYPE_OBJECT]; }
 
 #define IS_INT(V) ((V).type == TYPE_INT)
 #define IS_BOOL(V) ((V).type == TYPE_BOOL)
