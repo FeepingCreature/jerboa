@@ -13,6 +13,8 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+FnWrap call_internal(VMState *state, CallInfo *info);
+
 /* why does 'apply' take 'this' as an explicit first parameter?
  * well, consider foo.bar.apply()
  * by the time apply gets called, its parameter is just 'bar'
@@ -45,7 +47,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   // passthrough call to actual function
   // note: may set its own errors
   state->frame->instr_ptr = state->instr;
-  setup_call(state, info2);
+  call_internal(state, info2);
 }
 
 static void bool_eq_fn(VMState *state, CallInfo *info) {

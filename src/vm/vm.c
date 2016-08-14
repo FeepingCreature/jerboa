@@ -45,8 +45,8 @@ void vm_stack_free(VMState *state, void *ptr, int size) {
 void vm_alloc_frame(VMState *state, int slots, int refslots) {
   Callframe *cf = (Callframe*) vm_stack_alloc_uninitialized(state, sizeof(Callframe));
   if (!cf) return; // stack overflow
+  cf->uf = NULL;
   cf->above = state->frame;
-  cf->backtrace_belongs_to_p = NULL;
   cf->block = 0;
   cf->slots_len = slots;
   cf->slots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value) * slots);
@@ -86,17 +86,22 @@ void vm_remove_frame(VMState *state) {
   vm_stack_free(state, cf->refslots_ptr, sizeof(Value*)*cf->refslots_len);
   vm_stack_free(state, cf->slots_ptr, sizeof(Value)*cf->slots_len);
   state->frame = cf->above;
-  if (state->frame) state->frame->backtrace_belongs_to_p = NULL; // we're the head frame again, use instr_ptr again
   vm_stack_free(state, cf, sizeof(Callframe));
 }
 
 static FnWrap vm_instr_return(VMState *state);
-static __thread ReturnInstr stub_ret0 = { { .type = INSTR_RETURN, .fn = vm_instr_return }, .ret = { .kind = ARG_SLOT, .slot = 0 } };
+const static __thread struct __attribute__((__packed__)) {
+  CallInstr stub_call;
+  ReturnInstr stub_ret0;
+} stub_instrs = {
+  .stub_call = { { .type = INSTR_CALL }, .size = sizeof(CallInstr) },
+  .stub_ret0 = { { .type = INSTR_RETURN, .fn = vm_instr_return }, .ret = { .kind = ARG_SLOT, .slot = 0 } }
+};
 
 void setup_stub_frame(VMState *state, int slots) {
   if (state->frame) state->frame->instr_ptr = state->instr;
   vm_alloc_frame(state, slots + 1, 0);
-  state->instr = (Instr*) &stub_ret0;
+  state->instr = (Instr*) &stub_instrs;
 }
 
 void vm_print_backtrace(VMState *state) {
@@ -106,9 +111,7 @@ void vm_print_backtrace(VMState *state) {
     if (state->frame) state->frame->instr_ptr = state->instr;
     for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
-      FileRange *belongs_to;
-      if (curf->backtrace_belongs_to_p) belongs_to = *curf->backtrace_belongs_to_p;
-      else belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
+      FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
       if (!belongs_to) continue; // stub frame
       
       const char *file;
@@ -143,9 +146,7 @@ char *vm_record_backtrace(VMState *state, int *depth) {
   } else res_ptr = malloc(1);
   for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
     Instr *instr = curf->instr_ptr;
-    FileRange *belongs_to;
-    if (curf->backtrace_belongs_to_p) belongs_to = *curf->backtrace_belongs_to_p;
-    else belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
+    FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
     
     const char *file;
     TextRange line;
@@ -176,10 +177,10 @@ void vm_record_profile(VMState *state) {
     if (curstate->frame) curstate->frame->instr_ptr = curstate->instr;
     for (Callframe *curf = curstate->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
-      FileRange **belongs_to_p = curf->backtrace_belongs_to_p;
-      if (!belongs_to_p) belongs_to_p = instr_belongs_to_p(&curf->uf->body, instr);
+      if (!curf->uf) continue; // stub frame
       
-      if (!*belongs_to_p) continue; // stub frames and the like
+      FileRange **belongs_to_p = instr_belongs_to_p(&curf->uf->body, instr);
+      assert(*belongs_to_p);
       
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
@@ -337,13 +338,27 @@ static FnWrap vm_instr_freeze_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static inline bool call_internal(VMState *state, CallInfo *info, FileRange **prev_instr) {
-  // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
-  // solve explicitly
-  state->frame->backtrace_belongs_to_p = prev_instr;
-  state->frame->instr_ptr = state->instr;
+FnWrap call_internal(VMState *state, CallInfo *info) {
+  Value fn = load_arg(state->frame, info->fn);
+  VM_ASSERT2(!IS_NULL(fn), "function was null");
+  VM_ASSERT2(IS_OBJ(fn), "this is not a thing I can call.");
+  Object *fn_obj_n = AS_OBJ(fn);
   
-  return setup_call(state, info);
+  if (fn_obj_n->parent == state->shared->vcache.function_base) {
+    // cache beforehand, in case the function wants to set up its own stub call like apply
+    Instr *prev_instr = state->instr;
+    
+    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
+    if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
+    if (LIKELY(prev_instr == state->instr)) {
+      state->instr = (Instr*) ((char*) state->instr + instr_size(state->instr));
+    }
+    return (FnWrap) { state->instr->fn };
+  } else {
+    state->frame->instr_ptr = state->instr;
+    if (!setup_call(state, info)) return (FnWrap) { vm_halt };
+    return (FnWrap) { state->instr->fn };
+  }
 }
 
 static FnWrap vm_instr_access(VMState *state) {
@@ -370,17 +385,14 @@ static FnWrap vm_instr_access(VMState *state) {
   if (!object_found) {
     Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
     if (NOT_NULL(index_op)) {
-      FileRange **prev_instr = instr_belongs_to_p(&state->frame->uf->body, state->instr);
-      state->instr = (Instr*)(access_instr + 1);
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
       info->args_len = 1;
       info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
       info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
       info->target = access_instr->target;
       INFO_ARGS_PTR(info)[0] = access_instr->key;
-      if (!call_internal(state, info, prev_instr)) return (FnWrap) { vm_halt };
       
-      return (FnWrap) { state->instr->fn };
+      return call_internal(state, info);
     }
   }
   if (!object_found) {
@@ -394,7 +406,7 @@ static FnWrap vm_instr_access(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static bool vm_instr_access_string_key_index_fallback(VMState *state, AccessStringKeyInstr *aski) {
+static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessStringKeyInstr *aski) {
   Value val = load_arg(state->frame, aski->obj);
   Object *obj = closest_obj(state, val);
   Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
@@ -409,11 +421,9 @@ static bool vm_instr_access_string_key_index_fallback(VMState *state, AccessStri
     info->target = aski->target;
     INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = aski->key_slot };
     
-    state->instr = (Instr*)(aski + 1);
-    FileRange **prev_instr = instr_belongs_to_p(&state->frame->uf->body, state->instr);
-    return call_internal(state, info, prev_instr);
+    return call_internal(state, info);
   } else {
-    VM_ASSERT(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr) false;
+    VM_ASSERT(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr) (FnWrap) { vm_halt };
   }
 }
 
@@ -429,12 +439,11 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   set_arg(state, aski->target, object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found));
   
   if (UNLIKELY(!object_found)) {
-    if (!vm_instr_access_string_key_index_fallback(state, aski)) return (FnWrap) { vm_halt };
+    return vm_instr_access_string_key_index_fallback(state, aski);
   } else {
     state->instr = (Instr*)(aski + 1);
+    return (FnWrap) { state->instr->fn };
   }
-  
-  return (FnWrap) { state->instr->fn };
 }
 
 static FnWrap vm_instr_assign(VMState *state) {
@@ -460,10 +469,7 @@ static FnWrap vm_instr_assign(VMState *state) {
       INFO_ARGS_PTR(info)[0] = assign_instr->key;
       INFO_ARGS_PTR(info)[1] = assign_instr->value;
       
-      FileRange **prev_instr = instr_belongs_to_p(&state->frame->uf->body, state->instr);
-      state->instr = (Instr*)(assign_instr + 1);
-      if (!call_internal(state, info, prev_instr)) return (FnWrap) { vm_halt };
-      return (FnWrap) { state->instr->fn };
+      return call_internal(state, info);
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
@@ -634,29 +640,7 @@ static FnWrap vm_instr_call(VMState *state) {
   CallInstr *call_instr = (CallInstr*) state->instr;
   CallInfo *info = &call_instr->info;
   
-  Instr *next_instr = (Instr*) ((char*) call_instr + call_instr->size);
-  
-  // inline call_internal/setup_call hotpath
-  Value fn = load_arg(state->frame, info->fn);
-  VM_ASSERT2(!IS_NULL(fn), "function was null");
-  VM_ASSERT2(IS_OBJ(fn), "this is not a thing I can call.");
-  Object *fn_obj_n = AS_OBJ(fn);
-  
-  if (fn_obj_n->parent == state->shared->vcache.function_base) {
-    state->instr = next_instr;
-    state->frame->backtrace_belongs_to_p = instr_belongs_to_p(&state->frame->uf->body, state->instr);
-    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
-    if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
-    state->frame->backtrace_belongs_to_p = NULL;
-    return (FnWrap) { state->instr->fn };
-  } else {
-    // stackframe's instr_ptr will be pointed at the instr _after_ the call, but this messes up backtraces
-    // solve explicitly
-    state->frame->backtrace_belongs_to_p = instr_belongs_to_p(&state->frame->uf->body, state->instr);
-    state->frame->instr_ptr = next_instr;
-    if (!setup_call(state, info)) return (FnWrap) { vm_halt };
-    return (FnWrap) { state->instr->fn };
-  }
+  return call_internal(state, info);
 }
 
 static FnWrap vm_instr_call_function_direct(VMState *state) __attribute__ ((hot));
@@ -664,12 +648,10 @@ static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallFunctionDirectInstr *instr = (CallFunctionDirectInstr*) state->instr;
   CallInfo *info = &instr->info;
   
-  Callframe *cf = state->frame;
-  cf->backtrace_belongs_to_p = instr_belongs_to_p(&cf->uf->body, &instr->base);
+  // do this beforehand, in case the function wants to set up its own stub call like apply
   state->instr = (Instr*) ((char*) instr + instr->size);
   instr->fn(state, info);
   if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
-  if (LIKELY(state->frame == cf)) cf->backtrace_belongs_to_p = NULL;
   
   return (FnWrap) { state->instr->fn };
 }
@@ -693,6 +675,7 @@ static FnWrap vm_instr_return(VMState *state) {
   }
   
   state->instr = state->frame->instr_ptr;
+  state->instr = (Instr*)((char*) state->instr + instr_size(state->instr));
   
   return (FnWrap) { state->instr->fn };
 }
@@ -808,7 +791,7 @@ void vm_update_frame(VMState *state) {
 
 static void vm_step(VMState *state) {
   state->instr = state->frame->instr_ptr;
-  assert(state->frame->uf->resolved);
+  assert(!state->frame->uf || state->frame->uf->resolved);
   VMInstrFn fn = state->instr->fn;
   // fuzz to prevent profiler aliasing
   int limit = 128 + (state->shared->cyclecount % 64);

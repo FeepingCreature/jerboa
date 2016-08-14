@@ -54,7 +54,6 @@ bool setup_call(VMState *state, CallInfo *info) {
   Object *fn_obj_n = AS_OBJ(fn);
   if (fn_obj_n->parent == function_base) {
     ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
-    state->frame->backtrace_belongs_to_p = NULL; // we didn't need it after all
     return state->runstate != VM_ERRORED;
   }
   

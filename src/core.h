@@ -318,9 +318,6 @@ struct _Callframe {
   // this is set from state->instr as the callframe becomes "not the top frame"
   // if a callframe is the top frame, you should always be using state->instr.
   Instr *instr_ptr;
-  // overrides instr_ptr->belongs_to, used when in a call
-  // double pointer due to Dark Magic
-  FileRange **backtrace_belongs_to_p;
   // when returning *from* this frame, assign result value to this (in the *above* frame)
   WriteArg target;
   int block, prev_block; // required for phi nodes
