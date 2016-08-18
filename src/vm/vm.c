@@ -111,8 +111,9 @@ void vm_print_backtrace(VMState *state) {
     if (state->frame) state->frame->instr_ptr = state->instr;
     for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
+      if (!curf->uf) continue; // stub frame
       FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
-      if (!belongs_to) continue; // stub frame
+      assert(belongs_to);
       
       const char *file;
       TextRange line;
