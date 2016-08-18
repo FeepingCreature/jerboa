@@ -110,6 +110,12 @@ var XmlResults = {
     }
     return this;
   };
+  setAttrs = method(obj) {
+    for (var i = 0; i < this.array.length; i++) {
+      this.array[i].setAttrs(obj);
+    }
+    return this;
+  };
 };
 xml.node["find"] = method(pred) {
   if (pred instanceof string) {
@@ -186,6 +192,14 @@ const EventHandlers = {
       }
     }
   };
+};
+xml.node["setAttrs"] = method(obj) {
+  const keys = object.keys(obj);
+  var key = null;
+  for (var i: int = 0; i < keys.length; i++) {
+    key = keys[i];
+    this.attr[key] = obj[key];
+  }
 };
 // TODO figure out a better performing way to do this
 xml.node["on"] = method(key, obj) {
