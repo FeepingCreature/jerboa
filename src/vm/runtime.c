@@ -1004,6 +1004,15 @@ static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
 
 #include "language.h"
 
+typedef struct _ModuleCache ModuleCache;
+struct _ModuleCache {
+  ModuleCache *next;
+  char *filename;
+  Value importval;
+};
+
+static ModuleCache *mod_cache = 0;
+
 static void require_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
@@ -1013,6 +1022,14 @@ static void require_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(file_obj, "parameter to require() must be string!");
   
   char *filename = file_obj->value;
+  ModuleCache *cur_cache = mod_cache;
+  while (cur_cache) {
+    if (strcmp(cur_cache->filename, filename) == 0) {
+      vm_return(state, info, cur_cache->importval);
+      return;
+    }
+    cur_cache = cur_cache->next;
+  }
   
   TextRange source = readfile(filename);
   register_file(source, my_asprintf("%s", filename) /* dup */, 0, 0);
@@ -1044,6 +1061,14 @@ static void require_fn(VMState *state, CallInfo *info) {
     free(substate.backtrace);
     return;
   }
+  
+  ModuleCache *new_mod_cache = malloc(sizeof(ModuleCache));
+  *new_mod_cache = (ModuleCache) {
+    .next = mod_cache,
+    .filename = my_asprintf("%s", filename), // avoid gc on the string object
+    .importval = resval
+  };
+  mod_cache = new_mod_cache;
   
   vm_return(state, info, resval);
 }
