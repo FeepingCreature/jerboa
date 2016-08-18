@@ -1,0 +1,380 @@
+const geom = require("geom.jb");
+const pango = require("c/pangocairo.jb");
+const cairo = require("c/cairo.jb");
+const gl = require("c/gl.jb");
+const glfw = require("c/glfw3.jb");
+const glfwq = require("c/glfwq.jb");
+require("xmltools.jb");
+
+function genTexture() {
+  var res = malloc(gl.GLuint.sizeof); res.target_type = gl.GLuint;
+  gl.GenTextures(1, res);
+  return res[0];
+}
+
+var textcache = {};
+function renderTextToTexture(text) {
+  if (text in textcache) return textcache[text];
+  
+  var fontdes = pango.font_description_new();
+  pango.font_description_set_family(fontdes, "serif");
+  pango.font_description_set_weight(fontdes, pango.WEIGHT_BOLD);
+  pango.font_description_set_absolute_size(fontdes, 32 * pango.SCALE);
+  
+  var presurface = cairo.image_surface_create(cairo.FORMAT_ARGB32, 0, 0);
+  var cr = cairo.create(presurface);
+  
+  var layout = pango.cairo_create_layout(cr);
+  pango.layout_set_font_description(layout, fontdes);
+  pango.layout_set_text(layout, text, -1);
+  
+  var devcoords = new pango._PangoRectangle { pointer = malloc(pango._PangoRectangle.sizeof); };
+  pango.layout_get_pixel_extents(layout, devcoords.pointer, null);
+  pango.g_object_unref(layout);
+  
+  var width = devcoords.width;
+  var height = devcoords.height;
+  print("w ", devcoords.width, ", h ", devcoords.height, ", x ", devcoords.x, ", y ", devcoords.y);
+  cairo.destroy(cr);
+  cairo.surface_destroy(presurface);
+  
+  var surface = cairo.image_surface_create(cairo.FORMAT_ARGB32, width, height);
+  cr = cairo.create(surface);
+  
+  cairo.set_source_rgba(cr, 0,0,0,0);
+  cairo.set_operator(cr, cairo.OPERATOR_SOURCE);
+  cairo.paint(cr);
+  cairo.set_operator(cr, cairo.OPERATOR_OVER);
+  
+  layout = pango.cairo_create_layout(cr);
+  pango.layout_set_font_description(layout, fontdes);
+  pango.layout_set_text(layout, text, -1);
+  
+  cairo.set_source_rgb(cr, 0.7, 0.7, 0.7);
+  cairo.move_to(cr, -devcoords.x, -devcoords.y);
+  
+  pango.cairo_show_layout(cr, layout);
+  pango.g_object_unref(layout);
+  
+  var data = cairo.image_surface_get_data(surface);
+  
+  var tex = genTexture();
+  gl.BindTexture(gl.TEXTURE_2D, tex);
+  gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  gl.TexEnvf(gl.TEXTURE_ENV, gl.TEXTURE_ENV_MODE, gl.MODULATE);
+  gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.BGRA, gl.UNSIGNED_BYTE, data);
+  
+  cairo.destroy(cr);
+  cairo.surface_destroy(surface);
+  
+  pango.font_description_free(fontdes);
+  
+  var obj = {
+    width = width;
+    height = height;
+    texture = tex;
+    bind = method() {
+      gl.Enable(gl.TEXTURE_2D);
+      gl.BindTexture(gl.TEXTURE_2D, this.texture);
+    };
+  };
+  textcache[text] = obj;
+  return obj;
+}
+
+xml.node["attrToInt"] = method(attr, base) {
+  var value = this.attr[attr];
+  if (value instanceof int) return value;
+  if (value instanceof float) return value.toInt();
+  if (value instanceof string) {
+    var head_px = value.endsWith("px");
+    if (head_px) return int.parse(head_px);
+    
+    var refnode = this.parent;
+    
+    var head_pc = value.endsWith("%");
+    if (head_pc) return (refnode.presentation.rect[base] * int.parse(head_pc)) / 100;
+    
+    return int.parse(value);
+  }
+  print("can't convert to int: ", arg);
+  assert(false);
+};
+
+function findOverlaps(node, rect, fn) {
+  if (node?.presentation?.rect?.overlaps?(rect)) {
+    fn(node);
+    if (node.nodeType == 1) {
+      var len:int = node.children.length;
+      for (var i:int = 0; i < len; i++) {
+        findOverlaps(node.children[i], rect, fn);
+      }
+    }
+  }
+}
+
+const handlers = {};
+
+const RenderPrimitive = {
+  screenrect: geom.Rect = new geom.Rect;
+  render = method(mask: geom.Rect) { assert(false); };
+};
+
+function place(rect: geom.Rect, node) {
+  // assert(node.nodeName in handlers, "Unknown node of type "+node.nodeName);
+  if (node.nodeType == 3) handlers["text"].place(rect, node);
+  else handlers[node.nodeName].place(rect, node);
+}
+
+function present(node, array) {
+  if (node.nodeType == 3) handlers["text"].present(node, array);
+  else handlers[node.nodeName].present(node, array);
+}
+
+handlers["center"] = {
+  place = function(rect, node) {
+    var len: int = node.children.length;
+    assert(len == 1, "Please only center one element for now! "+len);
+    var child = node.children[0];
+    assert(child.nodeType == 1);
+    place(rect, child);
+    // adjust placement to center
+    child.presentation.rect = new geom.Rect {
+      x = rect.x + (rect.width - child.presentation.rect.width) / 2;
+      y = rect.y;
+      width = child.presentation.rect.width;
+      height = child.presentation.rect.height;
+    };
+  };
+  present = function(node, array) {
+    present(node.children[0], array);
+  };
+};
+
+handlers["margin"] = {
+  place = function(rect, node) {
+    var sz_x = node.attrToInt("size", "width");
+    var sz_y = node.attrToInt("size", "height");
+    var subrect = new rect;
+    subrect.x += sz_x;
+    subrect.y += sz_y;
+    subrect.width -= sz_x * 2;
+    subrect.height -= sz_y * 2;
+    var len: int = node.children.length;
+    assert(len == 1); // TODO "block-level element"?
+    for (var i: int = 0; i < len; i++) {
+      var child = node.children[i];
+      place(subrect, child);
+      var myrect = new geom.Rect {
+        x = child.presentation.rect.x - sz_x;
+        y = child.presentation.rect.y - sz_y;
+        width = child.presentation.rect.width + sz_x * 2;
+        height = child.presentation.rect.height + sz_y * 2;
+      };
+      node["presentation"] = {
+        proposed_rect = myrect;
+        rect = myrect;
+      };
+    }
+  };
+  present = function(node, array) {
+    var offset = node.presentation.rect - node.presentation.proposed_rect;
+    var len: int = node.children.length;
+    for (var i: int = 0; i < len; i++) {
+      var child = node.children[i];
+      child.presentation.rect += offset;
+      present(child, array);
+    }
+  };
+};
+
+const BlitPrimitive = new RenderPrimitive {
+  obj = null;
+  render = method(mask: geom.Rect) {
+    var drawrect = this.screenrect.intersect(mask);
+    if (drawrect.width <= 0 || drawrect.height <= 0) return null;
+    this.obj.bind();
+    gl.Color3f(1, 1, 1);
+    gl.Begin(gl.QUADS);
+    var tex_from = {
+      x = (drawrect.x - this.screenrect.x) / this.screenrect.width;
+      y = (drawrect.y - this.screenrect.y) / this.screenrect.height;
+    };
+    var tex_to = {
+      x = (drawrect.x + drawrect.width - this.screenrect.x) / this.screenrect.width;
+      y = (drawrect.y + drawrect.height - this.screenrect.y) / this.screenrect.height;
+    };
+    gl.TexCoord2f(tex_from.x, tex_from.y);
+    gl.Vertex2f(drawrect.x, drawrect.y);
+    gl.TexCoord2f(tex_to.x, tex_from.y);
+    gl.Vertex2f(drawrect.x + drawrect.width, drawrect.y);
+    gl.TexCoord2f(tex_to.x, tex_to.y);
+    gl.Vertex2f(drawrect.x + drawrect.width, drawrect.y + drawrect.height);
+    gl.TexCoord2f(tex_from.x, tex_to.y);
+    gl.Vertex2f(drawrect.x, drawrect.y + drawrect.height);
+    gl.End();
+  };
+};
+
+handlers["text"] = {
+  place = function(rect: geom.Rect, node) {
+    var texobj = renderTextToTexture(node.value);
+    var rect2 = new rect;
+    rect2.width = Math.min(rect2.width, texobj.width);
+    rect2.height = Math.min(rect2.height, texobj.height);
+    node["presentation"] = { texture = texobj; rect = rect2; };
+  };
+  present = function(node, array) {
+    array.push(new BlitPrimitive { obj = node.presentation.texture; screenrect = node.presentation.rect; });
+  };
+};
+
+function computeAttrs(rect, node) {
+  const rect2 = new geom.Rect { width = rect.width; height = rect.height; }, attr = node.attr;
+  if ("width" in attr) rect2.width = node.attrToInt("width", "width");
+  if ("height" in attr) rect2.height = node.attrToInt("height", "height");
+  if ("left" in attr) rect2.x = node.attrToInt("left", "width");
+  if ("top" in attr) rect2.y = node.attrToInt("top", "height");
+  if ("right" in attr) rect2.x = rect.width - rect2.width - node.attrToInt("right", "width");
+  if ("bottom" in attr) rect2.y = rect.height - rect2.height - node.attrToInt("bottom", "height");
+  rect2.x += rect.x;
+  rect2.y += rect.y;
+  rect2.width = Math.min(rect.width, rect2.width);
+  rect2.height = Math.min(rect.height, rect2.height);
+  return rect2;
+}
+
+handlers["list"] = {
+  place = function(rect, node) {
+    const rect2 = computeAttrs(rect, node);
+    node["presentation"] = { rect = rect2; };
+    var len: int = node.children.length;
+    for (var i: int = 0; i < len; i++) {
+      var child = node.children[i];
+      if (child.nodeType == 1) {
+        place(rect2, child);
+      }
+    }
+  };
+  present = function(node, array) {
+    var len: int = node.children.length;
+    for (var i: int = 0; i < len; i++) {
+      var child = node.children[i];
+      if (child.nodeType == 1) {
+        present(child, array);
+      }
+    }
+  };
+};
+
+function renderRect(rect) {
+  gl.Disable(gl.TEXTURE_2D);
+  gl.Color3f(1, 1, 1);
+  gl.Begin(gl.QUADS);
+  gl.Vertex2f(rect.x, rect.y);
+  gl.Vertex2f(rect.x + rect.width, rect.y);
+  gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
+  gl.Vertex2f(rect.x, rect.y + rect.height);
+  gl.End();
+}
+
+const RectPrimitive = new RenderPrimitive {
+  render = method(mask: geom.Rect) {
+    var actualRect = this.screenrect.intersect(mask);
+    if (actualRect.width >= 0 && actualRect.height >= 0) {
+      renderRect(actualRect);
+    }
+  };
+};
+
+handlers["rect"] = {
+  place = function(rect: geom.Rect, node) {
+    const rect2 = computeAttrs(rect, node);
+    node["presentation"] = { rect = rect2; };
+  };
+  present = function(node, array) {
+    var rect = node.presentation.rect;
+    const topline = new geom.Rect { x=rect.x; y=rect.y; width=rect.width; height=1; };
+    const botline = new geom.Rect { x=rect.x; y=rect.y+rect.height; width=rect.width; height=1; };
+    const leftline = new geom.Rect { x=rect.x; y=rect.y; width=1; height=rect.height; };
+    const rightline = new geom.Rect { x=rect.x+rect.width; y=rect.y; width=1; height=rect.height; };
+    array.push(new RectPrimitive { screenrect = topline; });
+    array.push(new RectPrimitive { screenrect = botline; });
+    array.push(new RectPrimitive { screenrect = leftline; });
+    array.push(new RectPrimitive { screenrect = rightline; });
+  };
+};
+
+handlers["square"] = {
+  place = function(rect, node) {
+    const rect2 = computeAttrs(rect, node);
+    node["presentation"] = { rect = rect2; };
+  };
+  present = function(node, array) {
+    array.push(new RectPrimitive { screenrect = node.presentation.rect; });
+  };
+};
+
+function render(node, width, height) {
+  var array = [];
+  var window = new geom.Rect { x = 0; y = 0; width = width; height = height; };
+  place(window, node);
+  present(node, array);
+  for (var i: int = 0; i < array.length; i++) {
+    array[i].render(window);
+  }
+}
+
+function glfwMainLoop(scene) {
+  if (glfw.Init() == 0) assert(false);
+
+  var width = 640, height = 480;
+
+  var window = glfw.CreateWindow(width, height, "Hello World", null, null);
+  if (!window) {
+    glfw.Terminate();
+    assert(false);
+  }
+
+  glfwq.SetupCallbacks(window);
+
+  glfw.MakeContextCurrent(window);
+  gl.Viewport(0, 0, width, height);
+  glfw.SwapInterval(1);
+
+  print("# loop start");
+  while (!glfw.WindowShouldClose(window)) {
+  // for (var i = 0; i < 1000; i++) {
+    gl.Enable(gl.BLEND);
+    gl.Enable(gl.TEXTURE_2D);
+    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.MatrixMode(gl.PROJECTION);
+    gl.LoadIdentity();
+    gl.MatrixMode(gl.MODELVIEW);
+    gl.LoadIdentity();
+    gl.Ortho(0, width, height, 0, 1, -1);
+    gl.ClearColor(0.2, 0.18, 0.17, 0);
+    gl.Clear(gl.COLOR_BUFFER_BIT);
+    render(scene, width, height);
+    scene.trigger_propagating("frame");
+    glfw.SwapBuffers(window);
+    glfw.PollEvents();
+    while (!glfwq.QueueEmpty()) {
+      var event = new glfwq.Event { pointer = glfwq.TakeEvent(); };
+      if (event.type == glfwq.KEY) {
+        var key_event = new glfwq.KeyEvent { pointer = event.pointer; };
+        // print(" key: ", key_event.key, ", scancode ", key_event.scancode, ", action ", key_event.action, ", mods ", key_event.mods);
+        scene.trigger_propagating("key", key_event.key, key_event.scancode, key_event.action, key_event.mods);
+      } else {
+        // print("event type = ", event.type);
+      }
+    }
+  }
+
+  print("# loop end");
+
+  glfw.DestroyWindow(window);
+}

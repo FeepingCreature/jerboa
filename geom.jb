@@ -1,0 +1,53 @@
+const Point = {
+  x = 0;
+  y = 0;
+  "*" = method(f) { return new Point { x = this.x * f; y = this.y * f; }; };
+  "/" = method(f) { return new Point { x = this.x / f; y = this.y / f; }; };
+  "-" = method(b) { return new Point { x = this.x - b.x; y = this.y - b.y; }; };
+};
+
+const DeltaRect = {
+  // showing off xcompose? who, me?
+  δx : int = 0;
+  δy : int = 0;
+  δwidth : int = 0;
+  δheight : int = 0;
+};
+
+const Rect = {
+  x: int = 0;
+  y: int = 0;
+  width: int = 0;
+  height: int = 0;
+  intersect = method(rect) {
+    const res = new Rect;
+    res.x = Math.max(this.x, rect.x);
+    res.y = Math.max(this.y, rect.y);
+    res.width = Math.min(this.x + this.width, rect.x + rect.width) - res.x;
+    res.height = Math.min(this.y + this.height, rect.y + rect.height) - res.y;
+    return res;
+  };
+  overlaps = method(rect2: Rect) {
+    if (this.x > rect2.x + rect2.width) return false;
+    if (rect2.x > this.x + this.width) return false;
+    if (this.y > rect2.y + rect2.height) return false;
+    if (rect2.y > this.y + this.height) return false;
+    return true;
+  };
+  "-" = method(rect2: Rect) {
+    return new DeltaRect {
+      δx = this.x - rect2.x;
+      δy = this.y - rect2.y;
+      δwidth = this.width - rect2.width;
+      δheight = this.height - rect2.height;
+    };
+  };
+  "+" = method(dr: DeltaRect) {
+    return new Rect {
+      x = this.x + dr.δx;
+      y = this.y + dr.δy;
+      width = this.width + dr.δwidth;
+      height = this.height + dr.δheight;
+    };
+  };
+};

@@ -1,0 +1,211 @@
+#!build/jerboa
+
+const gl = require("c/gl.jb");
+const glfw = require("c/glfw3.jb");
+const game = require("game.jb");
+const geom = require("geom.jb");
+
+function toInt(arg) {
+  if (arg instanceof int) return arg;
+  if (arg instanceof float) return arg.toInt();
+  if (arg instanceof string) return int.parse(arg);
+  print(arg);
+  assert(false);
+}
+
+const GameMode = {
+  Playing = 1;
+  Waiting = 2;
+};
+
+var scene = xml.parse("<list></list>");
+
+function resetGame() {
+  scene.attr["mode"] = GameMode.Waiting;
+  scene.find("#ball").setAttrs({ top = "50%"; left = "50%"; velx = 0; vely = 0; });
+}
+
+scene.on("key", method(key, ...) {
+  if (scene.attr.mode == GameMode.Waiting && (key == glfw.KEY_ENTER || key == glfw.KEY_SPACE)) {
+    scene.attr.mode = GameMode.Playing;
+    var ball = scene.find("#ball")[0];
+    if (Math.rand() % 2 == 0) ball.attr.velx = 5;
+    else ball.attr.velx = -5;
+    ball.attr.vely = Math.rand() % 7 - 3;
+  }
+});
+
+var score = {
+  left = 0;
+  right = 0;
+  set = method(left, right) {
+    this.left = left;
+    this.right = right;
+    scene.find('#score').text(""+left+" : "+right);
+  };
+};
+
+function winRound(side) {
+  var left = score.left, right = score.right;
+  if (side == "left") left++; else right++;
+  score.set(left, right);
+  resetGame();
+}
+
+var area = scene.append('<list id="play-area" width="620" height="440" left="10" top="30"></list>');
+var paddleLeft = area.append('<square id="paddle" width="10" height="40" left="50" top="50"></square>');
+var paddleRight = area.append('<square id="paddle" width="10" height="40" right="50" top="50"></square>');
+area.append('<rect width="100%" height="100%"/>');
+
+area.append('<rect id="goal-left" width="10px" height="100%" left="-5px"></rect>')
+.on("impact", function(ball) {
+  winRound("left");
+});
+
+area.append('<rect id="goal-right" width="10px" height="100%" right="-5px"></rect>')
+.on("impact", function(ball) {
+  winRound("right");
+});
+
+scene.append('<center><margin size="5" id="score"/></center>');
+
+scene.append('<square id="ball" width="10" height="10"></square>');
+
+score.set(0, 0);
+resetGame();
+
+function center(node) {
+  // var pres = node.presentation?.rect?;
+  var rect = node.presentation.rect;
+  return new geom.Point {
+    x = rect.x + rect.width / 2;
+    y = rect.y + rect.height / 2;
+  };
+}
+
+function bound(a, b, v) {
+  if (a > b) { var tmp = a; a = b; b = tmp; }
+  if (v < a) v = a;
+  if (v > b) v = b;
+  return v;
+}
+
+const move_paddle = method(delta) {
+  var from = 0;
+  var to = this.parent.attrToInt("height", "height") - this.attrToInt("height", "height");
+  this.attr.top = bound(from, to, this.attrToInt("top", "height") + delta);
+};
+
+var PaddleController = {
+  getAction = method() { assert(false); };
+  ACTION_NONE = 0;
+  ACTION_DOWN = 1;
+  ACTION_UP = 2;
+};
+
+const PlayerPaddleController = new PaddleController {
+  activeAction = PaddleController.ACTION_NONE;
+  getAction = method(paddle) { return this.activeAction; };
+  onKey = method(key, action) {
+    if (key == glfw.KEY_UP) {
+      if (action == 1) this.activeAction = this.ACTION_UP;
+      else if (action == 0) this.activeAction = this.ACTION_NONE;
+    }
+    if (key == glfw.KEY_DOWN) {
+      if (action == 1) this.activeAction = this.ACTION_DOWN;
+      else if (action == 0) this.activeAction = this.ACTION_NONE; // this.off("frame", move_down);
+    }
+  };
+};
+
+const AIPaddleController = new PaddleController {
+  getAction = method(paddle) {
+    var ball = scene.find('#ball')[0];
+    var delta = center(paddle) - center(ball);
+    if (delta.y > 5) return this.ACTION_UP;
+    if (delta.y < -5) return this.ACTION_DOWN;
+    return this.ACTION_NONE;
+  };
+};
+
+paddleLeft["controller"] = PlayerPaddleController;
+paddleRight["controller"] = AIPaddleController;
+
+scene.find('#paddle').on("key", method(key, scancode, action, mods) {
+  this.controller?.onKey(key, action);
+});
+
+scene.on('frame', method() {
+  var paddles = scene.find('#paddle');
+  for (var i = 0; i < paddles.length; i++) {
+    var paddle = paddles[i];
+    var action = paddle.controller.getAction(paddle);
+    if (action == PaddleController.ACTION_UP) {
+      move_paddle.apply(paddle, [-5]); // TODO .call()
+    }
+    if (action == PaddleController.ACTION_DOWN) {
+      move_paddle.apply(paddle, [ 5]);
+    }
+  }
+});
+
+scene.find('#paddle').on("impact", method(ball) {
+  // scene.find("#score").text("meep");
+  var pt1 = center(this), pt2 = center(ball);
+  var del = pt2 - pt1;
+  var sz = Math.sqrt(del.x * del.x + del.y * del.y);
+  del = del * 5 / sz;
+  if (del.x < 0) ball.attr.velx = -5;
+  else ball.attr.velx = 5; // prevent getting stuck in case of = 0
+});
+
+function addImpact(x, y) {
+  var effect = scene.append('<rect></rect>');
+  effect.attr = new effect.attr { width=10; height=10; left=x; top=y; };
+  var frame = 0;
+  effect.on("frame", method() {
+    this.attr.left -= 1;
+    this.attr.top -= 1;
+    this.attr.width += 2;
+    this.attr.height += 2;
+    if (frame++ == 10) this.remove();
+  });
+}
+
+scene.find("#ball").on("frame", method() {
+  var rect = this.presentation.rect;
+  var area_rect = area.presentation.rect;
+  if (rect.y < area_rect.y && toInt(this.attr.vely) < 0) {
+    addImpact(rect.x, rect.y);
+    this.attr.vely = -toInt(this.attr.vely);
+  }
+  if (rect.y + rect.height > toInt(area_rect.y) + toInt(area_rect.height)
+    && toInt(this.attr.vely) > 0
+  ) {
+    addImpact(rect.x, rect.y);
+    this.attr.vely = -toInt(this.attr.vely);
+  }
+  if (rect.x < area_rect.x && toInt(this.attr.velx) < 0) {
+    addImpact(rect.x, rect.y);
+    this.attr.velx = -toInt(this.attr.velx);
+  }
+  if (rect.x + rect.width > area_rect.x + area_rect.width
+    && toInt(this.attr.velx) > 0
+  ) {
+    addImpact(rect.x, rect.y);
+    this.attr.velx = -toInt(this.attr.velx);
+  }
+  this.attr.top = rect.y + toInt(this.attr.vely);
+  this.attr.left = rect.x + toInt(this.attr.velx);
+  game.findOverlaps(scene, rect, function(node) {
+    if (this !is node) {
+      node.trigger("impact", this);
+    }
+  });
+});
+
+print(scene);
+
+game.glfwMainLoop(scene);
+
+/* vim: syntax=JavaScript */
