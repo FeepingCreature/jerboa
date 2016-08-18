@@ -910,6 +910,13 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
       build_op(builder, "/", rv, *rv, rhs_expr, range);
       continue;
     }
+    if (eat_string(&text, "%")) {
+      record_end(text, range);
+      res = parse_expr(&text, builder, 5, &rhs_expr);
+      if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
+      build_op(builder, "%", rv, *rv, rhs_expr, range);
+      continue;
+    }
     free(range);
     break;
   }

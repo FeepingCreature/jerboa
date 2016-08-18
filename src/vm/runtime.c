@@ -65,6 +65,7 @@ typedef enum {
   MATH_SUB,
   MATH_MUL,
   MATH_DIV,
+  MATH_MOD,
   MATH_BIT_OR,
   MATH_BIT_AND
 } MathOp;
@@ -87,6 +88,10 @@ static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
       case MATH_DIV:
         VM_ASSERT(i2 != 0, "division by zero");
         res = i1 / i2;
+        break;
+      case MATH_MOD:
+        VM_ASSERT(i2 != 0, "division by zero");
+        res = i1 % i2;
         break;
       case MATH_BIT_OR: res = i1 | i2; break;
       case MATH_BIT_AND: res = i1 & i2; break;
@@ -131,6 +136,10 @@ static void int_mul_fn(VMState *state, CallInfo *info) {
 
 static void int_div_fn(VMState *state, CallInfo *info) {
   int_math_fn(state, info, MATH_DIV);
+}
+
+static void int_mod_fn(VMState *state, CallInfo *info) {
+  int_math_fn(state, info, MATH_MOD);
 }
 
 static void int_bit_or_fn(VMState *state, CallInfo *info) {
@@ -1205,6 +1214,12 @@ static void min_fn(VMState *state, CallInfo *info) {
   else vm_return(state, info, FLOAT2VAL(minval));
 }
 
+static void rand_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  int res = rand();
+  vm_return(state, info, INT2VAL(res));
+}
+
 static void assert_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
   bool test = value_is_truthy(load_arg(state->frame, INFO_ARGS_PTR(info)[0]));
@@ -1261,6 +1276,7 @@ Object *create_root(VMState *state) {
   object_set(state, int_obj, "-" , make_fn(state, int_sub_fn));
   object_set(state, int_obj, "*" , make_fn(state, int_mul_fn));
   object_set(state, int_obj, "/" , make_fn(state, int_div_fn));
+  object_set(state, int_obj, "%" , make_fn(state, int_mod_fn));
   object_set(state, int_obj, "|" , make_fn(state, int_bit_or_fn));
   object_set(state, int_obj, "&" , make_fn(state, int_bit_and_fn));
   object_set(state, int_obj, "==", make_fn(state, int_eq_fn));
@@ -1397,6 +1413,7 @@ Object *create_root(VMState *state) {
   object_set(state, math_obj, "pow", make_fn(state, pow_fn));
   object_set(state, math_obj, "max", make_fn(state, max_fn));
   object_set(state, math_obj, "min", make_fn(state, min_fn));
+  object_set(state, math_obj, "rand", make_fn(state, rand_fn));
   math_obj->flags |= OBJ_FROZEN;
   object_set(state, root, "Math", OBJ2VAL(math_obj));
   
