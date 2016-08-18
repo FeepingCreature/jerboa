@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.6)
 
 project(jerboa)
 
-set(FLAGS "-g" "-O2" "-Wall" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE")
+set(FLAGS "-g" "-O0" "-Wall" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE")
 
 find_package(PkgConfig)
 pkg_check_modules (LIBXML REQUIRED icu-uc)
