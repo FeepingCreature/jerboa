@@ -1,4 +1,3 @@
-// swig -v -includeall -ignoremissing -module [name] -outcurrentdir -xml /usr/include/[header]
 function print_xml(node, depth) {
   var spacing = "";
   for (var i = 0; i < depth; i++) {
@@ -20,13 +19,13 @@ function print_xml(node, depth) {
 xml.node["toStringBits"] = method(arr) {
   if (this.nodeType == 1) {
     arr.push("<");
-    arr.push(this.nodeName);
+    arr.push(""+this.nodeName);
     var attr_names = keys(this.attr);
     for (var i:int = 0; i < attr_names.length; i++) {
       arr.push(" ");
-      arr.push(attr_names[i]);
+      arr.push(""+attr_names[i]);
       arr.push("='");
-      arr.push(this.attr[attr_names[i]]);
+      arr.push(""+this.attr[attr_names[i]]);
       arr.push("'");
     }
     arr.push(">");
@@ -34,7 +33,7 @@ xml.node["toStringBits"] = method(arr) {
       this.children[i].toStringBits(arr);
     }
     arr.push("</");
-    arr.push(this.nodeName);
+    arr.push(""+this.nodeName);
     arr.push(">");
   }
 };
@@ -105,9 +104,20 @@ var XmlResults = {
     }
     return this;
   };
+  text = method(text) {
+    for (var i = 0; i < this.array.length; i++) {
+      this.array[i].text(text);
+    }
+    return this;
+  };
 };
 xml.node["find"] = method(pred) {
-  if (pred instanceof string) return this.findByName(pred);
+  if (pred instanceof string) {
+    // TODO full jquery-style predicate parsing
+    var rest = pred.startsWith("#");
+    if (rest) pred = function(node) { return node.nodeType == 1 && "id" in node.attr && node.attr.id == rest; };
+    else return this.findByName(pred);
+  }
   var array = this.find_array(pred);
   return new XmlResults {
     array = array;
@@ -121,6 +131,22 @@ xml.node["findByName"] = method(name) {
     array = array;
     length = array.length;
   };
+};
+xml.node["remove"] = method() {
+  assert(this.parent);
+  var pos = -1;
+  const children = this.parent.children;
+  for (var i = 0; i < children.length; i++) {
+    if (this is children[i]) {
+      children.splice(i, 1);
+      return this;
+    }
+  }
+  assert(false, "internal error");
+};
+xml.node["text"] = method(text) {
+  this.children = [ new xml.text_node { value = text; } ];
+  return this;
 };
 xml.node["append"] = method(arg) {
   if (arg instanceof string) {
@@ -138,31 +164,66 @@ xml.node["append"] = method(arg) {
     this.children.push(arg);
     arg.parent = this;
   }
+  return arg;
 };
 const EventHandlers = {
-  fns = [];
+  fns = null;
+  create = method() { return new this { fns = []; }; };
   call = method(base, arguments) {
     for (var i = 0; i < this.fns.length; i++) {
       var obj = this.fns[i];
-      if (!obj.fn.apply(obj.obj, arguments)) return false;
+      if (obj.fn.apply(obj.obj, arguments) is false) return false;
     }
     return true;
+  };
+  remove = method(obj) {
+    for (var i = 0; i < this.fns.length; i++) {
+      var entry = this.fns[i];
+      if (entry.fn is obj.fn && entry.obj is obj.obj) {
+        if (i < this.fns.length - 1) this.fns[i] = this.fns.pop();
+        else this.fns.pop();
+        return null;
+      }
+    }
   };
 };
 // TODO figure out a better performing way to do this
 xml.node["on"] = method(key, obj) {
   if (obj instanceof function) obj = { fn = obj; obj = this; };
+  obj.fn["key"] = key;
   if (!("_handlers" in this)) this["_handlers"] = {};
-  if (!("key" in this._handlers)) this._handlers[key] = new EventHandlers;
+  if (!(key in this._handlers)) this._handlers[key] = EventHandlers.create();
   this._handlers[key].fns.push(obj);
-  if (this.parent) this.parent.on(key, obj);
+};
+xml.node["off"] = method(key, obj) {
+  if (obj instanceof function) obj = { fn = obj; obj = this; };
+  if ("_handlers" in this && key in this._handlers) {
+    this._handlers[key].remove(obj);
+  }
+  if (this.parent) this.parent.off(key, obj);
 };
 xml.node["trigger_"] = method(key, arguments) {
   if ("_handlers" in this && key in this._handlers) {
-    if (!this._handlers[key].call(this, arguments)) return false;
+    if (this._handlers[key].call(this, arguments) is false) return false;
   }
   return true;
 };
+xml.node["trigger_propagating_"] = method(key, arguments) {
+  this.trigger_(key, arguments);
+  if (this.nodeType == 1) {
+    // handlers may be modifying this array in arbitrary ways
+    // TODO use a hashtable instead?
+    var children = this.children.dup();
+    var len:int = children.length;
+    for (var i:int = 0; i < len; i++) {
+      // TODO don't recurse into nodes that are "known" not to have a handler for this key
+      children[i].trigger_propagating_(key, arguments);
+    }
+  }
+};
 xml.node["trigger"] = method(key, ...) {
   this.trigger_(key, arguments);
+};
+xml.node["trigger_propagating"] = method(key, ...) {
+  this.trigger_propagating_(key, arguments);
 };
