@@ -17,6 +17,13 @@ do
       swigargs+=("$2")
       shift
       ;;
+    -d|--define)
+      swigargs+=("-d")
+      swigargs+=("$2")
+      swigargs+=("$3")
+      shift
+      shift
+      ;;
     -i|--include)
       swigargs+=("-i")
       swigargs+=("$2")
@@ -25,6 +32,23 @@ do
     -h)
       usage
       exit 1
+      ;;
+    *)
+      newargs+=("$1")
+      ;;
+  esac
+  shift
+done
+
+set -- ${newargs[@]}
+
+swigcmdargs=()
+newargs=()
+while [ $# -gt 0 ]
+do
+  case "$1" in
+    -cpperraswarn)
+      swigcmdargs+=("$1")
       ;;
     *)
       newargs+=("$1")
@@ -44,7 +68,7 @@ HEADER_FILE=$1; shift
 LIB_FILE=$1; shift
 JB_FILE=$1; shift
 echo "-- Running SWIG -> XML"
-swig -xml -o swig.xml -module swig -includeall -ignoremissing $@ "$HEADER_FILE"
+swig -xml -o swig.xml -module swig -includeall -ignoremissing ${swigcmdargs[@]} $@ "$HEADER_FILE"
 echo "-- Reencoding as UTF-8"
 iconv -f ISO-8859-15 -t UTF-8 swig.xml > swig.2.xml
 echo "-- Running XML -> C"

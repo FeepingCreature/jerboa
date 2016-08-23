@@ -5,8 +5,12 @@ if (arguments.length < 2) {
   assert(false, "bad arguments");
 }
 
+var global_typemap = {};
+var known_structs = {};
+
 var xmlfile = arguments[0], libfile = arguments[1];
 var modifiers = [];
+
 for (var i = 2; i < arguments.length; i++) {
   if (arguments[i] == "-x") {
     i++;
@@ -14,6 +18,10 @@ for (var i = 2; i < arguments.length; i++) {
   } else if (arguments[i] == "-i") {
     i++;
     modifiers.push({ kind = "include"; value = arguments[i]; });
+  } else if (arguments[i] == "-d") {
+    print("Define: '", arguments[i+1], "' = '", arguments[i+2], "'");
+    global_typemap[arguments[i+1]] = arguments[i+2];
+    i += 2;
   } else {
     modifiers.push({ kind = "prefix"; value = arguments[i]; });
   }
@@ -79,8 +87,6 @@ print("select decls");
 var decls = xmldata.findByName("cdecl");
 print("done. ", decls.length);
 
-var global_typemap = {};
-
 print("filter typedefs");
 var typedefs = decls.filter(function(node) {
   return getAttr(node, "kind") == "typedef";
@@ -92,12 +98,13 @@ for (var i = 0; i < typedefs.length; i++) {
   var name = getAttr(typedef, "name");
   var decl = getAttr(typedef, "decl");
   var type = getAttr(typedef, "type");
-  global_typemap[name] = decl + type;
+  if (!(name in global_typemap)) global_typemap[name] = decl + type;
 }
 print("done.");
 
 function xml_type_to_ffi_str(type) {
   // print("  debug: ", type);
+  if (type in known_structs) return known_structs[type];
   if (type == "p.char") return "ffi.char_pointer";
   if (type == "p.q(const).char") return "ffi.char_pointer";
   if (type.startsWith("a(")) return "null";
@@ -134,6 +141,7 @@ function xml_type_to_ffi_str(type) {
   if (type == "int16_t") return "ffi.int16";
   if (type == "int32_t") return "ffi.int32";
   if (type == "int64_t") return "ffi.int64";
+  if (type == "size_t") return "ffi.size_t";
   // print(type, " in ", global_typemap, " -- ", type in global_typemap);
   if (type in global_typemap) {
     return xml_type_to_ffi_str(global_typemap[type]);
@@ -220,17 +228,20 @@ for (var i = 0; i < structs.length; i++) {
     if (exclude(structname)) skip = true;
     if (skip) { print("skip ", structname); }
     else {
-      print("process ", structname);
+      print("process: ", structname);
       var struct_decl = "struct "+structname;
       if (getAttr(struct, "storage") && getAttr(struct, "storage") == "typedef")
         struct_decl = structname;
+      known_structs[struct_decl] = short_name(structname);
       var members = struct.findByName("cdecl");
+      var complete : bool = true;
       cfile.print("  {");
       cfile.print("    ", struct_decl, " ", "var;");
-      cfile.print("    printf(\"const ", short_name(structname), " = {\\n\");");
+      cfile.print("    printf(\"const ", short_name(structname), " = new ffi.struct {\\n\");");
       cfile.print("    printf(\"  pointer = null;\\n\");");
       cfile.print("    printf(\"  sizeof = %lu;\\n\", sizeof(var));");
       cfile.print("    printf(\"  \\\"[]\\\" = method(key) {\\n\");");
+      var ffi_members = [];
       for (var k = 0; k < members.length; k++) {
         var member = members[k];
         var isgood = false;
@@ -244,13 +255,26 @@ for (var i = 0; i < structs.length; i++) {
           var combined_type = decl + type;
           var ffi_type = xml_type_to_ffi_str(combined_type);
           if (ffi_type != "null") {
+            ffi_members.push(ffi_type);
             // print(ffi_type, " ", structname, " . ", name, "?");
             cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", ffi_type, ", %li);\\n\",");
             cfile.print("           (char*)&var.", name, " - (char*)&var);");
-          } else print("skip ", name, " (unknown type ", combined_type, ")");
-        } else print("skip ", name);
+          } else {
+            print("skip ", name, " (unknown type ", combined_type, ")");
+            complete = false;
+          }
+        } else {
+          print("skip ", name);
+          complete = false;
+        }
       }
       cfile.print("    printf(\"  };\\n\");");
+      if (complete) {
+        cfile.print("    printf(\"  complete = true;\\n\");");
+        cfile.print("    printf(\"  members = ["+ffi_members.join(", ")+"];\\n\");");
+      } else {
+        cfile.print("    printf(\"  complete = false;\\n\");");
+      }
       cfile.print("    printf(\"};\\n\");");
       cfile.print("  };");
     }

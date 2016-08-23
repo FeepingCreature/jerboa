@@ -31,7 +31,7 @@ static void ffi_open_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, OBJ2VAL(handle_obj));
 }
 
-static ffi_type *type_to_ffi_ptr(Object *ffi_obj, Object *obj) {
+static ffi_type *type_to_ffi_ptr(VMState *state, Object *ffi_obj, Object *obj) {
   FFIObject *ffi = (FFIObject*) ffi_obj;
   if (obj == ffi->void_obj) return &ffi_type_void;
   if (obj == ffi->short_obj) return &ffi_type_sshort;
@@ -52,6 +52,27 @@ static ffi_type *type_to_ffi_ptr(Object *ffi_obj, Object *obj) {
   if (obj == ffi->uint64_obj) return &ffi_type_uint64;
   if (obj == ffi->char_pointer_obj) return &ffi_type_pointer;
   if (obj == ffi->pointer_obj) return &ffi_type_pointer;
+  if (obj_instance_of(obj, ffi->struct_obj)) {
+    Value complete = OBJECT_LOOKUP_STRING(obj, "complete", NULL);
+    VM_ASSERT(value_is_truthy(complete), "cannot use incomplete struct in ffi call") NULL;
+    ArrayObject *members = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(obj, "members", NULL)), state->shared->vcache.array_base);
+    VM_ASSERT(members, "ffi struct members undefined!") NULL;
+    ffi_type *str_type = malloc(sizeof(ffi_type));
+    *str_type = (ffi_type) {
+      .size = 0,
+      .alignment = 0,
+      .type = FFI_TYPE_STRUCT,
+      // TODO just dangle off str_type
+      .elements = malloc(sizeof(ffi_type*) * (members->length + 1))
+    };
+    for (int i = 0; i < members->length; i++) {
+      ffi_type *ptr = type_to_ffi_ptr(state, ffi_obj, OBJ_OR_NULL(members->ptr[i]));
+      if (!ptr) return NULL; // recursion errored
+      str_type->elements[i] = ptr;
+    }
+    str_type->elements[members->length] = NULL;
+    return str_type;
+  }
   abort();
 }
 
@@ -237,7 +258,7 @@ typedef struct {
   int par_len_sum_precomp;
 } FFIFunctionObject;
 
-static int ffi_par_len(Object *ret_type, ArrayObject *par_types_array, FFIObject *ffi) {
+static int ffi_par_len(VMState *state, Object *ret_type, ArrayObject *par_types_array, FFIObject *ffi) {
   int par_len_sum = 0;
   for (int i = -1; i < par_types_array->length; ++i) {
     Object *type;
@@ -264,6 +285,13 @@ static int ffi_par_len(Object *ret_type, ArrayObject *par_types_array, FFIObject
     else if (type == ffi->uint64_obj) par_len_sum += TYPESZ(uint64_t);
     else if (type == ffi->char_pointer_obj) par_len_sum += TYPESZ(char*);
     else if (type == ffi->pointer_obj) par_len_sum += TYPESZ(void*);
+    else if (obj_instance_of(type, ffi->struct_obj)) {
+      Value struct_sz_val = OBJECT_LOOKUP_STRING(type, "sizeof", NULL);
+      VM_ASSERT(IS_INT(struct_sz_val), "sizeof should really have been int") -1;
+      int struct_sz = AS_INT(struct_sz_val);
+      if (struct_sz < sizeof(long)) struct_sz = sizeof(long);
+      par_len_sum += struct_sz;
+    }
     else abort();
 #undef TYPESZ
   }
@@ -312,6 +340,14 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     data = (char*) data + ((sizeof(double)>sizeof(long))?sizeof(double):sizeof(long));
   } else if (ret_type == ffi->char_pointer_obj || ret_type == ffi->pointer_obj) {
     data = (char*) data + sizeof(void*);
+  } else if (obj_instance_of(ret_type, ffi->struct_obj)) {
+    Value struct_sz_val = OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL);
+    VM_ASSERT(IS_INT(struct_sz_val), "sizeof should really have been int");
+    int struct_sz = AS_INT(struct_sz_val);
+    // NOTE: point of danger??
+    VM_ASSERT(struct_sz >= 0 && struct_sz < 16384, "wat r u even doing");
+    if (struct_sz < sizeof(long)) struct_sz = sizeof(long);
+    data = (char*) data + struct_sz;
   } else VM_ASSERT(false, "unhandled return type");
   // fprintf(stderr, "::");
   for (int i = 0; i < info->args_len; ++i) {
@@ -385,6 +421,29 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
       par_ptrs[i] = data;
       data = (char*) data + ((sizeof(void*)>sizeof(long))?sizeof(void*):sizeof(long));
     }
+    else if (obj_instance_of(type, ffi->struct_obj)) {
+      Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
+      VM_ASSERT(IS_OBJ(val), "ffi struct argument must be ffi struct object");
+      Object *str_obj = AS_OBJ(val);
+      // TODO same_type(a, b)
+      // VM_ASSERT(obj_instance_of(str_obj, type), "ffi struct argument %i must match struct type", i);
+      VM_ASSERT(obj_instance_of(str_obj, ffi->struct_obj), "ffi struct argument %i must be struct", i);
+      
+      Value sizeof_val = OBJECT_LOOKUP_STRING(str_obj, "sizeof", NULL);
+      VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
+      int struct_size = AS_INT(sizeof_val);
+      VM_ASSERT(struct_size >= 0 && struct_size < 16384, "scuse me wat r u doin");
+      
+      PointerObject *ptr_obj = (PointerObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(str_obj, "pointer", NULL)), pointer_base);
+      VM_ASSERT(ptr_obj, "struct's \"pointer\" not set, null or not a pointer");
+      
+      int step_size = struct_size;
+      if (sizeof(long) > step_size) step_size = sizeof(long);
+      
+      memcpy(data, ptr_obj->ptr, struct_size);
+      par_ptrs[i] = data;
+      data = (char*) data + step_size;
+    }
     else abort();
   }
   
@@ -422,6 +481,14 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     // fprintf(stderr, "d");
     // TODO alloc_double?
     vm_return(state, info, FLOAT2VAL((float) *(double*) ret_ptr));
+  } else if (obj_instance_of(ret_type, ffi->struct_obj)) {
+    // validated above
+    int struct_sz = AS_INT(OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL));
+    void *struct_data = malloc(struct_sz);
+    memcpy(struct_data, ret_ptr, struct_sz);
+    Object *struct_val_obj = AS_OBJ(make_object(state, ret_type));
+    object_set(state, struct_val_obj, "pointer", make_ffi_pointer(state, struct_data));
+    vm_return(state, info, OBJ2VAL(struct_val_obj));
   } else VM_ASSERT(false, "unknown return type");
   // fprintf(stderr, "\n");
 }
@@ -521,6 +588,7 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   Object *string_base = state->shared->vcache.string_base;
   Object *pointer_base = state->shared->vcache.pointer_base;
   Object *ffi = state->shared->vcache.ffi_obj;
+  FFIObject *ffi_obj = (FFIObject*) ffi;
   Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle", NULL));
   Object *type_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "type", NULL));
   
@@ -539,19 +607,24 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   // VM_ASSERT(!error, "dlsym failed: %s", error);
   if (error) { vm_return(state, info, VNULL); return; }
   
-  Object *ret_type = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), type_base);
+  Object *ret_type = OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1]));
+  if (obj_instance_of(ret_type, ffi_obj->struct_obj)) { } // keep ret_type the deepest obj
+  else ret_type = obj_instance_of(ret_type, type_base); // else bring down to right beneath type_base so we can ==
   VM_ASSERT(ret_type, "return type must be ffi.type!");
   
   ArrayObject *par_types = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[2])), array_base);
   VM_ASSERT(par_types, "parameter type must be array");
   
-  ffi_type *ffi_ret_type = type_to_ffi_ptr(ffi, ret_type);
+  ffi_type *ffi_ret_type = type_to_ffi_ptr(state, ffi, ret_type);
   FFIHandle *ffihdl = malloc(sizeof(FFIHandle) + sizeof(ffi_type*) * par_types->length);
   
   for (int i = 0; i < par_types->length; ++i) {
-    Object *sub_type = obj_instance_of(OBJ_OR_NULL(par_types->ptr[i]), type_base);
+    Object *sub_type = OBJ_OR_NULL(par_types->ptr[i]);
+    if (obj_instance_of(sub_type, ffi_obj->struct_obj)) { } // keep sub_type the deepest obj
+    else sub_type = obj_instance_of(sub_type, type_base); // else bring down to right beneath type_base so we can ==
     VM_ASSERT(sub_type, "parameter type %i must be ffi.type!", i);
-    ((ffi_type**)(ffihdl + 1))[i] = type_to_ffi_ptr(ffi, sub_type);
+    
+    ((ffi_type**)(ffihdl + 1))[i] = type_to_ffi_ptr(state, ffi, sub_type);
   }
   
   ffi_status status = ffi_prep_cif(&ffihdl->cif, FFI_DEFAULT_ABI, par_types->length, ffi_ret_type, (ffi_type**)(ffihdl + 1));
@@ -574,7 +647,7 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   ffi_fn->par_types_array = par_types;
   ffi_fn->_sym_pointer = _sym_pointer;
   ffi_fn->_ffi_pointer = _ffi_pointer;
-  ffi_fn->par_len_sum_precomp = ffi_par_len(ret_type, par_types, (FFIObject*) ffi);
+  ffi_fn->par_len_sum_precomp = ffi_par_len(state, ret_type, par_types, (FFIObject*) ffi);
   
   vm_return(state, info, OBJ2VAL(fn_obj));
 }
@@ -629,6 +702,13 @@ void ffi_setup_root(VMState *state, Object *root) {
   object_set(state, ffi_obj, "handle", OBJ2VAL(handle_obj));
   object_set(state, handle_obj, "pointer", VNULL);
   object_set(state, handle_obj, "sym", make_fn(state, ffi_sym_fn));
+  
+  Object *struct_obj = AS_OBJ(make_object(state, type_obj));
+  ffi->struct_obj = struct_obj;
+  object_set(state, ffi_obj, "struct", OBJ2VAL(struct_obj));
+  object_set(state, struct_obj, "complete", BOOL2VAL(false));
+  object_set(state, struct_obj, "pointer", VNULL);
+  object_set(state, struct_obj, "members", VNULL);
   
   object_set(state, root, "ffi", OBJ2VAL(ffi_obj));
   
