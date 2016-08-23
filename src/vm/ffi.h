@@ -16,7 +16,7 @@ typedef struct {
     *int8_obj, *int16_obj, *int32_obj, *int64_obj,
     *uint8_obj, *uint16_obj, *uint32_obj, *uint64_obj,
     *pointer_obj, *char_pointer_obj,
-    *struct_obj;
+    *size_t_obj, *struct_obj;
 } FFIObject;
 
 void ffi_setup_root(VMState *state, Object *root);

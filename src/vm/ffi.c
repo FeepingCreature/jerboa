@@ -696,6 +696,11 @@ void ffi_setup_root(VMState *state, Object *root) {
   DEFINE_TYPE(double, double);
   DEFINE_TYPE(pointer, void*);
   DEFINE_TYPE(char_pointer, char*);
+  if (sizeof(size_t) == sizeof(uint32_t)) {
+    DEFINE_TYPE(size_t, uint32_t);
+  } else if (sizeof(size_t) == sizeof(uint64_t)) {
+    DEFINE_TYPE(size_t, uint64_t);
+  } else abort(); // 128-bit? 16-bit?
 #undef DEFINE_TYPE
 
   Object *handle_obj = AS_OBJ(make_object(state, NULL));
