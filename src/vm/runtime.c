@@ -50,6 +50,19 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   call_internal(state, info2);
 }
 
+// foo.bar.call(xz, 3, 4, 5) -> xz.bar(3, 4, 5) can be done by just rewriting info
+static void fn_call_fn(VMState *state, CallInfo *info) {
+  CallInfo *info2 = alloca(sizeof(CallInfo) + sizeof(Arg) * (info->args_len - 1));
+  info2->args_len = info->args_len - 1;
+  info2->fn = info->this_arg;
+  info2->target = info->target;
+  info2->this_arg = INFO_ARGS_PTR(info)[0];
+  for (int i = 1; i < info->args_len; i++) {
+    INFO_ARGS_PTR(info2)[i-1] = INFO_ARGS_PTR(info)[i];
+  }
+  call_internal(state, info2);
+}
+
 static void bool_eq_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
@@ -1293,6 +1306,7 @@ Object *create_root(VMState *state) {
   object_set(state, root, "sysfun", OBJ2VAL(function_obj));
   state->shared->vcache.function_base = function_obj;
   object_set(state, function_obj, "apply", make_fn(state, fn_apply_fn));
+  object_set(state, function_obj, "call", make_fn(state, fn_call_fn));
   
   Object *int_obj = AS_OBJ(make_object(state, NULL));
   int_obj->flags |= OBJ_NOINHERIT;
@@ -1333,6 +1347,7 @@ Object *create_root(VMState *state) {
   closure_obj->flags |= OBJ_NOINHERIT;
   object_set(state, root, "function", OBJ2VAL(closure_obj));
   object_set(state, closure_obj, "apply", make_fn(state, fn_apply_fn));
+  object_set(state, closure_obj, "call", make_fn(state, fn_call_fn));
   state->shared->vcache.closure_base = closure_obj;
   
   Object *bool_obj = AS_OBJ(make_object(state, NULL));

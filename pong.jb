@@ -141,10 +141,10 @@ scene.on('frame', method() {
     var paddle = paddles[i];
     var action = paddle.controller.getAction(paddle);
     if (action == PaddleController.ACTION_UP) {
-      move_paddle.apply(paddle, [-5]); // TODO .call()
+      move_paddle.call(paddle, -5);
     }
     if (action == PaddleController.ACTION_DOWN) {
-      move_paddle.apply(paddle, [ 5]);
+      move_paddle.call(paddle,  5);
     }
   }
 });
