@@ -25,3 +25,5 @@ var baz = foo?.baz;
 assert(!baz);
 assert(!baz?());
 baz?();
+
+foo?["bar"]();

@@ -613,6 +613,97 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
   return PARSE_OK;
 }
 
+static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range) {
+  char *text = *textp;
+  
+  FileRange *carr_range = alloc_and_record_start(text);
+  if (!eat_string(&text, "?") || !eat_string(&text, "[")) {
+    free(carr_range);
+    return PARSE_NONE;
+  }
+  
+  RefValue key;
+  ParseResult res = parse_expr(&text, builder, 0, &key);
+  if (res == PARSE_ERROR) return res;
+  assert(res == PARSE_OK);
+  
+  if (!eat_string(&text, "]")) {
+    log_parser_error(*textp, "closing ']' expected");
+    free(carr_range);
+    return PARSE_ERROR;
+  }
+  record_end(text, carr_range);
+  
+  *textp = text;
+  
+  int expr_slot = 0;
+  if (builder) expr_slot = ref_access(builder, *rv);
+  
+  use_range_start(builder, carr_range);
+  
+  // test if lhs is null, if true null, else test if rhs is in lhs, if false null, else continue
+  int start_blk, expr_nonnull_blk, idx_in_expr_blk, idx_in_expr_end_blk, end1_blk, end2_blk;
+  if (builder) start_blk = get_block(builder);
+  
+  int branch_start_expr_nonnull, branch_start_end1;
+  if (builder) {
+    addinstr_test_branch(builder, expr_slot, &branch_start_expr_nonnull, &branch_start_end1);
+    expr_nonnull_blk = new_block(builder);
+    set_int_var(builder, branch_start_expr_nonnull, expr_nonnull_blk);
+  }
+  
+  int key_slot = 0;
+  int key_in_slot = 0;
+  int branch_expr_nonnull_key_in_expr, branch_key_nonnull_end2;
+  if (builder) {
+    key_slot = ref_access(builder, key);
+    key_in_slot = addinstr_key_in_obj(builder, key_slot, expr_slot);
+    
+    addinstr_test_branch(builder, key_in_slot, &branch_expr_nonnull_key_in_expr, &branch_key_nonnull_end2);
+    
+    idx_in_expr_blk = new_block(builder);
+    set_int_var(builder, branch_expr_nonnull_key_in_expr, idx_in_expr_blk);
+    
+    use_range_end(builder, carr_range);
+  }
+  
+  *rv = (RefValue) {expr_slot, key_slot, REFMODE_OBJECT, carr_range};
+  
+  res = parse_expr_continuation(&text, builder, rv, expr_range);
+  if (res == PARSE_ERROR) return res;
+  assert(res == PARSE_OK);
+  int res_slot = ref_access(builder, *rv);
+  
+  int branch_key_in_expr_end2;
+  if (builder) {
+    idx_in_expr_end_blk = get_block(builder);
+  
+    use_range_start(builder, carr_range);
+    addinstr_branch(builder, &branch_key_in_expr_end2);
+    
+    end2_blk = new_block(builder);
+    set_int_var(builder, branch_key_nonnull_end2, end2_blk);
+    set_int_var(builder, branch_key_in_expr_end2, end2_blk);
+    res_slot = addinstr_phi(builder, expr_nonnull_blk, 0, idx_in_expr_end_blk, res_slot);
+  }
+  
+  int branch_end2_end1;
+  if (builder) {
+    addinstr_branch(builder, &branch_end2_end1);
+    
+    end1_blk = new_block(builder);
+    set_int_var(builder, branch_end2_end1, end1_blk);
+    set_int_var(builder, branch_start_end1, end1_blk);
+    res_slot = addinstr_phi(builder, start_blk, 0, end2_blk, res_slot);
+    use_range_end(builder, carr_range);
+  }
+  
+  *rv = ref_simple(res_slot);
+  
+  *textp = text;
+  return PARSE_OK;
+}
+
 void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs_expr, RefValue rhs_expr, FileRange *range) {
   if (builder) {
     int lhs_value = ref_access(builder, lhs_expr);
@@ -713,6 +804,8 @@ static ParseResult parse_expr_continuation(char **textp, FunctionBuilder *builde
     if ((res = parse_cond_prop_access(&text, builder, rv, expr_range)) == PARSE_OK) break; // eats the tail
     if (res == PARSE_ERROR) return res;
     if ((res = parse_cond_cont_call(&text, builder, rv, expr_range)) == PARSE_OK) break; // eats the tail
+    if (res == PARSE_ERROR) return res;
+    if ((res = parse_cond_array_access(&text, builder, rv, expr_range)) == PARSE_OK) continue;
     if (res == PARSE_ERROR) return res;
     break;
   }
