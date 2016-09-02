@@ -95,7 +95,7 @@ CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
   if (instr->target.kind == ARG_SLOT) CHKSLOT_WRITE(instr->target.slot);
 CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  CHKSLOT_READ(instr->target_slot);
+  CHKSLOT_WRITE(instr->target_slot);
   if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
   if (instr->value.kind == ARG_SLOT) CHKSLOT_READ(instr->value.slot);
 CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)

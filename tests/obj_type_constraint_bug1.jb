@@ -1,0 +1,10 @@
+({ value = null; });
+
+// what the hell..
+const Obj2 = {
+  first = null;
+  second = null;
+  third = function(PARAMETER: int) { };
+};
+
+(new Obj2).third(0);

@@ -1648,7 +1648,7 @@ static void reassign_slot(int *slot_p, bool read, int numslots, int special_slot
     *slot_p = slot_map[slot];
     if (slot >= special_slots && !sl_contains(slot_outlist, slot) && last_access_blk) {
       slot_inuse[slot_map[slot]] = false;
-      // fprintf(stderr, "open slot %i for access\n", slot_map[slot]);
+      // fprintf(stderr, "open slot %i -> %i for access\n", slot, slot_map[slot]);
     }
     return;
   }
@@ -1771,7 +1771,7 @@ UserFunction *compactify_registers(UserFunction *uf) {
       if (sl_contains(slot_inlist[i], k)) slot_inuse[slot_map[k]] = true;
     }
     /*
-    printf(stderr, "updating block %i:\n", i);
+    fprintf(stderr, "updating block %i:\n", i);
     for (int k = special_slots; k < uf->slots; k++) {
       if (slot_inuse[k]) fprintf(stderr, "| %i in use.\n", k);
     }
