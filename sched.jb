@@ -1,0 +1,87 @@
+const time = require("c/time.jb");
+
+time.timespec["<"] = method(ts2: time.timespec) {
+  if (this.tv_sec < ts2.tv_sec) return true;
+  if (this.tv_sec > ts2.tv_sec) return false;
+  return this.tv_nsec < ts2.tv_nsec;
+};
+
+time.timespec["<="] = method(ts2: time.timespec) {
+  if (this.tv_sec < ts2.tv_sec) return true;
+  if (this.tv_sec > ts2.tv_sec) return false;
+  return this.tv_nsec <= ts2.tv_nsec;
+};
+
+time.timespec[">"] = method(ts2: time.timespec) {
+  if (this.tv_sec > ts2.tv_sec) return true;
+  if (this.tv_sec < ts2.tv_sec) return false;
+  return this.tv_nsec > ts2.tv_nsec;
+};
+
+time.timespec[">="] = method(ts2: time.timespec) {
+  if (this.tv_sec > ts2.tv_sec) return true;
+  if (this.tv_sec < ts2.tv_sec) return false;
+  return this.tv_nsec >= ts2.tv_nsec;
+};
+
+time.timespec["add"] = method(sec, nsec) {
+  this.tv_nsec = this.tv_nsec + nsec;
+  var overflow = 0;
+  if (this.tv_nsec > 1000000000) {
+    overflow = this.tv_nsec / 1000000000;
+    this.tv_nsec = this.tv_nsec % 1000000000;
+  }
+  this.tv_sec = this.tv_sec + sec + overflow;
+};
+
+const Scheduler = {
+  schedQueue = null;
+  init = method() {
+    this.schedQueue = require("minheap.jb").MinHeap.create();
+  };
+  setTimeout = method(time_ms, task: function) {
+    // TODO figure out some way to allocate struct object that includes its memory
+    var ts_p = malloc(time.timespec.sizeof);
+    var ts = new time.timespec { pointer = ts_p; };
+    var error = time.clock_gettime(time.CLOCK_MONOTONIC, ts.pointer);
+    assert(error == 0);
+    ts.add(time_ms / 1000, (time_ms % 1000) * 1000000);
+    this.schedQueue.insert(ts, task);
+  };
+  runSched = method() {
+    if (this.schedQueue.empty()) return;
+    
+    var ts_p = malloc(time.timespec.sizeof);
+    var now = new time.timespec { pointer = ts_p; };
+    var error = time.clock_gettime(time.CLOCK_MONOTONIC, now.pointer);
+    assert(error == 0);
+    
+    var running = true;
+    var didOne = false;
+    while (running) {
+      if (this.schedQueue.empty()) return;
+      var head_key = this.schedQueue.peek_key();
+      if (head_key < now) {
+        var task = this.schedQueue.take();
+        task.value();
+        didOne = true;
+        // TODO
+        // free(task.key);
+      } else {
+        // re-check time
+        var error = time.clock_gettime(time.CLOCK_MONOTONIC, now.pointer);
+        assert(error == 0);
+        if (head_key >= now) {
+          running = false; // TODO break
+        }
+      }
+    }
+    
+    if (didOne) print(this.schedQueue.keys.length, " tasks in the future.");
+    // free(ts_p);
+  };
+};
+
+Scheduler.init();
+function runSched() { Scheduler.runSched(); }
+function setTimeout(time, fn: function) { Scheduler.setTimeout(time, fn); }
