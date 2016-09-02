@@ -1,0 +1,20 @@
+var game = require("game.jb");
+var sfml_audio = require("c/sfml-audio.jb");
+var sfml_system = require("c/sfml-system.jb");
+
+// TODO cleanup handler
+game.handlers["sound"] = {
+  init = method(sound) {
+    var file = sound.attr["file"];
+    var buffer = sfml_audio.SoundBuffer_createFromFile(file);
+    
+    var sfml_snd = sfml_audio.Sound_create();
+    sfml_audio.Sound_setBuffer(sfml_snd, buffer);
+    
+    sound["play"] = method() {
+      sfml_audio.Sound_play(sfml_snd);
+    };
+    // sfml_audio.Sound_destroy(sfml_snd);
+    // sfml_audio.SoundBuffer_destroy(buffer);
+  };
+};

@@ -4,6 +4,7 @@ const gl = require("c/gl.jb");
 const glfw = require("c/glfw3.jb");
 const game = require("game.jb");
 const geom = require("geom.jb");
+require("sound.jb");
 
 function toInt(arg) {
   if (arg instanceof int) return arg;
@@ -19,6 +20,8 @@ const GameMode = {
 };
 
 var scene = xml.parse("<list></list>");
+
+scene.append('<sound id="impact" file="/usr/share/sounds/error.wav"/>');
 
 function resetGame() {
   scene.attr["mode"] = GameMode.Waiting;
@@ -150,6 +153,7 @@ scene.on('frame', method() {
 });
 
 scene.find('#paddle').on("impact", method(ball) {
+  scene.find("#impact")[0].play();
   // scene.find("#score").text("meep");
   var pt1 = center(this), pt2 = center(ball);
   var del = pt2 - pt1;
@@ -157,9 +161,11 @@ scene.find('#paddle').on("impact", method(ball) {
   del = del * 5 / sz;
   if (del.x < 0) ball.attr.velx = -5;
   else ball.attr.velx = 5; // prevent getting stuck in case of = 0
+  ball.attr.vely = del.y;
 });
 
 function addImpact(x, y) {
+  scene.find("#impact")[0].play();
   var effect = scene.append('<rect></rect>');
   effect.attr = new effect.attr { width=10; height=10; left=x; top=y; };
   var frame = 0;
@@ -205,6 +211,8 @@ scene.find("#ball").on("frame", method() {
 });
 
 print(scene);
+
+// scene.on("frame", function() { assert(false); });
 
 game.glfwMainLoop(scene);
 
