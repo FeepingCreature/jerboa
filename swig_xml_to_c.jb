@@ -242,6 +242,7 @@ for (var i = 0; i < structs.length; i++) {
       cfile.print("    printf(\"  sizeof = %lu;\\n\", sizeof(var));");
       cfile.print("    printf(\"  \\\"[]\\\" = method(key) {\\n\");");
       var ffi_members = [];
+      var assign_fns = {};
       for (var k = 0; k < members.length; k++) {
         var member = members[k];
         var isgood = false;
@@ -259,6 +260,10 @@ for (var i = 0; i < structs.length; i++) {
             // print(ffi_type, " ", structname, " . ", name, "?");
             cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", ffi_type, ", %li);\\n\",");
             cfile.print("           (char*)&var.", name, " - (char*)&var);");
+            assign_fns[name] = function() {
+              cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") this.pointer.dereference_assign(", ffi_type, ", %li, value);\\n\",");
+              cfile.print("           (char*)&var.", name, " - (char*)&var);");
+            };
           } else {
             print("skip ", name, " (unknown type ", combined_type, ")");
             complete = false;
@@ -266,6 +271,15 @@ for (var i = 0; i < structs.length; i++) {
         } else {
           print("skip ", name);
           complete = false;
+        }
+      }
+      cfile.print("    printf(\"  };\\n\");");
+      cfile.print("    printf(\"  \\\"[]=\\\" = method(key, value) {\\n\");");
+      for (var k = 0; k < members.length; k++) {
+        var member = members[k];
+        var name = getAttr(member, "name");
+        if (name in assign_fns) {
+          assign_fns[name]();
         }
       }
       cfile.print("    printf(\"  };\\n\");");
