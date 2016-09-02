@@ -437,11 +437,12 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   int key_len = aski->key_len;
   size_t key_hash = aski->key_hash;
   bool object_found = false;
-  set_arg(state, aski->target, object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found));
+  Value result = object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found);
   
   if (UNLIKELY(!object_found)) {
     return vm_instr_access_string_key_index_fallback(state, aski);
   } else {
+    set_arg(state, aski->target, result);
     state->instr = (Instr*)(aski + 1);
     return (FnWrap) { state->instr->fn };
   }
@@ -609,6 +610,21 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
       bool key_set;
       char *error = object_set_shadowing(state, AS_OBJ(obj_val), key, value, &key_set);
       VM_ASSERT2(error == NULL, "while shadow-assigning '%s': %s", key, error);
+      if (!key_set) { // fall back to index?
+        Value index_assign_op = OBJECT_LOOKUP_STRING(AS_OBJ(obj_val), "[]=", NULL);
+        if (NOT_NULL(index_assign_op)) {
+          Value key = make_string(state, aski->key, strlen(aski->key));
+          CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
+          info->args_len = 2;
+          info->this_arg = (Arg) { .kind = ARG_VALUE, .value = obj_val };
+          info->fn = (Arg) { .kind = ARG_VALUE, .value = index_assign_op };
+          info->target = (WriteArg) { .kind = ARG_SLOT, .slot = aski->target_slot };
+          INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = key };
+          INFO_ARGS_PTR(info)[1] = (Arg) { .kind = ARG_VALUE, .value = value };
+          
+          return call_internal(state, info);
+        }
+      }
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
     }

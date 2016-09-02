@@ -176,8 +176,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
       char *mode = "(plain)";
       if (((AssignStringKeyInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignStringKeyInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
-      fprintf(stderr, "assign%s: %s . '%s' = %s \t\t(opt: string key)\n",
+      fprintf(stderr, "assign%s: (%i=) %s . '%s' = %s \t\t(opt: string key)\n",
               mode,
+              ((AssignStringKeyInstr*) instr)->target_slot,
               get_arg_info_ext(state, ((AssignStringKeyInstr*) instr)->obj),
               ((AssignStringKeyInstr*) instr)->key,
               get_arg_info_ext(state, ((AssignStringKeyInstr*) instr)->value));

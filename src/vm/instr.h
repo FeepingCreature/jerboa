@@ -156,6 +156,7 @@ typedef struct {
   Instr base;
   char *key;
   Arg obj, value;
+  int target_slot /* scratch space for calls */;
   AssignType type;
 } AssignStringKeyInstr;
 

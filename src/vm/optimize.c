@@ -547,7 +547,8 @@ UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
           .obj = assi->obj,
           .value = assi->value,
           .key = slot_table_ptr[assi->key.slot],
-          .type = assi->type
+          .type = assi->type,
+          .target_slot = assi->target_slot,
         };
         addinstr_like(&builder, &uf->body, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(assi + 1);
