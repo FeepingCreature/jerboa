@@ -6,6 +6,24 @@ const glfw = require("c/glfw3.jb");
 const glfwq = require("c/glfwq.jb");
 require("xmltools.jb");
 
+const handlers = {};
+
+var backup_parse = xml["parse"];
+xml["parse"] = method(text) {
+  var obj = backup_parse.call(this, text);
+  function recursive_init(node) {
+    if (node.nodeType == 1) {
+      handlers?[node.nodeName]?.init(node);
+      var len:int = node.children.length;
+      for (var i:int = 0; i < len; i++) {
+        recursive_init(node.children[i]);
+      }
+    }
+  }
+  recursive_init(obj);
+  return obj;
+};
+
 function genTexture() {
   var res = malloc(gl.GLuint.sizeof); res.target_type = gl.GLuint;
   gl.GenTextures(1, res);
@@ -116,8 +134,6 @@ function findOverlaps(node, rect, fn) {
   }
 }
 
-const handlers = {};
-
 const RenderPrimitive = {
   screenrect: geom.Rect = new geom.Rect;
   render = method(mask: geom.Rect) { assert(false); };
@@ -126,12 +142,12 @@ const RenderPrimitive = {
 function place(rect: geom.Rect, node) {
   // assert(node.nodeName in handlers, "Unknown node of type "+node.nodeName);
   if (node.nodeType == 3) handlers["text"].place(rect, node);
-  else handlers[node.nodeName].place(rect, node);
+  else handlers[node.nodeName]?.place(rect, node);
 }
 
 function present(node, array) {
   if (node.nodeType == 3) handlers["text"].present(node, array);
-  else handlers[node.nodeName].present(node, array);
+  else handlers[node.nodeName]?.present(node, array);
 }
 
 handlers["center"] = {

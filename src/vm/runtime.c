@@ -1399,11 +1399,13 @@ Object *create_root(VMState *state) {
   Object *xml_obj = AS_OBJ(make_object(state, NULL));
   object_set(state, xml_obj, "load", make_fn(state, xml_load_fn));
   object_set(state, xml_obj, "parse", make_fn(state, xml_parse_fn));
+  // no! allow methods to redefine parse()
+  // (it's not inner-loop enough to require freezing)
+  // xml_obj->flags |= OBJ_FROZEN;
   
   Object *node_obj = AS_OBJ(make_object(state, NULL));
   object_set(state, node_obj, "find_array", make_fn(state, xml_node_find_array_fn));
   object_set(state, node_obj, "find_array_by_name", make_fn(state, xml_node_find_by_name_array_fn));
-  xml_obj->flags |= OBJ_FROZEN;
   object_set(state, xml_obj, "node", OBJ2VAL(node_obj));
   
   Object *element_node_obj = AS_OBJ(make_object(state, node_obj));
