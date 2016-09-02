@@ -1445,11 +1445,17 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
 
 static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRange *keywd_range) {
   RefValue ret_value;
-  ParseResult res = parse_expr(textp, builder, 0, &ret_value);
-  if (res == PARSE_ERROR) return res;
-  assert(res == PARSE_OK);
-  
-  int value = ref_access(builder, ret_value);
+  char *text2 = *textp;
+  int value;
+  if (eat_string(&text2, ";")) {
+    value = 0; // null slot
+  } else {
+    ParseResult res = parse_expr(textp, builder, 0, &ret_value);
+    if (res == PARSE_ERROR) return res;
+    assert(res == PARSE_OK);
+    
+    value = ref_access(builder, ret_value);
+  }
   
   if (builder) {
     use_range_start(builder, keywd_range);
