@@ -126,7 +126,44 @@ static void ffi_ptr_dereference(VMState *state, CallInfo *info) {
   } else if (ffi_type_obj == ffi->char_pointer_obj) {
     char *ptr = *(char**) offset_ptr;
     vm_return(state, info, make_string_static(state, ptr));
+  } else if (ffi_type_obj == ffi->long_obj) {
+    long l = *(long*) offset_ptr;
+    if (l < INT_MIN || l > INT_MAX) {
+      VM_ASSERT(false, "value exceeds bounds of my int type");
+    }
+    vm_return(state, info, INT2VAL((int) l));
   } else { fprintf(stderr, "TODO\n"); abort(); }
+}
+
+static void ffi_ptr_dereference_assign(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 3, "wrong arity: expected 2, got %i", info->args_len);
+  Object *root = state->root;
+  Object *pointer_base = state->shared->vcache.pointer_base;
+  
+  FFIObject *ffi = (FFIObject*) AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
+  Object *ffi_type = AS_OBJ(OBJECT_LOOKUP_STRING((Object*) ffi, "type", NULL));
+  
+  Object *thisptr = AS_OBJ(load_arg(state->frame, info->this_arg));
+  VM_ASSERT(thisptr->parent == pointer_base, "internal error");
+  PointerObject *thisptr_obj = (PointerObject*) thisptr;
+  
+  Object *ffi_type_obj = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), ffi_type);
+  Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
+  VM_ASSERT(IS_INT(offs_val), "offset must be integer");
+  int offs = AS_INT(offs_val);
+  VM_ASSERT(ffi_type_obj, "type is not a FFI type");
+  char *offset_ptr = (char*) thisptr_obj->ptr + offs;
+  
+  Value value = load_arg(state->frame, INFO_ARGS_PTR(info)[2]);
+  
+  (void) offset_ptr; (void) value;
+  if (ffi_type_obj == ffi->long_obj) {
+    VM_ASSERT(IS_INT(value), "can only assign integer to long");
+    *(long*) offset_ptr = AS_INT(value);
+  } else {
+    fprintf(stderr, "TODO\n");
+    abort();
+  }
 }
 
 bool ffi_pointer_write(VMState *state, Object *type, void *ptr, Value val) {
@@ -243,6 +280,7 @@ static void ffi_ptr_add(VMState *state, CallInfo *info) {
 static Value make_ffi_pointer(VMState *state, void *ptr) {
   Object *ptr_obj = AS_OBJ(make_ptr(state, ptr));
   object_set(state, ptr_obj, "dereference", make_fn(state, ffi_ptr_dereference));
+  object_set(state, ptr_obj, "dereference_assign", make_fn(state, ffi_ptr_dereference_assign));
   object_set(state, ptr_obj, "+", make_fn(state, ffi_ptr_add));
   object_set(state, ptr_obj, "target_type", VNULL);
   object_set(state, ptr_obj, "[]", make_fn(state, ffi_ptr_index_fn));
