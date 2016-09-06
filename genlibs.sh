@@ -13,3 +13,4 @@ mkdir -p c
 ./swigify.sh -p glfwq -p GLFWQ_ -p GLFWQ -x gl -x GL -x PFNGL /usr/include/glfwq.h libglfwq.so c/glfwq.jb
 ./swigify.sh -p sf /usr/include/SFML/Audio.h libcsfml-audio.so c/sfml-audio.jb -cpperraswarn -I/usr/include/ -DsfInt64=int64_t
 ./swigify.sh -p sf /usr/include/SFML/System.h libcsfml-system.so c/sfml-system.jb -cpperraswarn -I/usr/include/ -DsfInt64=int64_t
+./swigify.sh /usr/include/time.h librt.so c/time.jb
