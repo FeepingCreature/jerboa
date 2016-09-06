@@ -146,6 +146,7 @@ function place(rect: geom.Rect, node) {
 }
 
 function present(node, array) {
+  if ((node?.attr?.visibility || "visible") == "hidden") return;
   if (node.nodeType == 3) handlers["text"].present(node, array);
   else handlers[node.nodeName]?.present(node, array);
 }

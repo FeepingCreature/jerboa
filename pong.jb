@@ -22,6 +22,7 @@ const GameMode = {
 var scene = xml.parse("<list></list>");
 
 scene.append('<sound id="impact" file="/usr/share/sounds/error.wav"/>');
+scene.append('<sound id="goal" file="/usr/share/sounds/question.wav"/>');
 
 function resetGame() {
   scene.attr["mode"] = GameMode.Waiting;
@@ -49,6 +50,7 @@ var score = {
 };
 
 function winRound(side) {
+  scene.find('#goal')[0].play();
   var left = score.left, right = score.right;
   if (side == "left") left++; else right++;
   score.set(left, right);
@@ -60,12 +62,12 @@ var paddleLeft = area.append('<square id="paddle" width="10" height="40" left="5
 var paddleRight = area.append('<square id="paddle" width="10" height="40" right="50" top="50"></square>');
 area.append('<rect width="100%" height="100%"/>');
 
-area.append('<rect id="goal-left" width="10px" height="100%" left="-5px"></rect>')
+area.append('<rect id="goal-left" width="10px" height="100%" left="-5px" visibility="hidden"></rect>')
 .on("impact", function(ball) {
   winRound("left");
 });
 
-area.append('<rect id="goal-right" width="10px" height="100%" right="-5px"></rect>')
+area.append('<rect id="goal-right" width="10px" height="100%" right="-5px" visibility="hidden"></rect>')
 .on("impact", function(ball) {
   winRound("right");
 });
