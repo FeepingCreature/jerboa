@@ -665,10 +665,14 @@ static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallFunctionDirectInstr *instr = (CallFunctionDirectInstr*) state->instr;
   CallInfo *info = &instr->info;
   
-  // do this beforehand, in case the function wants to set up its own stub call like apply
-  state->instr = (Instr*) ((char*) instr + instr->size);
+  // cache beforehand, in case the function wants to set up its own stub call like apply
+  Instr *prev_instr = state->instr;
+  
   instr->fn(state, info);
   if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
+  if (LIKELY(state->instr == prev_instr)) {
+    state->instr = (Instr*) ((char*) instr + instr->size);
+  }
   
   return (FnWrap) { state->instr->fn };
 }
