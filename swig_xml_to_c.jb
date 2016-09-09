@@ -166,9 +166,13 @@ for (var i = 0; i < constants.length; i++) {
   var constant = constants[i];
   var name = getAttr(constant, "name");
   var value = getAttr(constant, "value");
-  value = int.parse(value);
   if (!exclude(name)) {
-    cfile.print("  printf(\"const ", short_name(name), " = ", value, ";\\n\");");
+    if (getAttr(constant, "rawval")?.startsWith("\"")) {
+      cfile.print("  printf(\"const ", short_name(name), " = ", getAttr(constant, "rawval").replace("\"", "\\\""), ";\\n\");");
+    } else {
+      value = int.parse(value);
+      cfile.print("  printf(\"const ", short_name(name), " = ", value, ";\\n\");");
+    }
   }
 }
 print("done.");
