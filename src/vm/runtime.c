@@ -378,6 +378,49 @@ static void string_find_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, INT2VAL(pos_utf8));
 }
 
+static void string_replace_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  
+  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
+  VM_ASSERT(sobj, "internal error: string.replace() called on wrong type of object");
+  StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
+  VM_ASSERT(sobj2, "internal error: string.replace() expects string as first arg");
+  StringObject *sobj3 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), string_base);
+  VM_ASSERT(sobj3, "internal error: string.replace() expects string as second arg");
+  
+  char *str = sobj->value;
+  int len = strlen(str);
+  char *match = sobj2->value;
+  int matchlen = strlen(match);
+  char *subst = sobj3->value;
+  int substlen = strlen(subst);
+  if (matchlen == 0 || substlen == 0) {
+    vm_return(state, info, OBJ2VAL((Object*)sobj));
+    return;
+  }
+  
+  char *res = NULL;
+  int reslen = 0;
+  while (true) {
+    char *pos = memmem(str, len, match, matchlen);
+    if (pos == NULL) {
+      res = realloc(res, reslen + len);
+      memcpy(res + reslen, str, len);
+      reslen += len;
+      vm_return(state, info, make_string(state, res, reslen));
+      return;
+    }
+    int ipos = pos - str;
+    res = realloc(res, reslen + ipos + substlen);
+    memcpy(res + reslen, str, ipos);
+    memcpy(res + reslen + ipos, subst, substlen);
+    reslen += ipos + substlen;
+    str += ipos + matchlen;
+  }
+  abort();
+}
+
 static void string_byte_len_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
@@ -1371,6 +1414,7 @@ Object *create_root(VMState *state) {
   object_set(state, string_obj, "endsWith", make_fn(state, string_endswith_fn));
   object_set(state, string_obj, "slice", make_fn(state, string_slice_fn));
   object_set(state, string_obj, "find", make_fn(state, string_find_fn));
+  object_set(state, string_obj, "replace", make_fn(state, string_replace_fn));
   object_set(state, string_obj, "byte_len", make_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
   
