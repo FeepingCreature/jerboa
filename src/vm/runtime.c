@@ -572,7 +572,7 @@ static void array_resize_fn(VMState *state, CallInfo *info) {
   int newsize = AS_INT(arg);
   VM_ASSERT(newsize >= 0, "bad size: %i", newsize);
   array_resize(state, arr_obj, newsize, true);
-  memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
+  if (oldsize) memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
   vm_return(state, info, this_val);
 }
 
@@ -713,7 +713,7 @@ static void array_dup_fn(VMState *state, CallInfo *info) {
   
   ArrayObject *new_arr = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   array_resize(state, new_arr, arr_obj->length, true);
-  memcpy(new_arr->ptr, arr_obj->ptr, sizeof(Value) * arr_obj->length);
+  if (arr_obj->length) memcpy(new_arr->ptr, arr_obj->ptr, sizeof(Value) * arr_obj->length);
   vm_return(state, info, OBJ2VAL((Object*) new_arr));
 }
 

@@ -779,9 +779,12 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
   
   // TODO table_clone
   obj->tbl = ((Object*)(asoi+1))->tbl;
-  int tbl_len = sizeof(TableEntry) * obj->tbl.entries_num;
-  obj->tbl.entries_ptr = cache_alloc_uninitialized(tbl_len);
-  memcpy(obj->tbl.entries_ptr, ((Object*)(asoi+1))->tbl.entries_ptr, tbl_len);
+  // TODO don't gen instr if 0
+  if (obj->tbl.entries_num) {
+    int tbl_len = sizeof(TableEntry) * obj->tbl.entries_num;
+    obj->tbl.entries_ptr = cache_alloc_uninitialized(tbl_len);
+    memcpy(obj->tbl.entries_ptr, ((Object*)(asoi+1))->tbl.entries_ptr, tbl_len);
+  }
   
   for (int i = 0; i < asoi->info_len; ++i) {
     StaticFieldInfo *info = &ASOI_INFO(asoi)[i];
