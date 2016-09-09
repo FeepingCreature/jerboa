@@ -44,6 +44,7 @@ Value make_closure_fn(VMState *state, Object *context, UserFunction *fn) {
   obj->base.mark_fn = closure_mark_fn;
   obj->context = context;
   obj->vmfun = fn;
+  obj->num_called = 0;
   return OBJ2VAL((Object*) obj);
 }
 
