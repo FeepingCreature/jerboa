@@ -532,7 +532,11 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     vm_return(state, info, make_string(state, *(char**) ret_ptr, strlen(*(char**) ret_ptr)));
   } else if (ret_type == ffi->pointer_obj) {
     // fprintf(stderr, "p");
-    vm_return(state, info, make_ffi_pointer(state, *(void**) ret_ptr));
+    if (*(void**) ret_ptr == NULL) {
+      vm_return(state, info, VNULL);
+    } else {
+      vm_return(state, info, make_ffi_pointer(state, *(void**) ret_ptr));
+    }
   } else if (ret_type == ffi->float_obj) {
     // fprintf(stderr, "f");
     vm_return(state, info, FLOAT2VAL(*(float*) ret_ptr));
