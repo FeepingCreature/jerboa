@@ -50,6 +50,11 @@ static ffi_type *type_to_ffi_ptr(VMState *state, Object *ffi_obj, Object *obj) {
   if (obj == ffi->uint16_obj) return &ffi_type_uint16;
   if (obj == ffi->uint32_obj) return &ffi_type_uint32;
   if (obj == ffi->uint64_obj) return &ffi_type_uint64;
+  if (obj == ffi->size_t_obj) {
+    if (sizeof(size_t) == 8) return &ffi_type_uint64;
+    else if (sizeof(size_t) == 4) return &ffi_type_uint32;
+    else abort();
+  }
   if (obj == ffi->char_pointer_obj) return &ffi_type_pointer;
   if (obj == ffi->pointer_obj) return &ffi_type_pointer;
   if (obj_instance_of(obj, ffi->struct_obj)) {
@@ -323,6 +328,7 @@ static int ffi_par_len(VMState *state, Object *ret_type, ArrayObject *par_types_
     else if (type == ffi->uint64_obj) par_len_sum += TYPESZ(uint64_t);
     else if (type == ffi->char_pointer_obj) par_len_sum += TYPESZ(char*);
     else if (type == ffi->pointer_obj) par_len_sum += TYPESZ(void*);
+    else if (type == ffi->size_t_obj) par_len_sum += TYPESZ(size_t);
     else if (obj_instance_of(type, ffi->struct_obj)) {
       Value struct_sz_val = OBJECT_LOOKUP_STRING(type, "sizeof", NULL);
       VM_ASSERT(IS_INT(struct_sz_val), "sizeof should really have been int") -1;
@@ -368,9 +374,12 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     || ret_type == ffi->int32_obj || ret_type == ffi->uint32_obj
     || ret_type == ffi->long_obj || ret_type == ffi->ulong_obj
     || ret_type == ffi->int8_obj || ret_type == ffi->uint8_obj
+    || (sizeof(size_t) == 4 && ret_type == ffi->size_t_obj)
   ) { // all types that are <= long
     data = (char*) data + sizeof(long);
-  } else if (ret_type == ffi->int64_obj || ret_type == ffi->uint64_obj) {
+  } else if (ret_type == ffi->int64_obj || ret_type == ffi->uint64_obj
+    || (sizeof(size_t) == 8 && ret_type == ffi->size_t_obj)
+  ) {
     data = (char*) data + sizeof(int64_t);
   } else if (ret_type == ffi->float_obj) {
     data = (char*) data + ((sizeof(float)>sizeof(long))?sizeof(float):sizeof(long));
@@ -403,7 +412,9 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
       par_ptrs[i] = data;
       data = (char*) data + ((sizeof(float)>sizeof(long))?sizeof(float):sizeof(long));
     }
-    else if (type == ffi->int_obj || type == ffi->uint_obj || type == ffi->int32_obj || type == ffi->uint32_obj) {
+    else if (type == ffi->int_obj || type == ffi->uint_obj || type == ffi->int32_obj || type == ffi->uint32_obj
+      || (sizeof(size_t) == 4 && type == ffi->size_t_obj)
+    ) {
       // fprintf(stderr, "i32");
       Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
       VM_ASSERT(IS_INT(val), "ffi int argument must be int");
@@ -419,7 +430,9 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
       par_ptrs[i] = data;
       data = (char*) data + sizeof(long);
     }
-    else if (type == ffi->int64_obj || type == ffi->uint64_obj) {
+    else if (type == ffi->int64_obj || type == ffi->uint64_obj
+      || (sizeof(size_t) == 8 && type == ffi->size_t_obj)
+    ) {
       // fprintf(stderr, "i64");
       Value val = load_arg(state->frame, INFO_ARGS_PTR(info)[i]);
       VM_ASSERT(IS_INT(val), "ffi (u)int64 argument must be int");
@@ -503,9 +516,17 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
   } else if (ret_type == ffi->uint_obj) {
     // fprintf(stderr, "u");
     vm_return(state, info, INT2VAL(*(unsigned int*) ret_ptr));
-  } else if (ret_type == ffi->uint32_obj) {
+  } else if (ret_type == ffi->uint32_obj
+    || (sizeof(size_t) == 4 && ret_type == ffi->size_t_obj)
+  ) {
     // fprintf(stderr, "i32");
     vm_return(state, info, INT2VAL(*(uint32_t*) ret_ptr));
+  } else if (ret_type == ffi->int64_obj || ret_type == ffi->uint64_obj
+    || (sizeof(size_t) == 8 && ret_type == ffi->size_t_obj)
+  ) {
+    int64_t retval = *(int64_t*) ret_ptr;
+    VM_ASSERT(retval >= INT32_MIN && retval <= INT32_MAX, "size of integer type exceeded on return");
+    vm_return(state, info, INT2VAL((int32_t) retval));
   } else if (ret_type == ffi->char_pointer_obj) {
     // fprintf(stderr, "pc");
     vm_return(state, info, make_string(state, *(char**) ret_ptr, strlen(*(char**) ret_ptr)));
