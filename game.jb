@@ -30,6 +30,18 @@ function genTexture() {
   return res[0];
 }
 
+var texfilecache = {};
+function loadTextureFile(name) {
+  if (name in texfilecache) return texfilecache[name];
+  var file = require("std/file.jb").read(name);
+  const soil = require("c/soil.jb");
+  var tex = soil.load_OGL_texture_from_memory(file.ptr, file.length,
+                                              soil.LOAD_AUTO, soil.CREATE_NEW_ID,
+                                              0);
+  texfilecache[name] = tex;
+  return tex;
+}
+
 var textcache = {};
 function renderTextToTexture(text) {
   if (text in textcache) return textcache[text];
@@ -287,22 +299,34 @@ handlers["list"] = {
   };
 };
 
-function renderRect(rect) {
-  gl.Disable(gl.TEXTURE_2D);
-  gl.Color3f(1, 1, 1);
-  gl.Begin(gl.QUADS);
-  gl.Vertex2f(rect.x, rect.y);
-  gl.Vertex2f(rect.x + rect.width, rect.y);
-  gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
-  gl.Vertex2f(rect.x, rect.y + rect.height);
-  gl.End();
+function renderRect(rect, tex) {
+  if (tex) {
+    gl.Enable(gl.TEXTURE_2D);
+    gl.BindTexture(gl.TEXTURE_2D, tex);
+    gl.Color3f(1, 1, 1);
+    gl.Begin(gl.QUADS);
+    gl.TexCoord2f(0, 0); gl.Vertex2f(rect.x, rect.y);
+    gl.TexCoord2f(1, 0); gl.Vertex2f(rect.x + rect.width, rect.y);
+    gl.TexCoord2f(1, 1); gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
+    gl.TexCoord2f(0, 1); gl.Vertex2f(rect.x, rect.y + rect.height);
+    gl.End();
+  } else {
+    gl.Disable(gl.TEXTURE_2D);
+    gl.Color3f(1, 1, 1);
+    gl.Begin(gl.QUADS);
+    gl.Vertex2f(rect.x, rect.y);
+    gl.Vertex2f(rect.x + rect.width, rect.y);
+    gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
+    gl.Vertex2f(rect.x, rect.y + rect.height);
+    gl.End();
+  }
 }
 
 const RectPrimitive = new RenderPrimitive {
   render = method(mask: geom.Rect) {
     var actualRect = this.screenrect.intersect(mask);
     if (actualRect.width >= 0 && actualRect.height >= 0) {
-      renderRect(actualRect);
+      renderRect(actualRect, this?.tex);
     }
   };
 };
@@ -331,7 +355,11 @@ handlers["square"] = {
     node["presentation"] = { rect = rect2; };
   };
   present = function(node, array) {
-    array.push(new RectPrimitive { screenrect = node.presentation.rect; });
+    var rectprim = new RectPrimitive { screenrect = node.presentation.rect; };
+    if ("tex" in node.attr) {
+      rectprim["tex"] = loadTextureFile(node.attr.tex);
+    }
+    array.push(rectprim);
   };
 };
 
