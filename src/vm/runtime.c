@@ -1065,6 +1065,7 @@ struct _ModuleCache {
   ModuleCache *next;
   char *filename;
   Value importval;
+  GCRootSet my_set;
 };
 
 static ModuleCache *mod_cache = 0;
@@ -1125,6 +1126,9 @@ static void require_fn(VMState *state, CallInfo *info) {
     .importval = resval
   };
   mod_cache = new_mod_cache;
+  // don't accidentally free the module in gc
+  // TODO single root set for all cache?
+  gc_add_roots(state, &mod_cache->importval, 1, &mod_cache->my_set);
   
   vm_return(state, info, resval);
 }
