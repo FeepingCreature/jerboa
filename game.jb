@@ -373,6 +373,34 @@ function render(node, width, height) {
   }
 }
 
+// factored out so the interpreter can actually optimize something
+function glfwLoopStep(window, width, height, scene) {
+  gl.Enable(gl.BLEND);
+  gl.Enable(gl.TEXTURE_2D);
+  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.MatrixMode(gl.PROJECTION);
+  gl.LoadIdentity();
+  gl.MatrixMode(gl.MODELVIEW);
+  gl.LoadIdentity();
+  gl.Ortho(0, width, height, 0, 1, -1);
+  gl.ClearColor(0.2, 0.18, 0.17, 0);
+  gl.Clear(gl.COLOR_BUFFER_BIT);
+  render(scene, width, height);
+  scene.trigger_propagating("frame");
+  glfw.SwapBuffers(window);
+  glfw.PollEvents();
+  while (!glfwq.QueueEmpty()) {
+    var event = new glfwq.Event { pointer = glfwq.TakeEvent(); };
+    if (event.type == glfwq.KEY) {
+      var key_event = new glfwq.KeyEvent { pointer = event.pointer; };
+      // print(" key: ", key_event.key, ", scancode ", key_event.scancode, ", action ", key_event.action, ", mods ", key_event.mods);
+      scene.trigger_propagating("key", key_event.key, key_event.scancode, key_event.action, key_event.mods);
+    } else {
+      // print("event type = ", event.type);
+    }
+  }
+}
+
 function glfwMainLoop(scene) {
   if (glfw.Init() == 0) assert(false);
 
@@ -393,30 +421,7 @@ function glfwMainLoop(scene) {
   print("# loop start");
   while (!glfw.WindowShouldClose(window)) {
   // for (var i = 0; i < 1000; i++) {
-    gl.Enable(gl.BLEND);
-    gl.Enable(gl.TEXTURE_2D);
-    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.MatrixMode(gl.PROJECTION);
-    gl.LoadIdentity();
-    gl.MatrixMode(gl.MODELVIEW);
-    gl.LoadIdentity();
-    gl.Ortho(0, width, height, 0, 1, -1);
-    gl.ClearColor(0.2, 0.18, 0.17, 0);
-    gl.Clear(gl.COLOR_BUFFER_BIT);
-    render(scene, width, height);
-    scene.trigger_propagating("frame");
-    glfw.SwapBuffers(window);
-    glfw.PollEvents();
-    while (!glfwq.QueueEmpty()) {
-      var event = new glfwq.Event { pointer = glfwq.TakeEvent(); };
-      if (event.type == glfwq.KEY) {
-        var key_event = new glfwq.KeyEvent { pointer = event.pointer; };
-        // print(" key: ", key_event.key, ", scancode ", key_event.scancode, ", action ", key_event.action, ", mods ", key_event.mods);
-        scene.trigger_propagating("key", key_event.key, key_event.scancode, key_event.action, key_event.mods);
-      } else {
-        // print("event type = ", event.type);
-      }
-    }
+    glfwLoopStep(window, width, height, scene);
   }
 
   print("# loop end");
