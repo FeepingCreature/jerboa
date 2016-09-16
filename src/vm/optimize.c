@@ -426,7 +426,8 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
             bool continue_outer = false;
             for (int k = 0; k < info[obj_slot].fields_len; ++k) {
               const char *name = info[obj_slot].names_ptr[k];
-              if (keylen == strlen(name) && strncmp(keyptr, name, keylen) == 0) {
+              int name_len = info[obj_slot].names_len_ptr[k];
+              if (keylen == name_len && strncmp(keyptr, name, keylen) == 0) {
                 int refslot = ref_slots_ptr[obj_slot][k];
                 use_range_start(&builder, *instr_belongs_to_p(&uf->body, instr));
                 builder.scope = instr->context_slot;
