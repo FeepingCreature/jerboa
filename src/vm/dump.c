@@ -167,7 +167,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
       fprintf(stderr, "access: %s = %s . '%.*s' \t\t(opt: string key, scratch %%%i)\n",
               get_write_arg_info(((AccessStringKeyInstr*) instr)->target),
               get_arg_info_ext(state, ((AccessStringKeyInstr*) instr)->obj),
-              ((AccessStringKeyInstr*) instr)->key_len, ((AccessStringKeyInstr*) instr)->key_ptr,
+              (int) ((AccessStringKeyInstr*) instr)->key.len, ((AccessStringKeyInstr*) instr)->key.ptr,
               ((AccessStringKeyInstr*) instr)->key_slot);
       *instr_p = (Instr*) ((AccessStringKeyInstr*) instr + 1);
       break;
@@ -176,11 +176,11 @@ void dump_instr(VMState *state, Instr **instr_p) {
       char *mode = "(plain)";
       if (((AssignStringKeyInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignStringKeyInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
-      fprintf(stderr, "assign%s: (%i=) %s . '%s' = %s \t\t(opt: string key)\n",
+      fprintf(stderr, "assign%s: (%i=) %s . '%.*s' = %s \t\t(opt: string key)\n",
               mode,
               ((AssignStringKeyInstr*) instr)->target_slot,
               get_arg_info_ext(state, ((AssignStringKeyInstr*) instr)->obj),
-              ((AssignStringKeyInstr*) instr)->key,
+              (int) ((AssignStringKeyInstr*) instr)->key.len, ((AssignStringKeyInstr*) instr)->key.ptr,
               get_arg_info_ext(state, ((AssignStringKeyInstr*) instr)->value));
       *instr_p = (Instr*) ((AssignStringKeyInstr*) instr + 1);
       break;
@@ -199,7 +199,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
     {
       DefineRefslotInstr *dri = (DefineRefslotInstr*) instr;
       fprintf(stderr, "def refslot: &%i = %%%i . '%.*s' \t\t (opt: refslot)\n",
-              dri->target_refslot, dri->obj_slot, dri->key_len, dri->key_ptr);
+              dri->target_refslot, dri->obj_slot, (int) dri->key.len, dri->key.ptr);
       *instr_p = (Instr*) (dri + 1);
       break;
     }
@@ -220,7 +220,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
         char *infostr = "";
         if (info->constraint) infostr = get_type_info(state, OBJ2VAL(info->constraint));
         fprintf(stderr, "%.*s%s%s = %%%i (&%i); ",
-                info->name_len, info->name_ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
+                (int) info->name.len, info->name.ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
       fprintf(stderr, "}\n");
       *instr_p = (Instr*) ((char*) instr + instr_size(instr));

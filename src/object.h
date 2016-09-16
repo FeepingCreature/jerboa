@@ -27,28 +27,35 @@ void free_cache(VMState *state);
 
 void save_profile_output(char *file, VMProfileState *profile_state);
 
-Value *object_lookup_ref(Object *obj, const char *key);
+Value *object_lookup_ref(Object *obj, FastKey *key);
 
-TableEntry *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv);
+TableEntry *object_lookup_ref_internal(Object *obj, FastKey *key);
 
-Value object_lookup(Object *obj, const char *key, bool *key_found);
-
-Value object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hash, bool *key_found_p);
+Value object_lookup(Object *obj, FastKey *key, bool *key_found);
 
 Object *closest_obj(VMState *state, Value val);
 
 Object *proto_obj(VMState *state, Value val);
 
-#define OBJECT_LOOKUP_STRING(obj, key, key_found) object_lookup_with_hash(obj, key, strlen(key), hash(key, strlen(key)), key_found)
+// hope the compiler will inline prepare_key
+static inline Value object_lookup_key_internal(Object *obj, FastKey key, bool *key_found) {
+  return object_lookup(obj, &key, key_found);
+}
+#define OBJECT_LOOKUP_STRING(obj, key, key_found) object_lookup_key_internal(obj, prepare_key(key, strlen(key)), key_found)
 
 // returns NULL on success, error string otherwise
-char *object_set_existing(VMState *state, Object *obj, const char *key, Value value);
+char *object_set_existing(VMState *state, Object *obj, FastKey *key, Value value);
 
-char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value value, bool *value_set);
+char *object_set_shadowing(VMState *state, Object *obj, FastKey *key, Value value, bool *value_set);
 
-char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint);
+char *object_set_constraint(VMState *state, Object *obj, FastKey *key, Object *constraint);
 
-char *object_set(VMState *state, Object *obj, const char *key, Value value);
+char *object_set(VMState *state, Object *obj, FastKey *key, Value value);
+
+static inline char *object_set_key_internal(VMState *state, Object *obj, FastKey key, Value value) {
+  return object_set(state, obj, &key, value);
+}
+#define OBJECT_SET_STRING(state, obj, key, value) object_set_key_internal(state, obj, prepare_key(key, strlen(key)), value)
 
 void obj_mark(VMState *state, Object *obj);
 

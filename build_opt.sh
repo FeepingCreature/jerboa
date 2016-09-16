@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-SOURCES=$(echo src/vm/*.c src/{gc,hash,language,object,parser,util,print}.c src/jerboa.c)
+SOURCES=$(echo src/vm/*.c src/{gc,hash,language,object,parser,util,print,trie}.c src/jerboa.c)
 cat $SOURCES > all.c
 SOURCES=all.c
 FLAGS="-DNDEBUG -std=c11 -D_GNU_SOURCE -g -Wall -Isrc -o build/jerboa -ljemalloc -ldl -lm -licuuc"

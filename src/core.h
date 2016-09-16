@@ -158,9 +158,16 @@ typedef struct {
 
 #define INFO_ARGS_PTR(I) ((Arg*)(I + 1))
 
+// key, interned and prehashed for fast lookup
+typedef struct {
+  size_t len;
+  const char *ptr;
+  size_t hash;
+  size_t last_index; // instrs usually access the same object, or objects with the same layout
+} FastKey;
+
 struct _TableEntry {
-  const char *name_ptr;
-  size_t name_len;
+  FastKey key;
   Value value;
   Object *constraint;
 };

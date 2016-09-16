@@ -74,34 +74,32 @@ void free_cache(VMState *state) {
   state->shared->stack_data_len = 0;
 }
 
-TableEntry *object_lookup_ref_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv) {
+TableEntry *object_lookup_ref_internal(Object *obj, FastKey *key) {
   while (obj) {
-    TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
+    TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
     if (entry) return entry;
     obj = obj->parent;
   }
   return NULL;
 }
 
-Value *object_lookup_ref(Object *obj, const char *key_ptr) {
-  size_t len = strlen(key_ptr);
-  size_t hashv = hash(key_ptr, len);
-  TableEntry *entry = object_lookup_ref_with_hash(obj, key_ptr, len, hashv);
+Value *object_lookup_ref(Object *obj, FastKey *key) {
+  TableEntry *entry = object_lookup_ref_internal(obj, key);
   if (entry) return &entry->value;
   return NULL;
 }
 
-Value object_lookup_with_hash(Object *obj, const char *key_ptr, size_t key_len, size_t hashv, bool *key_found_p) {
+Value object_lookup(Object *obj, FastKey *key, bool *key_found_p) {
   if (!key_found_p) {
     while (obj) {
-      TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
+      TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
       if (entry) return entry->value;
       obj = obj->parent;
     }
     return VNULL;
   }
   while (obj) {
-    TableEntry *entry = table_lookup_with_hash(&obj->tbl, key_ptr, key_len, hashv);
+    TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
     if (entry) { *key_found_p = true; return entry->value; }
     obj = obj->parent;
   }
@@ -132,12 +130,6 @@ Object *proto_obj(VMState *state, Value val) {
   return options[val.type];
 }
 
-Value object_lookup(Object *obj, const char *key_ptr, bool *key_found_p) {
-  size_t len = strlen(key_ptr);
-  size_t hashv = hash(key_ptr, len);
-  return object_lookup_with_hash(obj, key_ptr, len, hashv, key_found_p);
-}
-
 void obj_mark(VMState *state, Object *obj) {
   if (!obj) return;
   
@@ -150,7 +142,7 @@ void obj_mark(VMState *state, Object *obj) {
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr && IS_OBJ(entry->value)) {
+    if (entry->key.ptr && IS_OBJ(entry->value)) {
       obj_mark(state, AS_OBJ(entry->value));
     }
   }
@@ -216,9 +208,9 @@ bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constrain
 }
 
 // returns error or null
-char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, size_t key_len, Object *constraint) {
+char *object_set_constraint(VMState *state, Object *obj, FastKey *key, Object *constraint) {
   assert(obj != NULL);
-  TableEntry *entry = table_lookup(&obj->tbl, key_ptr, key_len);
+  TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
   if (!constraint) return "tried to set constraint that was null";
   if (!entry) return "tried to set constraint on a key that was not yet defined!";
   if (entry->constraint) return "tried to set constraint, but key already had a constraint!";
@@ -234,15 +226,14 @@ char *object_set_constraint(VMState *state, Object *obj, const char *key_ptr, si
 
 // change a property in-place
 // returns an error string or NULL
-char *object_set_existing(VMState *state, Object *obj, const char *key, Value value) {
-  int len = strlen(key);
+char *object_set_existing(VMState *state, Object *obj, FastKey *key, Value value) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    TableEntry *entry = table_lookup(&current->tbl, key, len);
+    TableEntry *entry = table_lookup_prepared(&current->tbl, key);
     if (entry != NULL) {
       if (current->flags & OBJ_FROZEN) {
-        return my_asprintf("Tried to set existing key '%s', but object %p was frozen.", key, (void*) current);
+        return my_asprintf("Tried to set existing key '%.*s', but object %p was frozen.", (int) key->len, key->ptr, (void*) current);
       }
       if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint violated on assignment";
@@ -252,17 +243,16 @@ char *object_set_existing(VMState *state, Object *obj, const char *key, Value va
     }
     current = current->parent;
   }
-  return my_asprintf("Key '%s' not found in object %p.", key, (void*) obj);
+  return my_asprintf("Key '%.*s' not found in object %p.", (int) key->len, key->ptr, (void*) obj);
 }
 
 // change a property but only if it exists somewhere in the prototype chain
 // returns error or null on success
-char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value value, bool *value_set) {
-  int len = strlen(key);
+char *object_set_shadowing(VMState *state, Object *obj, FastKey *key, Value value, bool *value_set) {
   assert(obj != NULL);
   Object *current = obj;
   while (current) {
-    TableEntry *entry = table_lookup(&current->tbl, key, len);
+    TableEntry *entry = table_lookup_prepared(&current->tbl, key);
     if (entry) {
       if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint violated on shadowing assignment";
@@ -271,7 +261,7 @@ char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value v
       object_set(state, obj, key, value);
       if (current != obj && entry->constraint) {
         // propagate constraint
-        char *error = object_set_constraint(state, obj, key, len, entry->constraint);
+        char *error = object_set_constraint(state, obj, key, entry->constraint);
         if (error) return error;
       }
       *value_set = true;
@@ -284,14 +274,13 @@ char *object_set_shadowing(VMState *state, Object *obj, const char *key, Value v
 }
 
 // returns error or null
-char *object_set(VMState *state, Object *obj, const char *key, Value value) {
-  int len = strlen(key);
+char *object_set(VMState *state, Object *obj, FastKey *key, Value value) {
   assert(obj != NULL);
   
   // check constraints in parents
   Object *current = obj->parent;
   while (current) {
-    TableEntry *entry = table_lookup(&current->tbl, key, len);
+    TableEntry *entry = table_lookup_prepared(&current->tbl, key);
     if (entry) {
       if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint in parent violated on assignment";
@@ -302,7 +291,7 @@ char *object_set(VMState *state, Object *obj, const char *key, Value value) {
   
   // TODO check flags beforehand to avoid clobbering tables that are frozen
   TableEntry *freeptr;
-  TableEntry *entry = table_lookup_alloc(&obj->tbl, key, len, &freeptr);
+  TableEntry *entry = table_lookup_alloc_prepared(&obj->tbl, key, &freeptr);
   if (entry) {
     assert(!(obj->flags & OBJ_FROZEN));
     if (!value_fits_constraint(state->shared, value, entry->constraint)) {
@@ -408,7 +397,7 @@ Value make_array(VMState *state, Value *ptr, int length, bool owned) {
   if (owned) obj->capacity = length;
   else obj->capacity = 0;
   obj->owned = owned;
-  object_set(state, (Object*) obj, "length", INT2VAL(length));
+  OBJECT_SET_STRING(state, (Object*) obj, "length", INT2VAL(length));
   return OBJ2VAL((Object*) obj);
 }
 
@@ -431,7 +420,7 @@ void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_le
     aobj->capacity = newcap;
   }
   aobj->length = newsize;
-  if (update_len) object_set(state, (Object*) aobj, "length", INT2VAL(aobj->length));
+  if (update_len) OBJECT_SET_STRING(state, (Object*) aobj, "length", INT2VAL(aobj->length));
 }
 
 Value make_ptr(VMState *state, void *ptr) {
@@ -550,8 +539,8 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   int k = 0;
   for (int i = 0; i < direct_table->entries_num; ++i) {
     TableEntry *entry = &direct_table->entries_ptr[i];
-    if (entry->name_ptr) {
-      FileRange *range = *(FileRange**) entry->name_ptr; // This hurts my soul.
+    if (entry->key.ptr) {
+      FileRange *range = (FileRange*) entry->key.ptr; // This hurts my soul.
       int samples = entry->value.i;
       // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_direct) max_samples_direct = samples;
@@ -561,8 +550,8 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   }
   for (int i = 0; i < indirect_table->entries_num; ++i) {
     TableEntry *entry = &indirect_table->entries_ptr[i];
-    if (entry->name_ptr) {
-      FileRange *range = *(FileRange**) entry->name_ptr;
+    if (entry->key.ptr) {
+      FileRange *range = (FileRange*) entry->key.ptr;
       int samples = entry->value.i;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_indirect) max_samples_indirect = samples;

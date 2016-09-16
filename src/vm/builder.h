@@ -97,7 +97,7 @@ int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, in
 
 void addinstr_return(FunctionBuilder *builder, int slot);
 
-int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key);
+int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, const char *key_ptr, size_t key_len);
 
 void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target);
 

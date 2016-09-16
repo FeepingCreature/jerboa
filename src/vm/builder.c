@@ -346,14 +346,11 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
   addinstr(builder, sizeof(instr), (Instr*) &instr);
 }
 
-int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, char *key) {
-  int keylen = strlen(key);
+int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, const char *key_ptr, size_t key_len) {
   DefineRefslotInstr instr = {
     .base = { .type = INSTR_DEFINE_REFSLOT },
     .obj_slot = obj_slot,
-    .key_ptr = key,
-    .key_len = keylen,
-    .key_hash = hash(key, keylen),
+    .key = prepare_key(key_ptr, key_len),
     .target_refslot = builder->refslot_base ++
   };
   

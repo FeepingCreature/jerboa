@@ -27,7 +27,7 @@ static void ffi_open_fn(VMState *state, CallInfo *info) {
   
   Object *handle_obj = AS_OBJ(make_object(state, handle_base));
   handle_obj->flags |= OBJ_FROZEN;
-  object_set(state, handle_obj, "pointer", make_ptr(state, dlptr));
+  OBJECT_SET_STRING(state, handle_obj, "pointer", make_ptr(state, dlptr));
   vm_return(state, info, OBJ2VAL(handle_obj));
 }
 
@@ -210,7 +210,7 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
       VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) VNULL;
     }
     Value res = make_object(state, type);
-    char *error = object_set(state, AS_OBJ(res), "pointer", make_ffi_pointer(state, ptr));
+    char *error = OBJECT_SET_STRING(state, AS_OBJ(res), "pointer", make_ffi_pointer(state, ptr));
     VM_ASSERT(!error, error) VNULL;
     return res;
   }
@@ -284,12 +284,12 @@ static void ffi_ptr_add(VMState *state, CallInfo *info) {
 
 static Value make_ffi_pointer(VMState *state, void *ptr) {
   Object *ptr_obj = AS_OBJ(make_ptr(state, ptr));
-  object_set(state, ptr_obj, "dereference", make_fn(state, ffi_ptr_dereference));
-  object_set(state, ptr_obj, "dereference_assign", make_fn(state, ffi_ptr_dereference_assign));
-  object_set(state, ptr_obj, "+", make_fn(state, ffi_ptr_add));
-  object_set(state, ptr_obj, "target_type", VNULL);
-  object_set(state, ptr_obj, "[]", make_fn(state, ffi_ptr_index_fn));
-  object_set(state, ptr_obj, "[]=", make_fn(state, ffi_ptr_index_assign_fn));
+  OBJECT_SET_STRING(state, ptr_obj, "dereference", make_fn(state, ffi_ptr_dereference));
+  OBJECT_SET_STRING(state, ptr_obj, "dereference_assign", make_fn(state, ffi_ptr_dereference_assign));
+  OBJECT_SET_STRING(state, ptr_obj, "+", make_fn(state, ffi_ptr_add));
+  OBJECT_SET_STRING(state, ptr_obj, "target_type", VNULL);
+  OBJECT_SET_STRING(state, ptr_obj, "[]", make_fn(state, ffi_ptr_index_fn));
+  OBJECT_SET_STRING(state, ptr_obj, "[]=", make_fn(state, ffi_ptr_index_assign_fn));
   return OBJ2VAL(ptr_obj);
 }
 
@@ -550,7 +550,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     void *struct_data = malloc(struct_sz);
     memcpy(struct_data, ret_ptr, struct_sz);
     Object *struct_val_obj = AS_OBJ(make_object(state, ret_type));
-    object_set(state, struct_val_obj, "pointer", make_ffi_pointer(state, struct_data));
+    OBJECT_SET_STRING(state, struct_val_obj, "pointer", make_ffi_pointer(state, struct_data));
     vm_return(state, info, OBJ2VAL(struct_val_obj));
   } else VM_ASSERT(false, "unknown return type");
   // fprintf(stderr, "\n");
@@ -701,10 +701,10 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   Object *_ffi_pointer = AS_OBJ(make_ptr(state, (void*) ffihdl));
   
   fn_obj->flags |= OBJ_FROZEN;
-  object_set(state, fn_obj, "return_type", OBJ2VAL(ret_type));
-  object_set(state, fn_obj, "parameter_types", load_arg(state->frame, INFO_ARGS_PTR(info)[2]));
-  object_set(state, fn_obj, "_sym_pointer", OBJ2VAL(_sym_pointer));
-  object_set(state, fn_obj, "_ffi_pointer", OBJ2VAL(_ffi_pointer));
+  OBJECT_SET_STRING(state, fn_obj, "return_type", OBJ2VAL(ret_type));
+  OBJECT_SET_STRING(state, fn_obj, "parameter_types", load_arg(state->frame, INFO_ARGS_PTR(info)[2]));
+  OBJECT_SET_STRING(state, fn_obj, "_sym_pointer", OBJ2VAL(_sym_pointer));
+  OBJECT_SET_STRING(state, fn_obj, "_ffi_pointer", OBJ2VAL(_ffi_pointer));
   ffi_fn->return_type = ret_type;
   // use the array here, since we don't care about any subtypes
   ffi_fn->par_types_array = par_types;
@@ -729,18 +729,18 @@ void ffi_setup_root(VMState *state, Object *root) {
   Object *ffi_obj = (Object*) ffi;
   ffi_obj->flags |= OBJ_FROZEN;
   
-  object_set(state, (Object*) ffi_obj, "open", make_fn(state, ffi_open_fn));
+  OBJECT_SET_STRING(state, (Object*) ffi_obj, "open", make_fn(state, ffi_open_fn));
   Object *type_obj = AS_OBJ(make_object(state, NULL));
-  object_set(state, (Object*) ffi_obj, "type", OBJ2VAL(type_obj));
+  OBJECT_SET_STRING(state, (Object*) ffi_obj, "type", OBJ2VAL(type_obj));
   
 #define DEFINE_TYPE(NAME, T) ffi->NAME ## _obj = AS_OBJ(make_object(state, type_obj)); \
   ffi->NAME ## _obj->flags |= OBJ_NOINHERIT; \
-  object_set(state, ffi->NAME ## _obj, "sizeof", INT2VAL(sizeof(T))); \
-  object_set(state, ffi->NAME ## _obj, "c_type", make_string(state, #T, strlen(#T))); \
-  object_set(state, ffi_obj, #NAME, OBJ2VAL(ffi->NAME ## _obj))
+  OBJECT_SET_STRING(state, ffi->NAME ## _obj, "sizeof", INT2VAL(sizeof(T))); \
+  OBJECT_SET_STRING(state, ffi->NAME ## _obj, "c_type", make_string(state, #T, strlen(#T))); \
+  OBJECT_SET_STRING(state, ffi_obj, #NAME, OBJ2VAL(ffi->NAME ## _obj))
   ffi->void_obj = AS_OBJ(make_object(state, type_obj));
   ffi->void_obj->flags |= OBJ_NOINHERIT;
-  object_set(state, ffi_obj, "void", OBJ2VAL(ffi->void_obj));
+  OBJECT_SET_STRING(state, ffi_obj, "void", OBJ2VAL(ffi->void_obj));
   DEFINE_TYPE(short, short);
   DEFINE_TYPE(ushort, unsigned short);
   DEFINE_TYPE(int, int);
@@ -767,20 +767,20 @@ void ffi_setup_root(VMState *state, Object *root) {
 #undef DEFINE_TYPE
 
   Object *handle_obj = AS_OBJ(make_object(state, NULL));
-  object_set(state, ffi_obj, "handle", OBJ2VAL(handle_obj));
-  object_set(state, handle_obj, "pointer", VNULL);
-  object_set(state, handle_obj, "sym", make_fn(state, ffi_sym_fn));
+  OBJECT_SET_STRING(state, ffi_obj, "handle", OBJ2VAL(handle_obj));
+  OBJECT_SET_STRING(state, handle_obj, "pointer", VNULL);
+  OBJECT_SET_STRING(state, handle_obj, "sym", make_fn(state, ffi_sym_fn));
   
   Object *struct_obj = AS_OBJ(make_object(state, type_obj));
   ffi->struct_obj = struct_obj;
-  object_set(state, ffi_obj, "struct", OBJ2VAL(struct_obj));
-  object_set(state, struct_obj, "complete", BOOL2VAL(false));
-  object_set(state, struct_obj, "pointer", VNULL);
-  object_set(state, struct_obj, "members", VNULL);
+  OBJECT_SET_STRING(state, ffi_obj, "struct", OBJ2VAL(struct_obj));
+  OBJECT_SET_STRING(state, struct_obj, "complete", BOOL2VAL(false));
+  OBJECT_SET_STRING(state, struct_obj, "pointer", VNULL);
+  OBJECT_SET_STRING(state, struct_obj, "members", VNULL);
   
-  object_set(state, root, "ffi", OBJ2VAL(ffi_obj));
+  OBJECT_SET_STRING(state, root, "ffi", OBJ2VAL(ffi_obj));
   
-  object_set(state, root, "malloc", make_fn(state, malloc_fn));
+  OBJECT_SET_STRING(state, root, "malloc", make_fn(state, malloc_fn));
   
   state->shared->vcache.ffi_obj = ffi_obj;
 }

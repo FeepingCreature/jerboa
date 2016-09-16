@@ -67,7 +67,7 @@ bool setup_call(VMState *state, CallInfo *info) {
   Object *context = cl_obj->context;
   if (vmfun->is_method) {
     context = AS_OBJ(make_object(state, context));
-    create_table_with_single_entry(&context->tbl, "this", 4, hash("this", 4), load_arg(state->frame, info->this_arg));
+    create_table_with_single_entry_prepared(&context->tbl, prepare_key("this", 4), load_arg(state->frame, info->this_arg));
     context->flags |= OBJ_CLOSED;
   }
   // gc only runs in the main loop
@@ -83,7 +83,7 @@ bool setup_call(VMState *state, CallInfo *info) {
     for (int i = 0; i < varargs_len; ++i) {
       varargs_ptr[i] = load_arg(state->frame, INFO_ARGS_PTR(info)[vmfun->arity + i]);
     }
-    object_set(state, context, "arguments", make_array(state, varargs_ptr, varargs_len, true));
+    OBJECT_SET_STRING(state, context, "arguments", make_array(state, varargs_ptr, varargs_len, true));
     context->flags |= OBJ_CLOSED;
   }
   cl_obj->num_called ++;

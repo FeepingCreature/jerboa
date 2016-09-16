@@ -146,15 +146,15 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int key_slot, key_len; // fallback slot in case we need to call an overload
-  char *key_ptr; size_t key_hash;
+  int key_slot; // fallback slot in case we need to call an overload
+  FastKey key;
   Arg obj;
   WriteArg target;
 } AccessStringKeyInstr;
 
 typedef struct {
   Instr base;
-  char *key;
+  FastKey key;
   Arg obj, value;
   int target_slot /* scratch space for calls */;
   AssignType type;
@@ -170,8 +170,7 @@ typedef struct {
   Instr base;
   int target_refslot;
   int obj_slot;
-  char *key_ptr; int key_len;
-  size_t key_hash;
+  FastKey key;
 } DefineRefslotInstr;
 
 typedef struct {
@@ -182,9 +181,7 @@ typedef struct {
 } MoveInstr;
 
 typedef struct {
-  char *name_ptr;
-  int name_len;
-  size_t name_hash;
+  FastKey name;
   int tbl_offset;
   
   Object *constraint;

@@ -180,33 +180,30 @@ void vm_record_profile(VMState *state) {
       Instr *instr = curf->instr_ptr;
       if (!curf->uf) continue; // stub frame
       
-      FileRange **belongs_to_p = instr_belongs_to_p(&curf->uf->body, instr);
-      assert(*belongs_to_p);
+      FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
+      assert(belongs_to);
       
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
-      char *key_ptr = (char*) belongs_to_p;
-      int key_len = sizeof(*belongs_to_p);
-      
-      size_t key_hash = hash(key_ptr, key_len);
+      FastKey key = fixed_pointer_key(belongs_to);
       
       if (k == 0) {
         TableEntry *freeptr;
-        TableEntry *entry_p = table_lookup_alloc_with_hash(direct_tbl, key_ptr, key_len, key_hash, &freeptr);
+        TableEntry *entry_p = table_lookup_alloc_prepared(direct_tbl, &key, &freeptr);
         if (entry_p) entry_p->value.i ++;
         else freeptr->value = INT2VAL(1);
       } else {
         // don't double-count ranges in case of recursion
-        bool range_already_counted = (*belongs_to_p)->last_cycle_seen == cyclecount;
+        bool range_already_counted = belongs_to->last_cycle_seen == cyclecount;
         
         if (!range_already_counted) {
           TableEntry *freeptr;
-          TableEntry *entry_p = table_lookup_alloc_with_hash(indirect_tbl, key_ptr, key_len, key_hash, &freeptr);
+          TableEntry *entry_p = table_lookup_alloc_prepared(indirect_tbl, &key, &freeptr);
           if (entry_p) entry_p->value.i ++;
           else freeptr->value = INT2VAL(1);
         }
       }
-      (*belongs_to_p)->last_cycle_seen = cyclecount;
+      belongs_to->last_cycle_seen = cyclecount;
     }
     curstate = curstate->parent;
   }
@@ -381,7 +378,8 @@ static FnWrap vm_instr_access(VMState *state) {
     has_char_key = true;
     key = skey->value;
     // otherwise, skey->value is independent of skey
-    set_arg(state, access_instr->target, object_lookup(obj, key, &object_found));
+    // TODO length in StringObject
+    set_arg(state, access_instr->target, OBJECT_LOOKUP_STRING(obj, key, &object_found));
   }
   if (!object_found) {
     Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
@@ -412,7 +410,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
   Object *obj = closest_obj(state, val);
   Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
   if (NOT_NULL(index_op)) {
-    Value key = make_string(state, aski->key_ptr, aski->key_len);
+    Value key = make_string(state, aski->key.ptr, aski->key.len);
     state->frame->slots_ptr[aski->key_slot] = key;
     
     CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
@@ -424,7 +422,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
     
     return call_internal(state, info);
   } else {
-    VM_ASSERT(false, "property not found: '%.*s'", aski->key_len, aski->key_ptr) (FnWrap) { vm_halt };
+    VM_ASSERT(false, "property not found: '%.*s'", (int) aski->key.len, aski->key.ptr) (FnWrap) { vm_halt };
   }
 }
 
@@ -433,11 +431,8 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   
   Object *obj = closest_obj(state, load_arg(state->frame, aski->obj));
   
-  char *key_ptr = aski->key_ptr;
-  int key_len = aski->key_len;
-  size_t key_hash = aski->key_hash;
   bool object_found = false;
-  Value result = object_lookup_with_hash(obj, key_ptr, key_len, key_hash, &object_found);
+  Value result = object_lookup(obj, &aski->key, &object_found);
   
   if (UNLIKELY(!object_found)) {
     return vm_instr_access_string_key_index_fallback(state, aski);
@@ -475,27 +470,28 @@ static FnWrap vm_instr_assign(VMState *state) {
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
   }
-  char *key = my_asprintf("%s", skey->value); // copy so key can get gc'd without problems
+  char *key_ptr = skey->value;
+  FastKey key = prepare_key(key_ptr, strlen(key_ptr));
   AssignType assign_type = assign_instr->type;
   // fprintf(stderr, "> obj set %p . '%s' = %p\n", (void*) obj, key, (void*) value_obj);
   VM_ASSERT2(obj, "assignment to null object");
   switch (assign_type) {
     case ASSIGN_PLAIN:
     {
-      char *error = object_set(state, obj, key, value_val);
+      char *error = object_set(state, obj, &key, value_val);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_EXISTING:
     {
-      char *error = object_set_existing(state, obj, key, value_val);
+      char *error = object_set_existing(state, obj, &key, value_val);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_SHADOWING:
     {
       bool key_set;
-      char *error = object_set_shadowing(state, obj, key, value_val, &key_set);
+      char *error = object_set_shadowing(state, obj, &key, value_val, &key_set);
       VM_ASSERT2(error == NULL, "while shadow-assigning: %s", error);
       VM_ASSERT2(key_set, "key '%s' not found in object", key);
       break;
@@ -516,8 +512,11 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
     VM_ASSERT2(false, "'in' key is not string! todo overload?");
   }
   char *key = skey->value;
+  /*if (key_in_obj_instr->key.kind == ARG_VALUE) {
+    printf(": %s\n", key);
+  }*/
   bool object_found = false;
-  object_lookup(obj, key, &object_found);
+  OBJECT_LOOKUP_STRING(obj, key, &object_found);
   set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
   
   state->instr = (Instr*)(key_in_obj_instr + 1);
@@ -575,7 +574,8 @@ static FnWrap vm_instr_set_constraint(VMState *state) {
   VM_ASSERT2(skey, "constraint key must be string");
   char *key = skey->value;
   
-  char *error = object_set_constraint(state, obj, key, strlen(key), constraint);
+  FastKey fkey = prepare_key(key, strlen(key));
+  char *error = object_set_constraint(state, obj, &fkey, constraint);
   VM_ASSERT2(!error, "error while setting constraint: %s", error);
   
   state->instr = (Instr*)(set_constraint_instr + 1);
@@ -586,21 +586,20 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
   AssignStringKeyInstr *aski = (AssignStringKeyInstr*) state->instr;
   Value obj_val = load_arg(state->frame, aski->obj);
   Value value = load_arg(state->frame, aski->value);
-  char *key = aski->key;
   AssignType assign_type = aski->type;
   VM_ASSERT2(NOT_NULL(obj_val), "assignment to null");
   switch (assign_type) {
     case ASSIGN_PLAIN:
     {
       VM_ASSERT2(IS_OBJ(obj_val), "can't assign to primitive");
-      char *error = object_set(state, AS_OBJ(obj_val), key, value);
+      char *error = object_set(state, AS_OBJ(obj_val), &aski->key, value);
       VM_ASSERT2(!error, error);
       break;
     }
     case ASSIGN_EXISTING:
     {
       Object *obj = closest_obj(state, obj_val);
-      char *error = object_set_existing(state, obj, key, value);
+      char *error = object_set_existing(state, obj, &aski->key, value);
       VM_ASSERT2(!error, error);
       break;
     }
@@ -608,12 +607,12 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
     {
       VM_ASSERT2(IS_OBJ(obj_val), "can't assign to primitive");
       bool key_set;
-      char *error = object_set_shadowing(state, AS_OBJ(obj_val), key, value, &key_set);
-      VM_ASSERT2(error == NULL, "while shadow-assigning '%s': %s", key, error);
+      char *error = object_set_shadowing(state, AS_OBJ(obj_val), &aski->key, value, &key_set);
+      VM_ASSERT2(error == NULL, "while shadow-assigning '%.*s': %s", (int) aski->key.len, aski->key.ptr, error);
       if (!key_set) { // fall back to index?
         Value index_assign_op = OBJECT_LOOKUP_STRING(AS_OBJ(obj_val), "[]=", NULL);
         if (NOT_NULL(index_assign_op)) {
-          Value key = make_string(state, aski->key, strlen(aski->key));
+          Value key = make_string(state, aski->key.ptr, aski->key.len);
           CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
           info->args_len = 2;
           info->this_arg = (Arg) { .kind = ARG_VALUE, .value = obj_val };
@@ -625,7 +624,7 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
           return call_internal(state, info);
         }
       }
-      VM_ASSERT2(key_set, "key '%s' not found in object", key);
+      VM_ASSERT2(key_set, "key '%.*s' not found in object", (int) aski->key.len, aski->key.ptr);
       break;
     }
   }
@@ -643,7 +642,8 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
   VM_ASSERT2(IS_OBJ(constraint_val), "constraint must not be primitive!");
   Object *constraint = AS_OBJ(constraint_val);
   
-  char *error = object_set_constraint(state, obj, scski->key_ptr, scski->key_len, constraint);
+  FastKey fkey = prepare_key(scski->key_ptr, scski->key_len);
+  char *error = object_set_constraint(state, obj, &fkey, constraint);
   VM_ASSERT2(!error, error);
   
   state->instr = (Instr*)(scski + 1);
@@ -749,7 +749,7 @@ static FnWrap vm_instr_define_refslot(VMState *state) {
   Object *obj = closest_obj(state, state->frame->slots_ptr[obj_slot]);
   VM_ASSERT2(obj, "cannot define refslot for null obj");
   
-  TableEntry *entry = object_lookup_ref_with_hash(obj, dri->key_ptr, dri->key_len, dri->key_hash);
+  TableEntry *entry = object_lookup_ref_internal(obj, &dri->key);
   VM_ASSERT2(entry, "key not in object");
   state->frame->refslots_ptr[target_refslot] = entry;
   

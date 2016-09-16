@@ -61,7 +61,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     obj->flags &= ~OBJ_PRINT_HACK;
     return;
   }
-  Value toString_fn = object_lookup(obj, "toString", NULL);
+  Value toString_fn = OBJECT_LOOKUP_STRING(obj, "toString", NULL);
   if (allow_tostring && NOT_NULL(toString_fn)) {
     VMState substate = {0};
     substate.runstate = VM_TERMINATED;
@@ -107,12 +107,12 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
   bool first = true;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->name_ptr) {
+    if (entry->key.ptr) {
       fprintf(fh, "\n");
       for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
       if (first) { first = false; fprintf(fh, "| "); }
       else fprintf(fh, ", ");
-      fprintf(fh, "'%.*s': ", (int) entry->name_len, entry->name_ptr);
+      fprintf(fh, "'%.*s': ", (int) entry->key.len, entry->key.ptr);
       print_recursive_indent(state, fh, entry->value, allow_tostring, indent+1);
       if (state->runstate == VM_ERRORED) return;
     }

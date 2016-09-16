@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
   }
   
   Value args = make_array(&vmstate, args_ptr, args_len, true);
-  object_set(&vmstate, root, "arguments", args);
+  OBJECT_SET_STRING(&vmstate, root, "arguments", args);
   
   if (vmstate.shared->verbose) {
     dump_fn(&vmstate, module);
