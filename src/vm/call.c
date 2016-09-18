@@ -65,9 +65,12 @@ bool setup_call(VMState *state, CallInfo *info) {
   
   UserFunction *vmfun = cl_obj->vmfun;
   Object *context = cl_obj->context;
+  if (UNLIKELY(state->shared->vcache.thiskey.hash == 0)) {
+    state->shared->vcache.thiskey = prepare_key("this", 4);
+  }
   if (vmfun->is_method) {
     context = AS_OBJ(make_object(state, context, false));
-    create_table_with_single_entry_prepared(&context->tbl, prepare_key("this", 4), load_arg(state->frame, info->this_arg));
+    create_table_with_single_entry_prepared(&context->tbl, state->shared->vcache.thiskey, load_arg(state->frame, info->this_arg));
     context->flags |= OBJ_CLOSED;
   }
   // gc only runs in the main loop
