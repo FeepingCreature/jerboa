@@ -534,6 +534,18 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_string_key_in_obj(VMState *state) {
+  StringKeyInObjInstr *skioi = (StringKeyInObjInstr*) state->instr;
+  Object *obj = closest_obj(state, load_arg(state->frame, skioi->obj));
+  // printf(": %.*s\n", (int) skioi->key.len, skioi->key.ptr);
+  bool object_found = false;
+  object_lookup(obj, &skioi->key, &object_found);
+  set_arg(state, skioi->target, BOOL2VAL(object_found));
+  
+  state->instr = (Instr*)(skioi + 1);
+  return (FnWrap) { state->instr->fn };
+}
+
 static FnWrap vm_instr_identical(VMState *state) {
   IdenticalInstr *instr= (IdenticalInstr*) state->instr;
   Value arg1 = load_arg(state->frame, instr->obj1);
@@ -877,6 +889,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_PHI] = vm_instr_phi;
   instr_fns[INSTR_ACCESS_STRING_KEY] = vm_instr_access_string_key;
   instr_fns[INSTR_ASSIGN_STRING_KEY] = vm_instr_assign_string_key;
+  instr_fns[INSTR_STRING_KEY_IN_OBJ] = vm_instr_string_key_in_obj;
   instr_fns[INSTR_SET_CONSTRAINT_STRING_KEY] = vm_instr_set_constraint_string_key;
   instr_fns[INSTR_DEFINE_REFSLOT] = vm_instr_define_refslot;
   instr_fns[INSTR_MOVE] = vm_instr_move;

@@ -39,7 +39,6 @@ void slot_is_primitive(UserFunction *uf, bool** slots_p) {
             if (instr->value.kind == ARG_SLOT) slots[instr->value.slot] = false;
           // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
-            if (instr->key.kind == ARG_SLOT) slots[instr->key.slot] = false;
             if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
           CASE(INSTR_IDENTICAL, IdenticalInstr)
             if (instr->obj1.kind == ARG_SLOT) slots[instr->obj1.slot] = false;
@@ -665,6 +664,7 @@ UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
       AllocStringObjectInstr *asoi = (AllocStringObjectInstr*) instr;
       AccessInstr *acci = (AccessInstr*) instr;
       AssignInstr *assi = (AssignInstr*) instr;
+      KeyInObjInstr *kioi = (KeyInObjInstr*) instr;
       SetConstraintInstr *sci = (SetConstraintInstr*) instr;
       if (instr->type == INSTR_ALLOC_STRING_OBJECT
         && asoi->target.kind == ARG_SLOT
@@ -696,6 +696,20 @@ UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
         };
         addinstr_like(&builder, &uf->body, instr, sizeof(aski), (Instr*) &aski);
         instr = (Instr*)(acci + 1);
+        continue;
+      }
+      if (instr->type == INSTR_KEY_IN_OBJ
+        && kioi->key.kind == ARG_SLOT
+        && kioi->key.slot < slot_table_len && slot_table_ptr[kioi->key.slot] != NULL)
+      {
+        StringKeyInObjInstr skioi = {
+          .base = { .type = INSTR_STRING_KEY_IN_OBJ },
+          .obj = kioi->obj,
+          .target = kioi->target,
+          .key = prepare_key(slot_table_ptr[kioi->key.slot], strlen(slot_table_ptr[kioi->key.slot]))
+        };
+        addinstr_like(&builder, &uf->body, instr, sizeof(skioi), (Instr*) &skioi);
+        instr = (Instr*)(kioi + 1);
         continue;
       }
       if (instr->type == INSTR_ASSIGN
@@ -809,7 +823,6 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
             if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
             if (instr->value.kind == ARG_SLOT) slot_live[instr->value.slot] = true;
-          // TODO inline key?
           CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
             if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
@@ -846,6 +859,9 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
             if (instr->value.kind == ARG_SLOT) slot_live[instr->value.slot] = true;
+          CASE(INSTR_STRING_KEY_IN_OBJ, StringKeyInObjInstr)
+            if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
+            if (instr->target.kind == ARG_SLOT) slot_live[instr->target.slot] = true;
           CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
             if (instr->constraint.kind == ARG_SLOT) slot_live[instr->constraint.slot] = true;

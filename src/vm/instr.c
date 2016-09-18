@@ -50,6 +50,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_PHI, PhiInstr);
     CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr);
     CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr);
+    CASE(INSTR_STRING_KEY_IN_OBJ, StringKeyInObjInstr);
     CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr);
     CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr);
     CASE(INSTR_MOVE, MoveInstr);

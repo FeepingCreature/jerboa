@@ -163,6 +163,12 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  FastKey key;
+  Arg obj; WriteArg target;
+} StringKeyInObjInstr;
+
+typedef struct {
+  Instr base;
   Arg obj, constraint;
   char *key_ptr; int key_len;
 } SetConstraintStringKeyInstr;

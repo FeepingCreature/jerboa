@@ -197,6 +197,16 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) (sci + 1);
       break;
     }
+    case INSTR_STRING_KEY_IN_OBJ:
+    {
+      StringKeyInObjInstr *skioi = (StringKeyInObjInstr*) instr;
+      fprintf(stderr, "key in obj: %s = '%.*s' in %s\t\t(opt: string key)\n",
+              get_write_arg_info(((StringKeyInObjInstr*) instr)->target),
+              (int) skioi->key.len, skioi->key.ptr,
+              get_arg_info_ext(state, ((StringKeyInObjInstr*) instr)->obj));
+      *instr_p = (Instr*) (skioi + 1);
+      break;
+    }
     case INSTR_DEFINE_REFSLOT:
     {
       DefineRefslotInstr *dri = (DefineRefslotInstr*) instr;
