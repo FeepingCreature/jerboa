@@ -1559,7 +1559,7 @@ static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRang
   return PARSE_OK;
 }
 
-static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRange *range) {
+static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRange *range, bool is_method) {
   // alloc scope for fun var
   use_range_start(builder, range);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
@@ -1567,6 +1567,7 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   
   UserFunction *fn;
   ParseResult res = parse_function_expr(textp, &fn);
+  fn->is_method = is_method;
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
   use_range_start(builder, range);
@@ -1628,10 +1629,11 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     *textp = text;
     return parse_if(textp, builder, keyword_range);
   }
-  if (eat_keyword(&text, "function")) {
+  bool is_method = false;
+  if (eat_keyword(&text, "function") || (eat_keyword(&text, "method") && (is_method = true))) {
     record_end(text, keyword_range);
     *textp = text;
-    return parse_fundecl(textp, builder, keyword_range);
+    return parse_fundecl(textp, builder, keyword_range, is_method);
   }
   if (eat_keyword(&text, "while")) {
     record_end(text, keyword_range);
