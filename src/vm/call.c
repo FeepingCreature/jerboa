@@ -39,7 +39,7 @@ static void closure_mark_fn(VMState *state, Object *obj) {
 }
 
 Value make_closure_fn(VMState *state, Object *context, UserFunction *fn) {
-  ClosureObject *obj = alloc_object_internal(state, sizeof(ClosureObject));
+  ClosureObject *obj = alloc_object_internal(state, sizeof(ClosureObject), false);
   obj->base.parent = state->shared->vcache.closure_base;
   obj->base.mark_fn = closure_mark_fn;
   obj->context = context;
@@ -66,14 +66,14 @@ bool setup_call(VMState *state, CallInfo *info) {
   UserFunction *vmfun = cl_obj->vmfun;
   Object *context = cl_obj->context;
   if (vmfun->is_method) {
-    context = AS_OBJ(make_object(state, context));
+    context = AS_OBJ(make_object(state, context, false));
     create_table_with_single_entry_prepared(&context->tbl, prepare_key("this", 4), load_arg(state->frame, info->this_arg));
     context->flags |= OBJ_CLOSED;
   }
   // gc only runs in the main loop
   // gc_disable(state); // keep context alive, if need be
   if (UNLIKELY(vmfun->variadic_tail)) {
-    context = AS_OBJ(make_object(state, context));
+    context = AS_OBJ(make_object(state, context, false));
     // should have been checked before
     assert(info->args_len >= vmfun->arity);
     int varargs_len = info->args_len - vmfun->arity;

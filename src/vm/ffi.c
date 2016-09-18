@@ -25,7 +25,7 @@ static void ffi_open_fn(VMState *state, CallInfo *info) {
   void *dlptr = dlopen(file, RTLD_LAZY);
   VM_ASSERT(dlptr, "dlopen failed: %s", dlerror());
   
-  Object *handle_obj = AS_OBJ(make_object(state, handle_base));
+  Object *handle_obj = AS_OBJ(make_object(state, handle_base, false));
   handle_obj->flags |= OBJ_FROZEN;
   OBJECT_SET_STRING(state, handle_obj, "pointer", make_ptr(state, dlptr));
   vm_return(state, info, OBJ2VAL(handle_obj));
@@ -209,7 +209,7 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
       VM_ASSERT(c_type, "internal type error") VNULL;
       VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) VNULL;
     }
-    Value res = make_object(state, type);
+    Value res = make_object(state, type, false);
     char *error = OBJECT_SET_STRING(state, AS_OBJ(res), "pointer", make_ffi_pointer(state, ptr));
     VM_ASSERT(!error, error) VNULL;
     return res;
@@ -549,7 +549,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     int struct_sz = AS_INT(OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL));
     void *struct_data = malloc(struct_sz);
     memcpy(struct_data, ret_ptr, struct_sz);
-    Object *struct_val_obj = AS_OBJ(make_object(state, ret_type));
+    Object *struct_val_obj = AS_OBJ(make_object(state, ret_type, false));
     OBJECT_SET_STRING(state, struct_val_obj, "pointer", make_ffi_pointer(state, struct_data));
     vm_return(state, info, OBJ2VAL(struct_val_obj));
   } else VM_ASSERT(false, "unknown return type");
@@ -725,20 +725,20 @@ static void malloc_fn(VMState *state, CallInfo *info) {
 }
 
 void ffi_setup_root(VMState *state, Object *root) {
-  FFIObject *ffi = (FFIObject*) alloc_object_internal(state, sizeof(FFIObject));
+  FFIObject *ffi = (FFIObject*) alloc_object_internal(state, sizeof(FFIObject), false);
   Object *ffi_obj = (Object*) ffi;
   ffi_obj->flags |= OBJ_FROZEN;
   
   OBJECT_SET_STRING(state, (Object*) ffi_obj, "open", make_fn(state, ffi_open_fn));
-  Object *type_obj = AS_OBJ(make_object(state, NULL));
+  Object *type_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, (Object*) ffi_obj, "type", OBJ2VAL(type_obj));
   
-#define DEFINE_TYPE(NAME, T) ffi->NAME ## _obj = AS_OBJ(make_object(state, type_obj)); \
+#define DEFINE_TYPE(NAME, T) ffi->NAME ## _obj = AS_OBJ(make_object(state, type_obj, false)); \
   ffi->NAME ## _obj->flags |= OBJ_NOINHERIT; \
   OBJECT_SET_STRING(state, ffi->NAME ## _obj, "sizeof", INT2VAL(sizeof(T))); \
   OBJECT_SET_STRING(state, ffi->NAME ## _obj, "c_type", make_string(state, #T, strlen(#T))); \
   OBJECT_SET_STRING(state, ffi_obj, #NAME, OBJ2VAL(ffi->NAME ## _obj))
-  ffi->void_obj = AS_OBJ(make_object(state, type_obj));
+  ffi->void_obj = AS_OBJ(make_object(state, type_obj, false));
   ffi->void_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, ffi_obj, "void", OBJ2VAL(ffi->void_obj));
   DEFINE_TYPE(short, short);
@@ -766,12 +766,12 @@ void ffi_setup_root(VMState *state, Object *root) {
   } else abort(); // 128-bit? 16-bit?
 #undef DEFINE_TYPE
 
-  Object *handle_obj = AS_OBJ(make_object(state, NULL));
+  Object *handle_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, ffi_obj, "handle", OBJ2VAL(handle_obj));
   OBJECT_SET_STRING(state, handle_obj, "pointer", VNULL);
   OBJECT_SET_STRING(state, handle_obj, "sym", make_fn(state, ffi_sym_fn));
   
-  Object *struct_obj = AS_OBJ(make_object(state, type_obj));
+  Object *struct_obj = AS_OBJ(make_object(state, type_obj, false));
   ffi->struct_obj = struct_obj;
   OBJECT_SET_STRING(state, ffi_obj, "struct", OBJ2VAL(struct_obj));
   OBJECT_SET_STRING(state, struct_obj, "complete", BOOL2VAL(false));

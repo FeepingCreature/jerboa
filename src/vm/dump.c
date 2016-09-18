@@ -13,8 +13,10 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((GetRootInstr*) instr + 1);
       break;
     case INSTR_ALLOC_OBJECT:
-      fprintf(stderr, "alloc object: %%%i = new object(%%%i)\n",
-              ((AllocObjectInstr*) instr)->target_slot, ((AllocObjectInstr*) instr)->parent_slot);
+      fprintf(stderr, "alloc object: %%%i = new object(%%%i, %s)\n",
+              ((AllocObjectInstr*) instr)->target_slot, ((AllocObjectInstr*) instr)->parent_slot,
+              ((AllocObjectInstr*) instr)->alloc_stack?"stack":"heap"
+             );
       *instr_p = (Instr*) ((AllocObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_INT_OBJECT:
@@ -222,7 +224,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
         fprintf(stderr, "%.*s%s%s = %%%i (&%i); ",
                 (int) info->name.len, info->name.ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
-      fprintf(stderr, "}\n");
+      fprintf(stderr, "} %s\n", asoi->alloc_stack?"stack":"heap");
       *instr_p = (Instr*) ((char*) instr + instr_size(instr));
       break;
     }

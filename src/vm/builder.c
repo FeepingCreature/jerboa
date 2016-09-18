@@ -205,7 +205,8 @@ int addinstr_alloc_object(FunctionBuilder *builder, int parent) {
   AllocObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_OBJECT },
     .target_slot = builder->slot_base++,
-    .parent_slot = parent
+    .parent_slot = parent,
+    .alloc_stack = false
   };
   addinstr(builder, sizeof(instr), (Instr*) &instr);
   return instr.target_slot;

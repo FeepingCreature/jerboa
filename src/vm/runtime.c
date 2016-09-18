@@ -794,7 +794,7 @@ static void file_open_fn(VMState *state, CallInfo *info) {
   if (fh == NULL) {
     VM_ASSERT(false, "file could not be opened: '%s' as '%s': %s", fnobj->value, fmobj->value, strerror(errno));
   }
-  Object *file_obj = AS_OBJ(make_object(state, file_base));
+  Object *file_obj = AS_OBJ(make_object(state, file_base, false));
   OBJECT_SET_STRING(state, file_obj, "_handle", make_ptr(state, (void*) fh));
   vm_return(state, info, OBJ2VAL(file_obj));
 }
@@ -855,7 +855,7 @@ static void keys_fn(VMState *state, CallInfo *info) {
 static Object *xml_to_object(VMState *state, Object *parent, xmlNode *element, Object *text_node_base, Object *element_node_base) {
   Object *res;
   if (element->type == 1) {
-    res = AS_OBJ(make_object(state, element_node_base));
+    res = AS_OBJ(make_object(state, element_node_base, false));
     xmlNode *child = element->children;
     int children_len = 0;
     for (; child; child = child->next) children_len ++;
@@ -864,7 +864,7 @@ static Object *xml_to_object(VMState *state, Object *parent, xmlNode *element, O
     for (child = element->children; child; child = child->next) {
       children_ptr[i++] = OBJ2VAL(xml_to_object(state, res, child, text_node_base, element_node_base));
     }
-    Object *attr = AS_OBJ(make_object(state, NULL));
+    Object *attr = AS_OBJ(make_object(state, NULL, false));
     xmlAttr *xml_attr = element->properties;
     for (; xml_attr; xml_attr = xml_attr->next) {
       assert(xml_attr->type == 2); // attribute
@@ -881,7 +881,7 @@ static Object *xml_to_object(VMState *state, Object *parent, xmlNode *element, O
     // otherwise VNULL via prototype
     if (parent) OBJECT_SET_STRING(state, res, "parent", OBJ2VAL(parent));
   } else if (element->type == 3) {
-    res = AS_OBJ(make_object(state, text_node_base));
+    res = AS_OBJ(make_object(state, text_node_base, false));
     // printf("alloc_string(%lu)\n", strlen((char*) element->content));
     char *content = (char*) element->content;
     OBJECT_SET_STRING(state, res, "value", make_string(state, content, strlen(content)));
@@ -1333,7 +1333,7 @@ char *get_type_info(VMState *state, Value val) {
 }
 
 Object *create_root(VMState *state) {
-  Object *root = AS_OBJ(make_object(state, NULL));
+  Object *root = AS_OBJ(make_object(state, NULL, false));
   
   state->root = root;
   
@@ -1341,14 +1341,14 @@ Object *create_root(VMState *state) {
   Value rootval = OBJ2VAL(root);
   gc_add_roots(state, &rootval, 1, &pin_root);
   
-  Object *function_obj = AS_OBJ(make_object(state, NULL));
+  Object *function_obj = AS_OBJ(make_object(state, NULL, false));
   function_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "sysfun", OBJ2VAL(function_obj));
   state->shared->vcache.function_base = function_obj;
   OBJECT_SET_STRING(state, function_obj, "apply", make_fn(state, fn_apply_fn));
   OBJECT_SET_STRING(state, function_obj, "call", make_fn(state, fn_call_fn));
   
-  Object *int_obj = AS_OBJ(make_object(state, NULL));
+  Object *int_obj = AS_OBJ(make_object(state, NULL, false));
   int_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "int", OBJ2VAL(int_obj));
   OBJECT_SET_STRING(state, int_obj, "+" , make_fn(state, int_add_fn));
@@ -1367,7 +1367,7 @@ Object *create_root(VMState *state) {
   state->shared->vcache.int_base = int_obj;
   int_obj->flags |= OBJ_FROZEN;
   
-  Object *float_obj = AS_OBJ(make_object(state, NULL));
+  Object *float_obj = AS_OBJ(make_object(state, NULL, false));
   float_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "float", OBJ2VAL(float_obj));
   OBJECT_SET_STRING(state, float_obj, "+" , make_fn(state, float_add_fn));
@@ -1383,14 +1383,14 @@ Object *create_root(VMState *state) {
   state->shared->vcache.float_base = float_obj;
   float_obj->flags |= OBJ_FROZEN;
   
-  Object *closure_obj = AS_OBJ(make_object(state, NULL));
+  Object *closure_obj = AS_OBJ(make_object(state, NULL, false));
   closure_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "function", OBJ2VAL(closure_obj));
   OBJECT_SET_STRING(state, closure_obj, "apply", make_fn(state, fn_apply_fn));
   OBJECT_SET_STRING(state, closure_obj, "call", make_fn(state, fn_call_fn));
   state->shared->vcache.closure_base = closure_obj;
   
-  Object *bool_obj = AS_OBJ(make_object(state, NULL));
+  Object *bool_obj = AS_OBJ(make_object(state, NULL, false));
   bool_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "bool", OBJ2VAL(bool_obj));
   OBJECT_SET_STRING(state, bool_obj, "==", make_fn(state, bool_eq_fn));
@@ -1402,7 +1402,7 @@ Object *create_root(VMState *state) {
   
   OBJECT_SET_STRING(state, root, "null", VNULL);
   
-  Object *string_obj = AS_OBJ(make_object(state, NULL));
+  Object *string_obj = AS_OBJ(make_object(state, NULL, false));
   string_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "string", OBJ2VAL(string_obj));
   OBJECT_SET_STRING(state, string_obj, "+", make_fn(state, string_add_fn));
@@ -1415,7 +1415,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, string_obj, "byte_len", make_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
   
-  Object *array_obj = AS_OBJ(make_object(state, NULL));
+  Object *array_obj = AS_OBJ(make_object(state, NULL, false));
   array_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "array", OBJ2VAL(array_obj));
   OBJECT_SET_STRING(state, array_obj, "resize", make_fn(state, array_resize_fn));
@@ -1429,7 +1429,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, array_obj, "dup", make_fn(state, array_dup_fn));
   state->shared->vcache.array_base = array_obj;
   
-  Object *ptr_obj = AS_OBJ(make_object(state, NULL));
+  Object *ptr_obj = AS_OBJ(make_object(state, NULL, false));
   ptr_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, root, "pointer", OBJ2VAL(ptr_obj));
   OBJECT_SET_STRING(state, ptr_obj, "null", make_fn(state, ptr_is_null_fn));
@@ -1437,34 +1437,34 @@ Object *create_root(VMState *state) {
   
   OBJECT_SET_STRING(state, root, "keys", make_fn(state, keys_fn));
   
-  Object *xml_obj = AS_OBJ(make_object(state, NULL));
+  Object *xml_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, xml_obj, "load", make_fn(state, xml_load_fn));
   OBJECT_SET_STRING(state, xml_obj, "parse", make_fn(state, xml_parse_fn));
   // no! allow methods to redefine parse()
   // (it's not inner-loop enough to require freezing)
   // xml_obj->flags |= OBJ_FROZEN;
   
-  Object *node_obj = AS_OBJ(make_object(state, NULL));
+  Object *node_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, node_obj, "find_array", make_fn(state, xml_node_find_array_fn));
   OBJECT_SET_STRING(state, node_obj, "find_array_by_name", make_fn(state, xml_node_find_by_name_array_fn));
   OBJECT_SET_STRING(state, xml_obj, "node", OBJ2VAL(node_obj));
   
-  Object *element_node_obj = AS_OBJ(make_object(state, node_obj));
+  Object *element_node_obj = AS_OBJ(make_object(state, node_obj, false));
   OBJECT_SET_STRING(state, element_node_obj, "nodeName", make_string_static(state, ""));
   OBJECT_SET_STRING(state, element_node_obj, "nodeType", INT2VAL(1));
-  OBJECT_SET_STRING(state, element_node_obj, "attr", make_object(state, NULL));
+  OBJECT_SET_STRING(state, element_node_obj, "attr", make_object(state, NULL, false));
   OBJECT_SET_STRING(state, element_node_obj, "children", make_array(state, NULL, 0, true));
   OBJECT_SET_STRING(state, element_node_obj, "parent", VNULL);
   OBJECT_SET_STRING(state, xml_obj, "element_node", OBJ2VAL(element_node_obj));
   
-  Object *text_node_obj = AS_OBJ(make_object(state, node_obj));
+  Object *text_node_obj = AS_OBJ(make_object(state, node_obj, false));
   OBJECT_SET_STRING(state, text_node_obj, "nodeType", INT2VAL(3));
   OBJECT_SET_STRING(state, text_node_obj, "value", VNULL);
   OBJECT_SET_STRING(state, xml_obj, "text_node", OBJ2VAL(text_node_obj));
   
   OBJECT_SET_STRING(state, root, "xml", OBJ2VAL(xml_obj));
   
-  Object *file_obj = AS_OBJ(make_object(state, NULL));
+  Object *file_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, file_obj, "_handle", VNULL);
   OBJECT_SET_STRING(state, file_obj, "print", make_fn(state, file_print_fn));
   OBJECT_SET_STRING(state, file_obj, "open", make_fn(state, file_open_fn));
@@ -1472,11 +1472,11 @@ Object *create_root(VMState *state) {
   file_obj->flags |= OBJ_FROZEN;
   OBJECT_SET_STRING(state, root, "file", OBJ2VAL(file_obj));
   
-  Object *stdout_obj = AS_OBJ(make_object(state, file_obj));
+  Object *stdout_obj = AS_OBJ(make_object(state, file_obj, false));
   OBJECT_SET_STRING(state, stdout_obj, "_handle", make_ptr(state, (void*) stdout));
   OBJECT_SET_STRING(state, root, "stdout", OBJ2VAL(stdout_obj));
   
-  Object *stderr_obj = AS_OBJ(make_object(state, file_obj));
+  Object *stderr_obj = AS_OBJ(make_object(state, file_obj, false));
   OBJECT_SET_STRING(state, stderr_obj, "_handle", make_ptr(state, (void*) stderr));
   OBJECT_SET_STRING(state, root, "stderr", OBJ2VAL(stderr_obj));
   
@@ -1487,7 +1487,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, root, "_mark_const", make_fn(state, mark_const_fn));
   OBJECT_SET_STRING(state, root, "assert", make_fn(state, assert_fn));
   
-  Object *math_obj = AS_OBJ(make_object(state, NULL));
+  Object *math_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, math_obj, "sin", make_fn(state, sin_fn));
   OBJECT_SET_STRING(state, math_obj, "cos", make_fn(state, cos_fn));
   OBJECT_SET_STRING(state, math_obj, "tan", make_fn(state, tan_fn));
@@ -1500,7 +1500,7 @@ Object *create_root(VMState *state) {
   math_obj->flags |= OBJ_FROZEN;
   OBJECT_SET_STRING(state, root, "Math", OBJ2VAL(math_obj));
   
-  Object *obj_tools = AS_OBJ(make_object(state, NULL));
+  Object *obj_tools = AS_OBJ(make_object(state, NULL, false));
   obj_tools->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, obj_tools, "keys", make_fn(state, obj_keys_fn));
   

@@ -34,6 +34,7 @@ typedef struct _Object Object;
 typedef struct {
   Instr base;
   int target_slot, parent_slot;
+  bool alloc_stack;
 } AllocObjectInstr;
 
 typedef struct {
@@ -196,6 +197,7 @@ typedef struct {
   int target_slot, parent_slot;
   
   int info_len;
+  bool alloc_stack;
 } AllocStaticObjectInstr;
 
 #define ASOI_OBJ(I) *((Object*)((AllocStaticObjectInstr*)(I) + 1))

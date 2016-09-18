@@ -80,7 +80,8 @@ typedef enum {
                        // you can still prototype the objects themselves though.
   OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
   OBJ_IMMORTAL = 0x10, // will never be freed
-  OBJ_PRINT_HACK = 0x20, // lol
+  OBJ_INLINE_TABLE = 0x20, // table is allocated with the object, doesn't need to be freed separately
+  OBJ_PRINT_HACK = 0x40 // lol
 } ObjectFlags;
 
 // for debugging specific objects
@@ -328,6 +329,7 @@ struct _Callframe {
   // when returning *from* this frame, assign result value to this (in the *above* frame)
   WriteArg target;
   int block, prev_block; // required for phi nodes
+  Object *last_stack_obj; // chain of stack allocated objects for freeing later
   Callframe *above;
 };
 

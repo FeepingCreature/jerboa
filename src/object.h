@@ -59,6 +59,8 @@ static inline char *object_set_key_internal(VMState *state, Object *obj, FastKey
 
 void obj_mark(VMState *state, Object *obj);
 
+void obj_free_aux(Object *obj); // free everything attached to obj except obj
+
 void obj_free(Object *obj);
 
 // returns the object in obj's prototype chain whose immediate prototype is `proto`
@@ -160,9 +162,9 @@ typedef struct {
   void *ptr;
 } PointerObject;
 
-void *alloc_object_internal(VMState *state, int size);
+void *alloc_object_internal(VMState *state, int size, bool stack);
 
-Value make_object(VMState *state, Object *parent);
+Value make_object(VMState *state, Object *parent, bool stack);
 
 Value make_int(VMState *state, int value);
 

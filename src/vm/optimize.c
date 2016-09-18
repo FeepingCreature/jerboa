@@ -491,6 +491,165 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
   return fn;
 }
 
+UserFunction *null_this_in_thisless_calls(VMState *state, UserFunction *uf) {
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
+  
+  Object *closure_base = state->shared->vcache.closure_base;
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    new_block(&builder);
+    
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      int instrsz = instr_size(instr_cur);
+      if (instr_cur->type == INSTR_CALL) {
+        CallInstr *instr = (CallInstr*) instr_cur;
+        CallInstr *instr_new = alloca(instrsz);
+        memcpy(instr_new, instr, instrsz);
+        if (instr->info.fn.kind == ARG_VALUE) {
+          Object *fn_obj = AS_OBJ(instr->info.fn.value);
+          ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
+          if (cl && !cl->vmfun->is_method) {
+            instr_new->info.this_arg = (Arg) {.kind = ARG_VALUE, .value = VNULL };
+          }
+        }
+        addinstr_like(&builder, &uf->body, instr_cur, instrsz, (Instr*) instr_new);
+      } else {
+        addinstr_like(&builder, &uf->body, instr_cur, instrsz, (Instr*) instr_cur);
+      }
+      
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  
+  UserFunction *fn = build_function(&builder);
+  copy_fn_stats(uf, fn);
+  free_function(uf);
+  return fn;
+}
+
+typedef struct {
+  bool test_escapes, definitely_escapes;
+  int *ptr;
+  int length;
+} SlotEscapeStat;
+
+void ia_append(SlotEscapeStat *array, int value) {
+  array->ptr = realloc(array->ptr, sizeof(int) * ++array->length);
+  array->ptr[array->length - 1] = value;
+}
+
+bool any_escape(SlotEscapeStat *escape_stat, int slot) {
+  if (escape_stat[slot].definitely_escapes) return true;
+  if (!escape_stat[slot].test_escapes) return false;
+  for (int i = 0; i < escape_stat[slot].length; i++) {
+    if (any_escape(escape_stat, escape_stat[slot].ptr[i])) return true;
+  }
+  return false;
+}
+
+UserFunction *stackify_nonescaping_heap_allocs(UserFunction *uf) {
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
+  
+  SlotEscapeStat *escape_stat = calloc(sizeof(SlotEscapeStat), uf->slots);
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      if (instr_cur->type == INSTR_ALLOC_OBJECT) {
+        AllocObjectInstr *instr = (AllocObjectInstr*) instr_cur;
+        escape_stat[instr->parent_slot].test_escapes = true;
+        ia_append(&escape_stat[instr->parent_slot], instr->target_slot);
+        ia_append(&escape_stat[instr->parent_slot], instr->target_slot);
+      } else if (instr_cur->type == INSTR_ALLOC_STATIC_OBJECT) {
+        AllocStaticObjectInstr *instr = (AllocStaticObjectInstr*) instr_cur;
+        escape_stat[instr->parent_slot].test_escapes = true;
+        ia_append(&escape_stat[instr->parent_slot], instr->target_slot);
+        for (int k = 0; k < instr->info_len; ++k) {
+          int slot = ASOI_INFO(instr)[k].slot;
+          // TODO track through refslots
+          escape_stat[slot].test_escapes = true;
+          ia_append(&escape_stat[slot], instr->target_slot);
+        }
+      } else if (instr_cur->type == INSTR_MOVE) {
+        MoveInstr *instr = (MoveInstr*) instr_cur;
+        if (instr->source.kind == ARG_SLOT) {
+          escape_stat[instr->source.slot].definitely_escapes = true;
+        }
+      } else if (instr_cur->type == INSTR_ASSIGN) {
+        AssignInstr *instr = (AssignInstr*) instr_cur;
+        if (instr->value.kind == ARG_SLOT) {
+          escape_stat[instr->value.slot].definitely_escapes = true;
+        }
+      } else if (instr_cur->type == INSTR_ASSIGN_STRING_KEY) {
+        AssignStringKeyInstr *instr = (AssignStringKeyInstr*) instr_cur;
+        if (instr->value.kind == ARG_SLOT) {
+          escape_stat[instr->value.slot].definitely_escapes = true;
+        }
+      } else if (instr_cur->type == INSTR_RETURN) {
+        ReturnInstr *instr = (ReturnInstr*) instr_cur;
+        if (instr->ret.kind == ARG_SLOT) escape_stat[instr->ret.slot].definitely_escapes = true;
+      } else if (instr_cur->type == INSTR_CALL) {
+        CallInstr *instr = (CallInstr*) instr_cur;
+        if (instr->info.this_arg.kind == ARG_SLOT) {
+          escape_stat[instr->info.this_arg.slot].definitely_escapes = true;
+        }
+        for (int k = 0; k < instr->info.args_len; k++) {
+          Arg arg = ((Arg*)(&instr->info + 1))[k];
+          if (arg.kind == ARG_SLOT) {
+            escape_stat[arg.slot].definitely_escapes = true;
+          }
+        }
+      } else if (instr_cur->type == INSTR_ALLOC_CLOSURE_OBJECT) {
+        AllocClosureObjectInstr *instr = (AllocClosureObjectInstr*) instr_cur;
+        escape_stat[instr->base.context_slot].test_escapes = true;
+        if (instr->target.kind == ARG_SLOT) {
+          ia_append(&escape_stat[instr->base.context_slot], instr->target.slot);
+        }
+      }
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    new_block(&builder);
+    
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      if (instr_cur->type == INSTR_ALLOC_OBJECT) {
+        AllocObjectInstr *instr = (AllocObjectInstr*) instr_cur;
+        AllocObjectInstr aloi = *instr;
+        if (!any_escape(escape_stat, aloi.target_slot)) {
+          aloi.alloc_stack = true;
+        }
+        addinstr_like(&builder, &uf->body, instr_cur, sizeof(aloi), (Instr*) &aloi);
+      } else if (instr_cur->type == INSTR_ALLOC_STATIC_OBJECT) {
+        AllocStaticObjectInstr *instr = (AllocStaticObjectInstr*) instr_cur;
+        int instrsz = instr_size(instr_cur);
+        AllocStaticObjectInstr *asoi = alloca(instrsz);
+        memcpy(asoi, instr, instrsz);
+        if (!any_escape(escape_stat, asoi->target_slot)) {
+          asoi->alloc_stack = true;
+        }
+        addinstr_like(&builder, &uf->body, instr_cur, instrsz, (Instr*) asoi);
+      } else {
+        addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
+      }
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  
+  for (int i = 0; i < uf->slots; i++) free(escape_stat[i].ptr);
+  free(escape_stat);
+  
+  UserFunction *fn = build_function(&builder);
+  copy_fn_stats(uf, fn);
+  free_function(uf);
+  return fn;
+}
+
 UserFunction *inline_primitive_accesses(UserFunction *uf, bool *prim_slot) {
   FunctionBuilder builder = {0};
   builder.block_terminated = true;
@@ -1970,9 +2129,14 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   // must be late!
   uf = fuse_static_object_alloc(state, uf);
   uf = remove_dead_slot_writes(uf);
-  uf = call_functions_directly(state, uf);
   
   uf = remove_pointless_blocks(uf);
+  
+  uf = null_this_in_thisless_calls(state, uf);
+  uf = stackify_nonescaping_heap_allocs(uf);
+  
+  // should be last-ish, micro-opt that introduces a new op
+  uf = call_functions_directly(state, uf);
   
   // must be very very *very* last!
   uf = compactify_registers(uf);

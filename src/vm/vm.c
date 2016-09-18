@@ -47,6 +47,7 @@ void vm_alloc_frame(VMState *state, int slots, int refslots) {
   if (!cf) return; // stack overflow
   cf->uf = NULL;
   cf->above = state->frame;
+  cf->last_stack_obj = NULL;
   cf->block = 0;
   cf->slots_len = slots;
   cf->slots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value) * slots);
@@ -83,6 +84,13 @@ void vm_error(VMState *state, const char *fmt, ...) {
 
 void vm_remove_frame(VMState *state) {
   Callframe *cf = state->frame;
+  Object *obj = cf->last_stack_obj;
+  while (obj) {
+    obj_free_aux(obj);
+    Object *prev_obj = obj->prev;
+    vm_stack_free(state, obj, obj->size);
+    obj = prev_obj;
+  }
   vm_stack_free(state, cf->refslots_ptr, sizeof(Value*)*cf->refslots_len);
   vm_stack_free(state, cf->slots_ptr, sizeof(Value)*cf->slots_len);
   state->frame = cf->above;
@@ -256,7 +264,7 @@ static FnWrap vm_instr_alloc_object(VMState *state) {
   VM_ASSERT2_SLOT(parent_slot < state->frame->slots_len, "slot numbering error");
   Object *parent_obj = OBJ_OR_NULL(state->frame->slots_ptr[parent_slot]);
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
-  state->frame->slots_ptr[target_slot] = make_object(state, parent_obj);
+  state->frame->slots_ptr[target_slot] = make_object(state, parent_obj, alloc_obj_instr->alloc_stack);
   state->instr = (Instr*)(alloc_obj_instr + 1);
   return (FnWrap) { state->instr->fn };
 }
@@ -396,15 +404,16 @@ static FnWrap vm_instr_access(VMState *state) {
   }
   if (!object_found) {
     if (has_char_key) {
-      VM_ASSERT2(false, "property not found: '%s'", key);
+      VM_ASSERT2(false, "[1] property not found: '%s'", key);
     } else {
-      VM_ASSERT2(false, "property not found!");
+      VM_ASSERT2(false, "[2] property not found!");
     }
   }
   state->instr = (Instr*)(access_instr + 1);
   return (FnWrap) { state->instr->fn };
 }
 
+#include "print.h"
 static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessStringKeyInstr *aski) {
   Value val = load_arg(state->frame, aski->obj);
   Object *obj = closest_obj(state, val);
@@ -422,7 +431,9 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
     
     return call_internal(state, info);
   } else {
-    VM_ASSERT(false, "property not found: '%.*s'", (int) aski->key.len, aski->key.ptr) (FnWrap) { vm_halt };
+    print_recursive(state, stderr, OBJ2VAL(obj), true);
+    fprintf(stderr, "\n");
+    VM_ASSERT(false, "[3] property not found: '%.*s'", (int) aski->key.len, aski->key.ptr) (FnWrap) { vm_halt };
   }
 }
 
@@ -775,15 +786,16 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
   VM_ASSERT2_SLOT(parent_slot < state->frame->slots_len, "slot numbering error");
   Object *parent_obj = OBJ_OR_NULL(state->frame->slots_ptr[parent_slot]);
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
-  Object *obj = AS_OBJ(make_object(state, parent_obj));
   
-  // TODO table_clone
+  int tbl_size = sizeof(TableEntry) * ((Object*)(asoi+1))->tbl.entries_num;
+  Object *obj = alloc_object_internal(state, sizeof(Object) + tbl_size, asoi->alloc_stack);
+  obj->parent = parent_obj;
+  
   obj->tbl = ((Object*)(asoi+1))->tbl;
   // TODO don't gen instr if 0
-  if (obj->tbl.entries_num) {
-    int tbl_len = sizeof(TableEntry) * obj->tbl.entries_num;
-    obj->tbl.entries_ptr = cache_alloc_uninitialized(tbl_len);
-    memcpy(obj->tbl.entries_ptr, ((Object*)(asoi+1))->tbl.entries_ptr, tbl_len);
+  if (tbl_size) {
+    obj->tbl.entries_ptr = (TableEntry*) ((Object*) obj + 1); // fixed table, hangs off the end
+    memcpy(obj->tbl.entries_ptr, ((Object*)(asoi+1))->tbl.entries_ptr, tbl_size);
   }
   
   for (int i = 0; i < asoi->info_len; ++i) {
@@ -798,7 +810,7 @@ static FnWrap vm_instr_alloc_static_object(VMState *state) {
     state->frame->refslots_ptr[info->refslot] = entry;
   }
   
-  obj->flags = OBJ_CLOSED;
+  obj->flags = OBJ_CLOSED | OBJ_INLINE_TABLE;
   
   state->frame->slots_ptr[target_slot] = OBJ2VAL(obj);
   

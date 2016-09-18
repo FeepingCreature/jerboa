@@ -152,11 +152,17 @@ void obj_mark(VMState *state, Object *obj) {
   }
 }
 
-void obj_free(Object *obj) {
+void obj_free_aux(Object *obj) {
   if (obj->free_fn) {
     obj->free_fn(obj);
   }
-  cache_free(sizeof(TableEntry) * obj->tbl.entries_num, obj->tbl.entries_ptr);
+  if (!(obj->flags & OBJ_INLINE_TABLE)) {
+    cache_free(sizeof(TableEntry) * obj->tbl.entries_num, obj->tbl.entries_ptr);
+  }
+}
+
+void obj_free(Object *obj) {
+  obj_free_aux(obj);
   cache_free(obj->size, obj);
 }
 
@@ -306,24 +312,37 @@ char *object_set(VMState *state, Object *obj, FastKey *key, Value value) {
 }
 
 void vm_record_profile(VMState *state);
-void *alloc_object_internal(VMState *state, int size) {
-  Object *res = cache_alloc_uninitialized(size);
-  *res = (Object) {
+void *alloc_object_internal(VMState *state, int size, bool stack) {
+  Object *res;
+  if (stack) {
+    res = vm_stack_alloc_uninitialized(state, size);
+    *res = (Object) {
 #if COUNT_OBJECTS
-    .alloc_id = state->shared->gcstate.num_obj_allocated_total++,
+      .alloc_id = state->shared->gcstate.num_obj_allocated_total++,
 #endif
-    .prev = state->shared->gcstate.last_obj_allocated,
-    .size = size,
-  };
-  // for debugging
-  /*if (res->alloc_id == 535818) {
-    __asm__("int $3");
-  }*/
-  state->shared->gcstate.last_obj_allocated = res;
-  state->shared->gcstate.num_obj_allocated ++;
+      .prev = state->frame->last_stack_obj,
+      .size = size,
+    };
+    state->frame->last_stack_obj = res;
+  } else {
+    res = cache_alloc_uninitialized(size);
+    *res = (Object) {
+#if COUNT_OBJECTS
+      .alloc_id = state->shared->gcstate.num_obj_allocated_total++,
+#endif
+      .prev = state->shared->gcstate.last_obj_allocated,
+      .size = size,
+    };
+    // for debugging
+    /*if (res->alloc_id == 535818) {
+      __asm__("int $3");
+    }*/
+    state->shared->gcstate.last_obj_allocated = res;
+    state->shared->gcstate.num_obj_allocated ++;
+  }
   
 #if DEBUG_MEM
-  fprintf(stderr, "alloc object %p\n", (void*) obj);
+  fprintf(stderr, "alloc object %p\n", (void*) res);
 #endif
   
   // if(state->runstate == VM_RUNNING) vm_record_profile(state);
@@ -331,8 +350,8 @@ void *alloc_object_internal(VMState *state, int size) {
   return res;
 }
 
-Value make_object(VMState *state, Object *parent) {
-  Object *obj = alloc_object_internal(state, sizeof(Object));
+Value make_object(VMState *state, Object *parent, bool stack) {
+  Object *obj = alloc_object_internal(state, sizeof(Object), stack);
   obj->parent = parent;
   return OBJ2VAL(obj);
 }
@@ -351,7 +370,7 @@ Value make_float(VMState *state, float value) {
 
 Value make_string(VMState *state, const char *ptr, int len) {
   // allocate the string as part of the object, so that it gets freed with the object
-  StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1);
+  StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1, false);
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->static_ptr = true;
@@ -362,7 +381,7 @@ Value make_string(VMState *state, const char *ptr, int len) {
 }
 
 Value make_string_static(VMState *state, char *value) {
-  StringObject *obj = alloc_object_internal(state, sizeof(StringObject));
+  StringObject *obj = alloc_object_internal(state, sizeof(StringObject), false);
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
   obj->static_ptr = true;
@@ -388,7 +407,7 @@ static void array_free_fn(Object *obj) {
 }
 
 Value make_array(VMState *state, Value *ptr, int length, bool owned) {
-  ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject));
+  ArrayObject *obj = alloc_object_internal(state, sizeof(ArrayObject), false);
   obj->base.parent = state->shared->vcache.array_base;
   obj->base.mark_fn = array_mark_fn;
   obj->base.free_fn = array_free_fn;
@@ -424,7 +443,7 @@ void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_le
 }
 
 Value make_ptr(VMState *state, void *ptr) {
-  PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject));
+  PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject), false);
   obj->base.parent = state->shared->vcache.pointer_base;
   // see alloc_int
   obj->base.flags = OBJ_NOINHERIT;
@@ -435,7 +454,7 @@ Value make_ptr(VMState *state, void *ptr) {
 // used to allocate "special functions" like ffi functions, that need to store more data
 Value make_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom) {
   assert(size_custom >= sizeof(FunctionObject));
-  FunctionObject *obj = alloc_object_internal(state, size_custom);
+  FunctionObject *obj = alloc_object_internal(state, size_custom, false);
   obj->base.parent = state->shared->vcache.function_base;
   obj->base.flags |= OBJ_NOINHERIT;
   obj->fn_ptr = fn;
