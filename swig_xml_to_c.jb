@@ -158,6 +158,16 @@ cfile.print("#include <", inputfile, ">");
 cfile.print("int main() {");
 cfile.print("  printf(\"var library = ffi.open(\\\"", libfile, "\\\");\\n\");");
 
+cfile.print("  printf(\"method lazyload(name, shortname, ret, args) {\\n\");");
+cfile.print("  printf(\"  return function(...) {\\n\");");
+cfile.print("  printf(\"    var sym = library.sym(name, ret, args);\\n\");");
+cfile.print("  printf(\"    if (!sym) abort();\\n\");");
+cfile.print("  printf(\"    this[shortname] = sym;\\n\");");
+cfile.print("  printf(\"    _mark_const.call(this, shortname);\\n\");");
+cfile.print("  printf(\"    return sym.apply(null, arguments);\\n\");");
+cfile.print("  printf(\"  };\\n\");");
+cfile.print("  printf(\"}\\n\");");
+
 print("filter constants");
 var constants = xmldata.findByName("constant");
 print("done.");
@@ -336,14 +346,9 @@ for (var i = 0; i < fndecls.length; i++) {
     if (good) {
       var par_types_str = "[" + par_types.join(", ") + "]";
       var shortn = short_name(name);
-      cfile.print("  printf(\"var ", shortn, " = function(...) {\\n\");");
-      cfile.print("  printf(\"  var sym = library.sym(\\\"", name, "\\\", ", ret_type, ", ", par_types_str, ");\\n\");");
-      cfile.print("  printf(\"  if (sym) {\\n\");");
-      cfile.print("  printf(\"    ", shortn, " = sym;\\n\");");
-      cfile.print("  printf(\"    _mark_const(\\\"", shortn, "\\\");\\n\");");
-      cfile.print("  printf(\"    return ", shortn, ".apply(null, arguments);\\n\");");
-      cfile.print("  printf(\"  } else abort();\\n\");");
-      cfile.print("  printf(\"};\\n\");");
+      cfile.print("  printf(\"var ", shortn,
+                  " = lazyload(\\\"", name, "\\\", \\\"", shortn, "\\\", ",
+                  ret_type, ", ", par_types_str, ");\\n\");");
     } else print("bad skip ", getAttr(decl, "name"));
   } else print("ret skip ", getAttr(decl, "name"));
 }

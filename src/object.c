@@ -509,8 +509,8 @@ int prec_sort_outside_in_fn(const void *a, const void *b) {
   if (rec_a->range->text_from < rec_b->range->text_from) return -1;
   if (rec_a->range->text_from > rec_b->range->text_from) return 1;
   // then ranges that end later (outermost)
-  if (rec_a->range->text_to > rec_b->range->text_to) return -1;
-  if (rec_a->range->text_to < rec_b->range->text_to) return 1;
+  if (rec_a->range->text_len > rec_b->range->text_len) return -1;
+  if (rec_a->range->text_len < rec_b->range->text_len) return 1;
   // otherwise they're identical (direct/indirect collision)
   return 0;
 }
@@ -613,7 +613,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
     int zindex = 100000; // if there's more spans than this we are anyways fucked
     while (cur_char != source.end) {
       // close all extant
-      while (open_range_head && open_range_head->record->range->text_to == cur_char) {
+      while (open_range_head && open_range_head->record->range->text_from + open_range_head->record->range->text_len == cur_char) {
         // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
         drop_record(&open_range_head);
         fprintf(file, "</span>");
@@ -665,7 +665,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
         cur_entry_id ++;
       }
       // close all 0-size new
-      while (open_range_head && open_range_head->record->range->text_to == cur_char) {
+      while (open_range_head && open_range_head->record->range->text_from + open_range_head->record->range->text_len == cur_char) {
         // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
         drop_record(&open_range_head);
         fprintf(file, "</span>");

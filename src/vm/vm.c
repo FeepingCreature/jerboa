@@ -129,7 +129,7 @@ void vm_print_backtrace(VMState *state) {
       bool found = find_text_pos(belongs_to->text_from, &file, &line, &row, &col1);
       (void) found;
       assert(found);
-      found = find_text_pos(belongs_to->text_to, &file, &line, &row, &col2);
+      found = find_text_pos(belongs_to->text_from + belongs_to->text_len, &file, &line, &row, &col2);
       assert(found);
       int len = (int) (line.end - line.start - 1);
       if (col1 > len) col1 = len;
