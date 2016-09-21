@@ -5,22 +5,12 @@
 #include "parser.h"
 
 void record_start(char *text, FileRange *range) {
-  TextRange line;
   eat_filler(&text); // record at the start of the [whatever], not on the end of the previous
   range->text_from = text;
-  int row_from, col_from;
-  bool found = find_text_pos(text, (const char**) &range->file, &line, &row_from, &col_from);
-  (void) found; assert(found);
 }
 
 void record_end(char *text, FileRange *range) {
-  TextRange line;
-  const char *file;
   range->text_len = text - range->text_from;
-  int row_to, col_to;
-  bool found = find_text_pos(text, &file, &line, &row_to, &col_to);
-  (void) found; assert(found);
-  assert(strcmp(file, range->file) == 0);
 }
 
 void use_range_start(FunctionBuilder *builder, FileRange *range) {

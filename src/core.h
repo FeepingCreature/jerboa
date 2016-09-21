@@ -269,7 +269,6 @@ typedef struct {
 } VMSharedState;
 
 typedef struct {
-  char *file;
   char *text_from;
   int text_len;
   int last_cycle_seen;
