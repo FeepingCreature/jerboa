@@ -15,6 +15,8 @@ typedef struct {
 
 TextRange readfile(char *filename);
 
+bool file_exists(char *filename);
+
 void register_file(TextRange text, const char *name, int row_start, int col_start);
 
 size_t utf8_strnlen(const char *ptr, size_t length);

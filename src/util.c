@@ -28,6 +28,10 @@ TextRange readfile(char *filename) {
   } while (true);
 }
 
+bool file_exists(char *path) {
+  return access(path, R_OK) != -1;
+}
+
 struct _FileRecord;
 typedef struct _FileRecord FileRecord;
 

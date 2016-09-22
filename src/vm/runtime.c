@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #include "vm/call.h"
 #include "vm/ffi.h"
@@ -1065,6 +1066,27 @@ struct _ModuleCache {
 
 static ModuleCache *mod_cache = 0;
 
+static char *find_file_in_searchpath(VMState *state, char *filename) {
+  Object *searchpath = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(state->root, "searchpath", NULL));
+  VM_ASSERT(searchpath, "search path must exist, internal error") NULL;
+  Object *array_base = state->shared->vcache.array_base;
+  Object *string_base = state->shared->vcache.string_base;
+  
+  ArrayObject *searchpath_array = (ArrayObject*) obj_instance_of(searchpath, array_base);
+  VM_ASSERT(searchpath_array, "search path must be array object, internal error") NULL;
+  for (int i = 0; i < searchpath_array->length; i++) {
+    Object *entry_obj = OBJ_OR_NULL(searchpath_array->ptr[i]);
+    StringObject *entry_str = (StringObject*) obj_instance_of(entry_obj, string_base);
+    VM_ASSERT(entry_str, "search path entry %i must be string", i) NULL;
+    char *path = my_asprintf("%s/%s", entry_str->value, filename);
+    if (file_exists(path)) {
+      return path;
+    }
+    free(path);
+  }
+  return NULL;
+}
+
 static void require_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
@@ -1074,6 +1096,9 @@ static void require_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(file_obj, "parameter to require() must be string!");
   
   char *filename = file_obj->value;
+  filename = find_file_in_searchpath(state, filename);
+  if (!filename) return; // asserted
+  
   ModuleCache *cur_cache = mod_cache;
   while (cur_cache) {
     if (strcmp(cur_cache->filename, filename) == 0) {
@@ -1332,6 +1357,63 @@ char *get_type_info(VMState *state, Value val) {
   return "unknown";
 }
 
+static char *dir_sub(char *path_a, char *path_b) {
+  if (path_a[strlen(path_a) - 1] == '/') return my_asprintf("%s%s", path_a, path_b);
+  return my_asprintf("%s/%s", path_a, path_b);
+}
+
+static char *slice(char **str, char *needle) {
+  char *pos = strstr(*str, needle);
+  if (pos == NULL) {
+    char *res = my_asprintf("%s", *str);
+    *str = NULL;
+    return res;
+  }
+  int offset = (int) (pos - *str);
+  char *res = my_asprintf("%.*s", offset, *str);
+  *str += offset + strlen(needle);
+  return res;
+}
+
+void setup_default_searchpath(VMState *state, Object *root) {
+  // search path: as per https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+  // current path | $XDG_DATA_HOME/jerboa | $XDG_DATA_DIRS/jerboa
+  int paths_len = 0;
+  Value *paths_ptr = NULL;
+  
+  char *cwd = get_current_dir_name();
+  paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
+  paths_ptr[paths_len - 1] = make_string_static(state, cwd);
+  
+  char *xdg_home = getenv("XDG_DATA_HOME");
+  if (xdg_home) xdg_home = dir_sub(xdg_home, "jerboa");
+  else {
+    xdg_home = getenv("HOME");
+    if (xdg_home) {
+      xdg_home = dir_sub(xdg_home, ".local/share/jerboa");
+    }
+  }
+  if (xdg_home) {
+    paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
+    paths_ptr[paths_len - 1] = make_string_static(state, xdg_home);
+  }
+  
+  char *xdg_dirs = getenv("XDG_DATA_DIRS");
+  if (!xdg_dirs) xdg_dirs = "/usr/local/share/:/usr/share/";
+  
+  while (xdg_dirs) {
+    char *xdg_dir = slice(&xdg_dirs, ":");
+    assert(xdg_dir);
+    char *xdg_jerboa_dir = dir_sub(xdg_dir, "jerboa");
+    free(xdg_dir);
+    
+    paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
+    paths_ptr[paths_len - 1] = make_string_static(state, xdg_jerboa_dir);
+  }
+  
+  OBJECT_SET_STRING(state, root, "searchpath", make_array(state, paths_ptr, paths_len, true));
+}
+
 Object *create_root(VMState *state) {
   Object *root = AS_OBJ(make_object(state, NULL, false));
   
@@ -1481,6 +1563,8 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, root, "stderr", OBJ2VAL(stderr_obj));
   
   OBJECT_SET_STRING(state, root, "print", make_fn(state, print_fn));
+  
+  setup_default_searchpath(state, root);
   
   OBJECT_SET_STRING(state, root, "require", make_fn(state, require_fn));
   OBJECT_SET_STRING(state, root, "freeze", make_fn(state, freeze_fn));
