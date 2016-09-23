@@ -1325,6 +1325,12 @@ static void rand_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, INT2VAL(res));
 }
 
+static void randf_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  float res = rand() * 1.0f / RAND_MAX;
+  vm_return(state, info, FLOAT2VAL(res));
+}
+
 static void assert_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
   bool test = value_is_truthy(load_arg(state->frame, INFO_ARGS_PTR(info)[0]));
@@ -1583,6 +1589,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, math_obj, "max", make_fn(state, max_fn));
   OBJECT_SET_STRING(state, math_obj, "min", make_fn(state, min_fn));
   OBJECT_SET_STRING(state, math_obj, "rand", make_fn(state, rand_fn));
+  OBJECT_SET_STRING(state, math_obj, "randf", make_fn(state, randf_fn));
   math_obj->flags |= OBJ_FROZEN;
   OBJECT_SET_STRING(state, root, "Math", OBJ2VAL(math_obj));
   
