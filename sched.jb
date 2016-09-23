@@ -1,30 +1,32 @@
 const time = require("c/time.jb");
 
-time.timespec["<"] = method(ts2: time.timespec) {
+const timespec = new time.timespec;
+
+timespec["<"] = method(ts2: timespec) {
   if (this.tv_sec < ts2.tv_sec) return true;
   if (this.tv_sec > ts2.tv_sec) return false;
   return this.tv_nsec < ts2.tv_nsec;
 };
 
-time.timespec["<="] = method(ts2: time.timespec) {
+timespec["<="] = method(ts2: timespec) {
   if (this.tv_sec < ts2.tv_sec) return true;
   if (this.tv_sec > ts2.tv_sec) return false;
   return this.tv_nsec <= ts2.tv_nsec;
 };
 
-time.timespec[">"] = method(ts2: time.timespec) {
+timespec[">"] = method(ts2: timespec) {
   if (this.tv_sec > ts2.tv_sec) return true;
   if (this.tv_sec < ts2.tv_sec) return false;
   return this.tv_nsec > ts2.tv_nsec;
 };
 
-time.timespec[">="] = method(ts2: time.timespec) {
+timespec[">="] = method(ts2: timespec) {
   if (this.tv_sec > ts2.tv_sec) return true;
   if (this.tv_sec < ts2.tv_sec) return false;
   return this.tv_nsec >= ts2.tv_nsec;
 };
 
-time.timespec["add"] = method(sec, nsec) {
+timespec["add"] = method(sec, nsec) {
   this.tv_nsec = this.tv_nsec + nsec;
   var overflow = 0;
   if (this.tv_nsec > 1000000000) {
@@ -34,6 +36,19 @@ time.timespec["add"] = method(sec, nsec) {
   this.tv_sec = this.tv_sec + sec + overflow;
 };
 
+timespec["-"] = method(ts2: timespec) {
+  var sec_diff = this.tv_sec - ts2.tv_sec;
+  var nsec_diff = this.tv_nsec - ts2.tv_nsec;
+  if (nsec_diff < 0) {
+    sec_diff -= 1;
+    nsec_diff += 1000000000;
+  }
+  var res = new timespec { pointer = malloc(timespec.sizeof); };
+  res.tv_sec = sec_diff;
+  res.tv_nsec = nsec_diff;
+  return res;
+};
+
 const Scheduler = {
   schedQueue = null;
   init = method() {
@@ -41,25 +56,26 @@ const Scheduler = {
   };
   setTimeout = method(time_ms, task: function) {
     // TODO figure out some way to allocate struct object that includes its memory
-    var ts_p = malloc(time.timespec.sizeof);
-    var ts = new time.timespec { pointer = ts_p; };
+    var ts_p = malloc(timespec.sizeof);
+    var ts = new timespec { pointer = ts_p; };
     var error = time.clock_gettime(time.CLOCK_MONOTONIC, ts.pointer);
     assert(error == 0);
     ts.add(time_ms / 1000, (time_ms % 1000) * 1000000);
     this.schedQueue.insert(ts, task);
   };
   runSched = method() {
-    if (this.schedQueue.empty()) return;
+    if (this.schedQueue.empty()) return false;
     
-    var ts_p = malloc(time.timespec.sizeof);
-    var now = new time.timespec { pointer = ts_p; };
+    var ts_p = malloc(timespec.sizeof);
+    var now = new timespec { pointer = ts_p; };
     var error = time.clock_gettime(time.CLOCK_MONOTONIC, now.pointer);
     assert(error == 0);
     
+    var retval = null;
     var running = true;
     var didOne = false;
     while (running) {
-      if (this.schedQueue.empty()) return;
+      if (this.schedQueue.empty()) return false;
       var head_key = this.schedQueue.peek_key();
       if (head_key < now) {
         var task = this.schedQueue.take();
@@ -73,15 +89,18 @@ const Scheduler = {
         assert(error == 0);
         if (head_key >= now) {
           running = false; // TODO break
+          retval = head_key - now;
         }
       }
     }
     
     if (didOne) print(this.schedQueue.keys.length, " tasks in the future.");
     // free(ts_p);
+    
+    return retval;
   };
 };
 
 Scheduler.init();
-function runSched() { Scheduler.runSched(); }
+function runSched() { return Scheduler.runSched(); }
 function setTimeout(time, fn: function) { Scheduler.setTimeout(time, fn); }
