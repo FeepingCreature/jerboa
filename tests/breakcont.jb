@@ -1,0 +1,20 @@
+var i;
+for (i = 0; i < 5; i++) {
+  if (i == 2) break;
+}
+assert(i == 2);
+
+for (i = 0; i < 5; i++) {
+  if (i < 2) continue;
+  break;
+}
+
+assert(i == 2);
+
+outer:while (true) {
+  for (i = 0; i < 5; i++) {
+    if (i == 2) break outer;
+  }
+  assert(false);
+}
+assert(i == 2);

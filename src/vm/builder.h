@@ -5,6 +5,14 @@
 
 #include "object.h"
 
+typedef struct _LoopRecord LoopRecord;
+struct _LoopRecord {
+  char *label;
+  int *branches_cont_ptr, *branches_brk_ptr;
+  int branches_cont_len, branches_brk_len;
+  LoopRecord *prev_loop;
+};
+
 typedef struct {
   char *name;
   
@@ -17,11 +25,18 @@ typedef struct {
   int refslot_base;
   
   bool block_terminated;
+  LoopRecord *loops;
   
   FileRange *current_range;
   
   FunctionBody body;
 } FunctionBuilder;
+
+LoopRecord *open_loop(FunctionBuilder *builder, char *name);
+
+void close_loop(FunctionBuilder *builder, LoopRecord *record, int brk_blk, int cont_blk);
+
+char *loop_contbrk(FunctionBuilder *builder, char *name, bool is_break);
 
 void record_start(char *text, FileRange *range);
 

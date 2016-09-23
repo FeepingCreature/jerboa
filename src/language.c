@@ -1256,21 +1256,23 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   return PARSE_OK;
 }
 
-static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange *range) {
+static ParseResult parse_while(char **textp, FunctionBuilder *builder, char *loop_label, FileRange *range) {
   char *text = *textp;
   if (!eat_string(&text, "(")) {
     log_parser_error(text, "'while' expected opening paren");
     return PARSE_ERROR;
   }
   
+  LoopRecord *loop_record = open_loop(builder, loop_label);
+  
   use_range_start(builder, range);
-  int test_blk;
-  addinstr_branch(builder, &test_blk);
-  int test_blk_idx = new_block(builder);
-  set_int_var(builder, test_blk, test_blk_idx);
+  int branch_test;
+  addinstr_branch(builder, &branch_test);
+  int test_blk = new_block(builder);
+  set_int_var(builder, branch_test, test_blk);
   use_range_end(builder, range);
   
-  int loop_blk, end_blk;
+  int branch_test_loop, branch_test_end;
   
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, 0, &test_expr);
@@ -1283,10 +1285,11 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
     return PARSE_ERROR;
   }
   use_range_start(builder, range);
-  addinstr_test_branch(builder, testslot, &loop_blk, &end_blk);
+  addinstr_test_branch(builder, testslot, &branch_test_loop, &branch_test_end);
   use_range_end(builder, range);
   
-  set_int_var(builder, loop_blk, new_block(builder));
+  int loop_blk = new_block(builder);
+  set_int_var(builder, branch_test_loop, loop_blk);
   res = parse_block(&text, builder, false);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
@@ -1296,8 +1299,11 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, FileRange
   addinstr_branch(builder, &test_blk2);
   use_range_end(builder, range);
   
-  set_int_var(builder, test_blk2, test_blk_idx);
-  set_int_var(builder, end_blk, new_block(builder));
+  set_int_var(builder, test_blk2, test_blk);
+  int end_blk = new_block(builder);
+  set_int_var(builder, branch_test_end, end_blk);
+  
+  close_loop(builder, loop_record, end_blk, test_blk);
   
   *textp = text;
   return PARSE_OK;
@@ -1441,8 +1447,11 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
 
 static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *builder);
 
-static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *range) {
+static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_label, FileRange *range) {
   char *text = *textp;
+  
+  LoopRecord *loop_record = open_loop(builder, loop_label);
+  
   if (!eat_string(&text, "(")) {
     log_parser_error(text, "'for' expected opening paren");
     return PARSE_ERROR;
@@ -1478,7 +1487,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   set_int_var(builder, test_blk, test_blk_idx);
   use_range_end(builder, range);
   
-  int loop_blk, end_blk;
+  int loop_blk, branch_test_end;
   
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, 0, &test_expr);
@@ -1509,7 +1518,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   use_range_start(builder, range);
   int testslot = ref_access(builder, test_expr);
 
-  addinstr_test_branch(builder, testslot, &loop_blk, &end_blk);
+  addinstr_test_branch(builder, testslot, &loop_blk, &branch_test_end);
   use_range_end(builder, range);
   
   // begin loop body
@@ -1518,6 +1527,13 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
+  int branch_test_step;
+  use_range_start(builder, range);
+  addinstr_branch(builder, &branch_test_step);
+  use_range_end(builder, range);
+  
+  int step_blk = new_block(builder);
+  set_int_var(builder, branch_test_step, step_blk);
   res = parse_semicolon_statement(&text_step, builder);
   assert(res == PARSE_OK); // what? this already worked above...
   
@@ -1528,9 +1544,12 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, FileRange *
   
   use_range_end(builder, range);
   
-  set_int_var(builder, end_blk, new_block(builder));
+  int end_blk = new_block(builder);
+  set_int_var(builder, branch_test_end, end_blk);
   
   end_lex_scope(builder, scope_backup);
+  
+  close_loop(builder, loop_record, end_blk, step_blk);
   
   *textp = text;
   return PARSE_OK;
@@ -1580,6 +1599,18 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   return PARSE_OK;
 }
 
+static ParseResult parse_contbrk(char **textp, FunctionBuilder *builder, FileRange *range, bool is_break) {
+  char *label_name = parse_identifier(textp);
+  use_range_start(builder, range);
+  char *error = loop_contbrk(builder, label_name, is_break);
+  use_range_end(builder, range);
+  if (error) {
+    log_parser_error(*textp, error);
+    return PARSE_ERROR;
+  }
+  return PARSE_OK;
+}
+
 static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *builder) {
   char *text = *textp;
   FileRange *keyword_range = alloc_and_record_start(text);
@@ -1595,6 +1626,14 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
   else if (eat_keyword(&text, "const")) {
     record_end(text, keyword_range);
     res = parse_vardecl(&text, builder, keyword_range, true);
+  }
+  else if (eat_keyword(&text, "continue")) {
+    record_end(text, keyword_range);
+    res = parse_contbrk(&text, builder, keyword_range, false);
+  }
+  else if (eat_keyword(&text, "break")) {
+    record_end(text, keyword_range);
+    res = parse_contbrk(&text, builder, keyword_range, true);
   }
   else {
     res = parse_assign(&text, builder);
@@ -1635,15 +1674,31 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
     *textp = text;
     return parse_fundecl(textp, builder, keyword_range, is_method);
   }
-  if (eat_keyword(&text, "while")) {
-    record_end(text, keyword_range);
-    *textp = text;
-    return parse_while(textp, builder, keyword_range);
+  char *loop_label = NULL;
+  bool for_with_label = false, while_with_label = false;
+  {
+    char *text2 = text;
+    char *label = parse_identifier(&text2);
+    if (label && eat_string(&text2, ":")) {
+      loop_label = label;
+      if (eat_keyword(&text2, "for")) {
+        text = text2;
+        for_with_label = true;
+      } else if (eat_keyword(&text2, "while")) {
+        text = text2;
+        while_with_label = true;
+      }
+    }
   }
-  if (eat_keyword(&text, "for")) {
+  if (while_with_label || eat_keyword(&text, "while")) {
     record_end(text, keyword_range);
     *textp = text;
-    return parse_for(textp, builder, keyword_range);
+    return parse_while(textp, builder, loop_label, keyword_range);
+  }
+  if (for_with_label || eat_keyword(&text, "for")) {
+    record_end(text, keyword_range);
+    *textp = text;
+    return parse_for(textp, builder, loop_label, keyword_range);
   }
   ParseResult res = parse_block(&text, builder, true);
   if (res == PARSE_ERROR) return PARSE_ERROR;

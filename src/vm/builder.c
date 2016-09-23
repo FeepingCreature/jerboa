@@ -361,6 +361,58 @@ void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target) {
   addinstr(builder, sizeof(instr), (Instr*) &instr);
 }
 
+LoopRecord *open_loop(FunctionBuilder *builder, char *name) {
+  LoopRecord *new_record = calloc(sizeof(LoopRecord), 1);
+  new_record->label = name;
+  new_record->prev_loop = builder->loops;
+  builder->loops = new_record;
+  return new_record;
+}
+
+void close_loop(FunctionBuilder *builder, LoopRecord *record, int brk_blk, int cont_blk) {
+  if (record != builder->loops) {
+    fprintf(stderr, "loop open/close order mismatch\n");
+    abort();
+  }
+  builder->loops = builder->loops->prev_loop;
+  for (int i = 0; i < record->branches_brk_len; i++) {
+    set_int_var(builder, record->branches_brk_ptr[i], brk_blk);
+  }
+  for (int i = 0; i < record->branches_cont_len; i++) {
+    set_int_var(builder, record->branches_cont_ptr[i], cont_blk);
+  }
+}
+
+char *loop_contbrk(FunctionBuilder *builder, char *name, bool is_break) {
+  int **branches_ptr_p, *branches_len_p;
+  LoopRecord *my_record = builder->loops; // innermost loop
+  if (!my_record) {
+    return "Not inside a loop";
+  }
+  if (name) {
+    while (my_record && (!my_record->label || strcmp(my_record->label, name) != 0)) {
+      my_record = my_record->prev_loop;
+    }
+    if (!my_record) {
+      return my_asprintf("No loop found with label '%s'", name);
+    }
+  }
+  if (is_break) {
+    branches_ptr_p = &my_record->branches_brk_ptr;
+    branches_len_p = &my_record->branches_brk_len;
+  } else {
+    branches_ptr_p = &my_record->branches_cont_ptr;
+    branches_len_p = &my_record->branches_cont_len;
+  }
+  
+  *branches_ptr_p = realloc(*branches_ptr_p, ++*branches_len_p);
+  addinstr_branch(builder, &(*branches_ptr_p)[*branches_len_p - 1]);
+  new_block(builder);
+  
+  return NULL;
+}
+
+
 UserFunction *build_function(FunctionBuilder *builder) {
   assert(builder->block_terminated);
   if (builder->body.blocks_len == 0) { fprintf(stderr, "Built an invalid function!\n"); abort(); }
