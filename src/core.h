@@ -210,7 +210,16 @@ static inline Object *obj_or_null_(Value v) { Object *sel[] = { NULL, v.obj }; r
 #define INT2VAL(I) ((Value) { .type = TYPE_INT, .i = (I) })
 #define BOOL2VAL(B) ((Value) { .type = TYPE_BOOL, .b = (B) })
 #define FLOAT2VAL(F) ((Value) { .type = TYPE_FLOAT, .f = (F) })
+
+#ifndef NDEBUG
+static inline Value obj2val_checked(Object *obj) {
+  assert(obj != NULL);
+  return (Value) { .type = TYPE_OBJECT, .obj = obj };
+}
+#define OBJ2VAL(O) obj2val_checked(O)
+#else
 #define OBJ2VAL(O) ((Value) { .type = TYPE_OBJECT, .obj = (O) })
+#endif
 
 typedef enum {
   VM_RUNNING,

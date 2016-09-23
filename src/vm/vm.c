@@ -441,7 +441,9 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
     
     return call_internal(state, info, instr_after);
   } else {
-    print_recursive(state, stderr, OBJ2VAL(obj), true);
+    Value val = VNULL;
+    if (obj) val = OBJ2VAL(obj);
+    print_recursive(state, stderr, val, true);
     fprintf(stderr, "\n");
     VM_ASSERT(false, "[3] property not found: '%.*s'", (int) aski->key.len, aski->key.ptr) (FnWrap) { vm_halt };
   }

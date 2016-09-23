@@ -507,7 +507,7 @@ UserFunction *null_this_in_thisless_calls(VMState *state, UserFunction *uf) {
         CallInstr *instr_new = alloca(instrsz);
         memcpy(instr_new, instr, instrsz);
         if (instr->info.fn.kind == ARG_VALUE) {
-          Object *fn_obj = AS_OBJ(instr->info.fn.value);
+          Object *fn_obj = OBJ_OR_NULL(instr->info.fn.value);
           ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
           if (cl && !cl->vmfun->is_method) {
             instr_new->info.this_arg = (Arg) {.kind = ARG_VALUE, .value = VNULL };

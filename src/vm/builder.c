@@ -384,6 +384,8 @@ void close_loop(FunctionBuilder *builder, LoopRecord *record, int brk_blk, int c
 }
 
 char *loop_contbrk(FunctionBuilder *builder, char *name, bool is_break) {
+  if (!builder) return NULL;
+  
   int **branches_ptr_p, *branches_len_p;
   LoopRecord *my_record = builder->loops; // innermost loop
   if (!my_record) {

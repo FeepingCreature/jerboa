@@ -1586,9 +1586,13 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   
   UserFunction *fn;
   ParseResult res = parse_function_expr(textp, &fn);
-  fn->is_method = is_method;
   if (res == PARSE_ERROR) return res;
+  if (res == PARSE_NONE) {
+    log_parser_error(*textp, "opening paren for parameter list expected");
+    return PARSE_ERROR;
+  }
   assert(res == PARSE_OK);
+  fn->is_method = is_method;
   use_range_start(builder, range);
   int name_slot = addinstr_alloc_string_object(builder, fn->name);
   int slot = addinstr_alloc_closure_object(builder, fn);

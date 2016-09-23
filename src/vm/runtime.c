@@ -573,7 +573,7 @@ static void array_resize_fn(VMState *state, CallInfo *info) {
   int newsize = AS_INT(arg);
   VM_ASSERT(newsize >= 0, "bad size: %i", newsize);
   array_resize(state, arr_obj, newsize, true);
-  if (oldsize) memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
+  if (newsize > oldsize) memset(arr_obj->ptr + oldsize, 0, sizeof(Value) * (newsize - oldsize));
   vm_return(state, info, this_val);
 }
 
