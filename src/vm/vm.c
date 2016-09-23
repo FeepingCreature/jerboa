@@ -128,21 +128,22 @@ void vm_print_backtrace(VMState *state) {
       assert(belongs_to);
       
       const char *file;
-      TextRange line;
-      int row, col1, col2;
-      bool found = find_text_pos(belongs_to->text_from, &file, &line, &row, &col1);
+      TextRange line1, line2;
+      int row1, row2, col1, col2;
+      bool found = find_text_pos(belongs_to->text_from, &file, &line1, &row1, &col1);
       (void) found;
       assert(found);
-      found = find_text_pos(belongs_to->text_from + belongs_to->text_len, &file, &line, &row, &col2);
+      found = find_text_pos(belongs_to->text_from + belongs_to->text_len, &file, &line2, &row2, &col2);
       assert(found);
-      int len = (int) (line.end - line.start - 1);
-      if (col1 > len) col1 = len;
-      if (col2 > len) col2 = len;
+      int len1 = (int) (line1.end - line1.start - 1);
+      if (col1 > len1) col1 = len1;
+      int len2 = (int) (line2.end - line2.start - 1);
+      if (col2 > len2) col2 = len2;
       // if (strcmp(file, "test4.jb") == 0 && row == 18) __asm__("int $3");
-      fprintf(stderr, "#%i\t%s:%i\t", k+1, file, row+1);
-      fprintf(stderr, "%.*s", col1, line.start);
-      fprintf(stderr, "\x1b[1m%.*s\x1b[0m", col2 - col1, line.start + col1);
-      fprintf(stderr, "%.*s\n", len - col2, line.start + col2);
+      fprintf(stderr, "#%i\t%s:%i\t", k+1, file, row1+1); // file:line
+      fprintf(stderr, "%.*s", col1, line1.start); // line up to the range start
+      fprintf(stderr, "\x1b[1m%.*s\x1b[0m", belongs_to->text_len, belongs_to->text_from); // actual range
+      fprintf(stderr, "%.*s\n", len2 - col2, line2.start + col2); // end of range to end of line
     }
     state = state->parent;
   }
