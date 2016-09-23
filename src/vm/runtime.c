@@ -667,7 +667,7 @@ static void array_splice_fn(VMState *state, CallInfo *info) {
   Value start_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(start_val), "array 'splice()' called with non-int");
   int start = AS_INT(start_val);
-  VM_ASSERT(start >= 0 && (len == 0 || start < len), "start out of bounds");
+  VM_ASSERT(start >= 0 && start <= len, "start out of bounds");
   
   int deleteCount = len - start;
   if (info->args_len > 1) {
