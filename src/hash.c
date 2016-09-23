@@ -19,7 +19,7 @@ static inline TableEntry *table_lookup_prepared_internal(HashTable *tbl, FastKey
   int entries_num = tbl->entries_num;
   // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
   size_t entries_mask = entries_num - 1;
-  int early_index = key->last_index & entries_mask;
+  size_t early_index = key->last_index & entries_mask;
   TableEntry *early_entry = &tbl->entries_ptr[early_index];
   if (LIKELY(early_entry->key.ptr == key->ptr)) {
     return early_entry;

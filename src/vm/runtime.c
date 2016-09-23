@@ -14,7 +14,7 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-FnWrap call_internal(VMState *state, CallInfo *info);
+FnWrap call_internal(VMState *state, CallInfo *info, Instr *instr_after_call);
 
 /* why does 'apply' take 'this' as an explicit first parameter?
  * well, consider foo.bar.apply()
@@ -48,7 +48,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   // passthrough call to actual function
   // note: may set its own errors
   state->frame->instr_ptr = state->instr;
-  call_internal(state, info2);
+  call_internal(state, info2, (Instr*)((char*) state->instr + instr_size(state->instr)));
 }
 
 // foo.bar.call(xz, 3, 4, 5) -> xz.bar(3, 4, 5) can be done by just rewriting info
@@ -61,7 +61,7 @@ static void fn_call_fn(VMState *state, CallInfo *info) {
   for (int i = 1; i < info->args_len; i++) {
     INFO_ARGS_PTR(info2)[i-1] = INFO_ARGS_PTR(info)[i];
   }
-  call_internal(state, info2);
+  call_internal(state, info2, (Instr*)((char*) state->instr + instr_size(state->instr)));
 }
 
 static void bool_eq_fn(VMState *state, CallInfo *info) {
@@ -1138,6 +1138,8 @@ static void require_fn(VMState *state, CallInfo *info) {
     free(substate.backtrace);
     return;
   }
+  
+  free_function(module);
   
   ModuleCache *new_mod_cache = malloc(sizeof(ModuleCache));
   *new_mod_cache = (ModuleCache) {

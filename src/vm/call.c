@@ -53,10 +53,16 @@ bool setup_call(VMState *state, CallInfo *info) {
   Value fn = load_arg(state->frame, info->fn);
   VM_ASSERT(IS_OBJ(fn), "this is not a thing I can call.") false;
   Object *fn_obj_n = AS_OBJ(fn);
+  // should have been handled outside setup_call
+  // primarily to do the whole if (instr != previous instr) tango
+  // (see vm.c whenever we call something)
+  (void) function_base; assert(fn_obj_n->parent != function_base);
+  /*
   if (fn_obj_n->parent == function_base) {
     ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
     return state->runstate != VM_ERRORED;
   }
+  */
   
   Object *closure_base = state->shared->vcache.closure_base;
   ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn_obj_n, closure_base);

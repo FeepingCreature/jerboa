@@ -492,6 +492,7 @@ char *get_val_info_ext(VMState *state, Value val) {
 void free_function(UserFunction *uf) {
   free(uf->body.blocks_ptr);
   free(uf->body.instrs_ptr);
+  free(uf->body.ranges_ptr);
   free(uf);
 }
 

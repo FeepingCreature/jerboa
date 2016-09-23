@@ -327,6 +327,8 @@ struct _Callframe {
   // this is set from state->instr as the callframe becomes "not the top frame"
   // if a callframe is the top frame, you should always be using state->instr.
   Instr *instr_ptr;
+  // set on user function call, to avoid having to compute it in vm_instr_return
+  Instr *return_next_instr;
   // when returning *from* this frame, assign result value to this (in the *above* frame)
   WriteArg target;
   int block, prev_block; // required for phi nodes
