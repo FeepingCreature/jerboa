@@ -122,6 +122,11 @@ static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
       case MATH_ADD: res = v1 + v2; break;
       case MATH_SUB: res = v1 - v2; break;
       case MATH_MUL: res = v1 * v2; break;
+      case MATH_MOD:
+        VM_ASSERT(v2 > 0.0f, "what are you even doing");
+        res = fmodf(v1, v2);
+        if (res < 0) res += v2;
+        break;
       case MATH_DIV:
         VM_ASSERT(v2 != 0.0f, "float division by zero");
         res = v1 / v2;
@@ -200,6 +205,11 @@ static void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
     case MATH_SUB: res = v1 - v2; break;
     case MATH_MUL: res = v1 * v2; break;
     case MATH_DIV: res = v1 / v2; break;
+    case MATH_MOD:
+      VM_ASSERT(v2 > 0.0f, "what are you even doing");
+      res = fmodf(v1, v2);
+      if (res < 0) res += v2;
+      break;
     case MATH_BIT_OR:
     case MATH_BIT_AND: vm_error(state, "bitops are undefined for float");
     default: abort();
@@ -222,6 +232,10 @@ static void float_mul_fn(VMState *state, CallInfo *info) {
 
 static void float_div_fn(VMState *state, CallInfo *info) {
   float_math_fn(state, info, MATH_DIV);
+}
+
+static void float_mod_fn(VMState *state, CallInfo *info) {
+  float_math_fn(state, info, MATH_MOD);
 }
 
 static void string_add_fn(VMState *state, CallInfo *info) {
@@ -1464,6 +1478,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, float_obj, "-" , make_fn(state, float_sub_fn));
   OBJECT_SET_STRING(state, float_obj, "*" , make_fn(state, float_mul_fn));
   OBJECT_SET_STRING(state, float_obj, "/" , make_fn(state, float_div_fn));
+  OBJECT_SET_STRING(state, float_obj, "%" , make_fn(state, float_mod_fn));
   OBJECT_SET_STRING(state, float_obj, "==", make_fn(state, float_eq_fn));
   OBJECT_SET_STRING(state, float_obj, "<" , make_fn(state, float_lt_fn));
   OBJECT_SET_STRING(state, float_obj, ">" , make_fn(state, float_gt_fn));
