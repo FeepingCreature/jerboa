@@ -33,6 +33,7 @@ typedef enum {
   INSTR_ALLOC_ARRAY_OBJECT,
   INSTR_ALLOC_STRING_OBJECT,
   INSTR_ALLOC_CLOSURE_OBJECT,
+  INSTR_FREE_OBJECT,
   INSTR_CLOSE_OBJECT,
   INSTR_FREEZE_OBJECT,
   INSTR_ACCESS,
@@ -85,7 +86,9 @@ typedef enum {
   OBJ_GC_MARK = 0x8,   // reachable in the "gc mark" phase
   OBJ_IMMORTAL = 0x10, // will never be freed
   OBJ_INLINE_TABLE = 0x20, // table is allocated with the object, doesn't need to be freed separately
-  OBJ_PRINT_HACK = 0x40 // lol
+  OBJ_PRINT_HACK = 0x40, // lol
+  OBJ_STACK_FREED = 0x80, // stack allocated object is marked freed, and will be
+                          // cleaned up once the allocations on top of it are gone
 } ObjectFlags;
 
 // for debugging specific objects
@@ -300,7 +303,8 @@ typedef struct {
     struct {
       VMInstrFn fn; // cache
       InstrType type;
-      int context_slot;
+      int context_slot; // this is actually important - it keeps the stackframe
+                        // alive in the optimizer (CAREFUL when removing)
     };
   };
 } Instr;

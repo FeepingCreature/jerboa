@@ -27,7 +27,7 @@ static void *vm_stack_alloc_internal(VMState *state, int size) {
 
 void *vm_stack_alloc(VMState *state, int size) {
   void *res = vm_stack_alloc_internal(state, size);
-  bzero(res, size);
+  if (res) bzero(res, size);
   return res;
 }
 
@@ -322,6 +322,30 @@ static FnWrap vm_instr_alloc_closure_object(VMState *state) {
   Object *context_obj = AS_OBJ(context);
   set_arg(state, alloc_closure_obj_instr->target, make_closure_fn(state, context_obj, alloc_closure_obj_instr->fn));
   state->instr = (Instr*)(alloc_closure_obj_instr + 1);
+  return (FnWrap) { state->instr->fn };
+}
+
+static FnWrap vm_instr_free_object(VMState *state) {
+  FreeObjectInstr * __restrict__ free_object_instr = (FreeObjectInstr*) state->instr;
+  int slot = free_object_instr->obj_slot;
+  VM_ASSERT2_SLOT(slot < state->frame->slots_len, "slot numbering error");
+  Value val = state->frame->slots_ptr[slot];
+  // non-object values are always OBJ_CLOSED
+  VM_ASSERT2(free_object_instr->on_stack, "TODO heap free()");
+  if (free_object_instr->on_stack) {
+    VM_ASSERT2(IS_OBJ(val), "tried to free object that wasn't stack allocated");
+    Object *obj = AS_OBJ(val);
+    obj->flags |= OBJ_STACK_FREED;
+    Callframe *cf = state->frame;
+    while (cf->last_stack_obj && cf->last_stack_obj->flags & OBJ_STACK_FREED) {
+      Object *obj = cf->last_stack_obj;
+      obj_free_aux(obj);
+      Object *prev_obj = obj->prev;
+      vm_stack_free(state, obj, obj->size);
+      cf->last_stack_obj = prev_obj;
+    }
+  } else abort();
+  state->instr = (Instr*)(free_object_instr + 1);
   return (FnWrap) { state->instr->fn };
 }
 
@@ -723,6 +747,7 @@ static FnWrap vm_halt(VMState *state) {
 
 static FnWrap vm_instr_return(VMState *state) {
   ReturnInstr * __restrict__ ret_instr = (ReturnInstr*) state->instr;
+  assert(ret_instr->ret.kind != ARG_REFSLOT);
   Value res = load_arg(state->frame, ret_instr->ret);
   WriteArg target = state->frame->target;
   gc_remove_roots(state, &state->frame->frameroot_slots);
@@ -837,6 +862,8 @@ static FnWrap vm_instr_alloc_static_object(VMState * __restrict__ state) {
   
   int tbl_size = sizeof(TableEntry) * obj_template->tbl.entries_num;
   Object * __restrict__ obj = alloc_object_internal(state, sizeof(Object) + tbl_size, asoi->alloc_stack);
+  if (!obj) return (FnWrap) { vm_halt }; // oom, possibly stack oom
+  
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
   obj->parent = parent_obj;
   
@@ -908,6 +935,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ALLOC_ARRAY_OBJECT] = vm_instr_alloc_array_object;
   instr_fns[INSTR_ALLOC_STRING_OBJECT] = vm_instr_alloc_string_object;
   instr_fns[INSTR_ALLOC_CLOSURE_OBJECT] = vm_instr_alloc_closure_object;
+  instr_fns[INSTR_FREE_OBJECT] = vm_instr_free_object;
   instr_fns[INSTR_CLOSE_OBJECT] = vm_instr_close_object;
   instr_fns[INSTR_FREEZE_OBJECT] = vm_instr_freeze_object;
   instr_fns[INSTR_ACCESS] = vm_instr_access;

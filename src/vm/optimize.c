@@ -1421,9 +1421,9 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
         if (instr.test.kind == ARG_SLOT) {
           if (NOT_NULL(constant_slots[instr.test.slot])) {
             instr.test = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.test.slot] };
-          } else if (refslots[instr.test.slot] != -1) {
+          } /*else if (refslots[instr.test.slot] != -1) { // invalid state - branch instructions mustn't access refslots
             instr.test = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.test.slot] };
-          }
+          }*/
         }
         addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
@@ -1465,9 +1465,9 @@ UserFunction *inline_constant_slots(VMState *state, UserFunction *uf) {
         if (instr.ret.kind == ARG_SLOT) {
           if (NOT_NULL(constant_slots[instr.ret.slot])) {
             instr.ret = (Arg) { .kind = ARG_VALUE, .value = constant_slots[instr.ret.slot] };
-          } else if (refslots[instr.ret.slot] != -1) {
+          } /*else if (refslots[instr.ret.slot] != -1) { // invalid state - branch instructions mustn't access refslots
             instr.ret = (Arg) { .kind = ARG_REFSLOT, .refslot = refslots[instr.ret.slot] };
-          }
+          }*/
         }
         addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
         instr_cur = (Instr*) ((char*) instr_cur + sizeof(instr));
@@ -1739,6 +1739,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
   return fn;
 }
 
+// TODO make something fast, lol
 typedef struct _SortedUniqList SortedUniqList;
 struct _SortedUniqList {
   int value;
@@ -1919,6 +1920,107 @@ void determine_slot_liveness(UserFunction *uf, SortedUniqList ***slot_inlist, So
   }
 }
 
+UserFunction *free_stack_objects_early(UserFunction *uf) {
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
+  
+  // Note: frees for stackframes are placed as soon as the stackframe
+  // stops being the context, even if just because another context was
+  // allocated beneath it. THIS IS SAFE, surprisingly enough, since they'll
+  // only _actually_ be freed once the allocs above them are clear.
+  
+  SortedUniqList *stack_allocated_obj = NULL;
+  
+  SortedUniqList **slot_inlist, **slot_outlist;
+  determine_slot_liveness(uf, &slot_inlist, &slot_outlist);
+  
+  Instr **blk_last_access = malloc(sizeof(Instr*) * uf->slots);
+  int *dying_object_slots = calloc(sizeof(int), uf->slots);
+  
+  for (int blk = 0; blk < uf->body.blocks_len; ++blk) {
+    new_block(&builder);
+    
+    // precomp first/last access per instr inside the block, for slots that die in the block
+    {
+      bzero(blk_last_access, sizeof(Instr*) * uf->slots);
+      Instr *instr_cur = BLOCK_START(uf, blk), *instr_end = BLOCK_END(uf, blk);
+      while (instr_cur != instr_end) {
+        if (instr_cur->type == INSTR_ALLOC_OBJECT) {
+          AllocObjectInstr *instr = (AllocObjectInstr*) instr_cur;
+          if (instr->alloc_stack) {
+            sl_add_value_to(&stack_allocated_obj, instr->target_slot);
+          }
+        }
+        if (instr_cur->type == INSTR_ALLOC_STATIC_OBJECT) {
+          AllocStaticObjectInstr *instr = (AllocStaticObjectInstr*) instr_cur;
+          if (instr->alloc_stack) {
+            sl_add_value_to(&stack_allocated_obj, instr->target_slot);
+          }
+        }
+        switch (instr_cur->type) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+#define CHKSLOT_READ(S) blk_last_access[S] = instr_cur;
+#define CHKSLOT_WRITE(S) blk_last_access[S] = instr_cur;
+          case INSTR_INVALID: { abort(); Instr *instr = NULL; (void) instr;
+#include "vm/slots.txt"
+            CASE(INSTR_LAST, Instr) abort();
+          } break;
+          default: assert("Unhandled Instruction Type!" && false);
+#undef CHKSLOT_READ
+#undef CHKSLOT_WRITE
+#undef CASE
+        }
+        instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+      }
+    }
+    
+    int num_dying_slots = 0;
+    for (int k = 0; k < uf->slots; k++) {
+      if (blk_last_access[k] && !sl_contains(slot_outlist[blk], k) && sl_contains(stack_allocated_obj, k)) {
+        dying_object_slots[num_dying_slots++] = k;
+      }
+    }
+    
+    Instr *instr_cur = BLOCK_START(uf, blk), *instr_end = BLOCK_END(uf, blk);
+    while (instr_cur != instr_end) {
+      // Instr *instr2 = instr_cur; dump_instr(NULL, &instr2);
+      addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
+      
+      for (int k = 0; k < num_dying_slots; k++) {
+        int slot = dying_object_slots[k];
+        if (instr_cur == blk_last_access[slot]) {
+          // fprintf(stderr, "and generate free for %i\n", slot);
+          FreeObjectInstr instr = {
+            .base = { .type = INSTR_FREE_OBJECT },
+            .on_stack = true,
+            .obj_slot = slot
+          };
+          // TODO assign to debug info of allocation
+          // instead of some rando instr that's the last to use it
+          addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
+        }
+      }
+      
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+    bzero(dying_object_slots, sizeof(int) * num_dying_slots);
+  }
+  
+  free(blk_last_access);
+  free(dying_object_slots);
+  for (int i = 0; i < uf->slots; i++) {
+    sl_free(slot_inlist[i]);
+    sl_free(slot_outlist[i]);
+  }
+  free(slot_inlist);
+  free(slot_outlist);
+  
+  UserFunction *fn = build_function(&builder);
+  copy_fn_stats(uf, fn);
+  free_function(uf);
+  return fn;
+}
+
 // WARNING
 // this function makes the IR **NON-SSA**
 // and thus it **MUST** come completely last!!
@@ -2018,6 +2120,8 @@ UserFunction *compactify_registers(UserFunction *uf) {
     sl_free(slot_inlist[i]);
     sl_free(slot_outlist[i]);
   }
+  free(slot_inlist);
+  free(slot_outlist);
   
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
@@ -2072,28 +2176,28 @@ UserFunction *remove_pointless_blocks(UserFunction *uf) {
     while (instr_cur != instr_end) {
       if (instr_cur->type == INSTR_BR) {
         BranchInstr *instr = (BranchInstr*) instr_cur;
-        instr_cur = (Instr*) (instr + 1);
         BranchInstr bri = *instr;
         bri.blk = blk_map[bri.blk];
         addinstr_like(&builder, &uf->body, instr_cur, sizeof(bri), (Instr*) &bri);
+        instr_cur = (Instr*) (instr + 1);
         continue;
       }
       if (instr_cur->type == INSTR_TESTBR) {
         TestBranchInstr *instr = (TestBranchInstr*) instr_cur;
-        instr_cur = (Instr*) (instr + 1);
         TestBranchInstr tbri = *instr;
         tbri.true_blk = blk_map[tbri.true_blk];
         tbri.false_blk = blk_map[tbri.false_blk];
         addinstr_like(&builder, &uf->body, instr_cur, sizeof(tbri), (Instr*) &tbri);
+        instr_cur = (Instr*) (instr + 1);
         continue;
       }
       if (instr_cur->type == INSTR_PHI) {
         PhiInstr *instr = (PhiInstr*) instr_cur;
-        instr_cur = (Instr*) (instr + 1);
         PhiInstr phi = *instr;
         phi.block1 = blk_map[phi.block1];
         phi.block2 = blk_map[phi.block2];
         addinstr_like(&builder, &uf->body, instr_cur, sizeof(phi), (Instr*) &phi);
+        instr_cur = (Instr*) (instr + 1);
         continue;
       }
       addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
@@ -2153,6 +2257,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
   
   uf = null_this_in_thisless_calls(state, uf);
   uf = stackify_nonescaping_heap_allocs(uf);
+  uf = free_stack_objects_early(uf);
   
   // should be last-ish, micro-opt that introduces a new op
   uf = call_functions_directly(state, uf);

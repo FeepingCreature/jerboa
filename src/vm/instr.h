@@ -74,6 +74,12 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  int obj_slot;
+  bool on_stack;
+} FreeObjectInstr;
+
+typedef struct {
+  Instr base;
   int slot;
 } CloseObjectInstr;
 
@@ -140,7 +146,9 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  Arg test;
+  Arg test; // MUST NOT be ref! so that our stackframe
+            // can be safely freed before this instr
+            // (relevant for testbranch at the end of a loop)
   int true_blk, false_blk;
 } TestBranchInstr;
 

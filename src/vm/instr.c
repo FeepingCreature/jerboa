@@ -36,6 +36,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr);
     CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr);
     CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr);
+    CASE(INSTR_FREE_OBJECT, FreeObjectInstr);
     CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr);
     CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr);
     CASE(INSTR_ACCESS, AccessInstr);

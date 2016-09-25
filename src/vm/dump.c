@@ -56,6 +56,12 @@ void dump_instr(VMState *state, Instr **instr_p) {
               get_write_arg_info(((AllocClosureObjectInstr*) instr)->target));
       *instr_p = (Instr*) ((AllocClosureObjectInstr*) instr + 1);
       break;
+    case INSTR_FREE_OBJECT:
+      fprintf(stderr, "free object: %i (%s)\n",
+              ((FreeObjectInstr*) instr)->obj_slot,
+              ((FreeObjectInstr*) instr)->on_stack?"stack":"heap");
+      *instr_p = (Instr*) ((FreeObjectInstr*) instr + 1);
+      break;
     case INSTR_CLOSE_OBJECT:
       fprintf(stderr, "close object: %%%i\n", ((CloseObjectInstr*) instr)->slot);
       *instr_p = (Instr*) ((CloseObjectInstr*) instr + 1);

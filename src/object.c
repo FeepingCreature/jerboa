@@ -316,6 +316,7 @@ void *alloc_object_internal(VMState *state, int size, bool stack) {
   Object *res;
   if (stack) {
     res = vm_stack_alloc_uninitialized(state, size);
+    if (!res) return NULL;
     *res = (Object) {
 #if COUNT_OBJECTS
       .alloc_id = state->shared->gcstate.num_obj_allocated_total++,
@@ -352,6 +353,7 @@ void *alloc_object_internal(VMState *state, int size, bool stack) {
 
 Value make_object(VMState *state, Object *parent, bool stack) {
   Object *obj = alloc_object_internal(state, sizeof(Object), stack);
+  if (!obj) return VNULL; // alloc failed
   obj->parent = parent;
   return OBJ2VAL(obj);
 }

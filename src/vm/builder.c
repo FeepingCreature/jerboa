@@ -314,7 +314,11 @@ void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, i
   *truebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.true_blk);
   *falsebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.false_blk);
   
+  // no need to have a live context here, since
+  // we're just branching on a slot, never a refslot
+  int backup = builder->scope; builder->scope = 0;
   addinstr(builder, sizeof(instr), (Instr*) &instr);
+  builder->scope = backup;
 }
 
 int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, int slot2) {
@@ -337,7 +341,10 @@ void addinstr_branch(FunctionBuilder *builder, int *branch) {
   };
   *branch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.blk);
   
+  // no need to have a live context here
+  int backup = builder->scope; builder->scope = 0;
   addinstr(builder, sizeof(instr), (Instr*) &instr);
+  builder->scope = backup;
 }
 
 void addinstr_return(FunctionBuilder *builder, int slot) {
@@ -346,7 +353,10 @@ void addinstr_return(FunctionBuilder *builder, int slot) {
     .ret = (Arg) { .kind = ARG_SLOT, .slot = slot }
   };
   
+  // no need to have a live context here
+  int backup = builder->scope; builder->scope = 0;
   addinstr(builder, sizeof(instr), (Instr*) &instr);
+  builder->scope = backup;
 }
 
 int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, const char *key_ptr, size_t key_len) {
