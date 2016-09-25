@@ -125,6 +125,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
       fprintf(stderr, "test: %s = %s ? true : false\n",
               get_write_arg_info(((TestInstr*) instr)->target),
               get_arg_info_ext(state, ((TestInstr*) instr)->value));
+      *instr_p = (Instr*) ((TestInstr*) instr + 1);
       break;
     case INSTR_CALL:
     {
