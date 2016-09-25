@@ -756,14 +756,25 @@ static FnWrap vm_instr_br(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_test(VMState * __restrict__ state) {
+  TestInstr * __restrict__ test_instr = (TestInstr*) state->instr;
+  Callframe * __restrict__ frame = state->frame;
+  Value val = load_arg(frame, test_instr->value);
+  bool res = value_is_truthy(val);
+  set_arg(state, test_instr->target, BOOL2VAL(res));
+  state->instr = (Instr*) (test_instr + 1);
+  return (FnWrap) { state->instr->fn };
+}
+
 static FnWrap vm_instr_testbr(VMState * __restrict__ state) __attribute__ ((hot));
 static FnWrap vm_instr_testbr(VMState * __restrict__ state) {
   TestBranchInstr * __restrict__ tbr_instr = (TestBranchInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
   int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
+  assert(tbr_instr->test.kind != ARG_REFSLOT);
   Value test_value = load_arg(frame, tbr_instr->test);
-  
-  bool test = value_is_truthy(test_value);
+  VM_ASSERT2(IS_BOOL(test_value), "can't branch on non-bool"); // TODO move to debug - should be language assured
+  bool test = AS_BOOL(test_value);
   
   int target_blk = test ? true_blk : false_blk;
   state->instr = (Instr*) ((char*) frame->uf->body.instrs_ptr + frame->uf->body.blocks_ptr[target_blk].offset);
@@ -905,6 +916,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_IDENTICAL] = vm_instr_identical;
   instr_fns[INSTR_INSTANCEOF] = vm_instr_instanceof;
   instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
+  instr_fns[INSTR_TEST] = vm_instr_test;
   instr_fns[INSTR_CALL] = vm_instr_call;
   instr_fns[INSTR_RETURN] = vm_instr_return;
   instr_fns[INSTR_BR] = vm_instr_br;

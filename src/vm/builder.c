@@ -263,6 +263,16 @@ int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
   return instr.target.slot;
 }
 
+int addinstr_test(FunctionBuilder *builder, int value_slot) {
+  TestInstr instr = {
+    .base = { .type = INSTR_TEST },
+    .value = { .kind = ARG_SLOT, .slot = value_slot },
+    .target = { .kind = ARG_SLOT, .slot = builder->slot_base++ }
+  };
+  addinstr(builder, sizeof(instr), (Instr*) &instr);
+  return instr.target.slot;
+}
+
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len) {
   int size = sizeof(CallInstr) + sizeof(Arg) * args_len;
   CallInstr *instr = alloca(size);
@@ -299,7 +309,7 @@ int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, in
 void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, int *falsebranch) {
   TestBranchInstr instr = {
     .base = { .type = INSTR_TESTBR },
-    .test = (Arg) { .kind = ARG_SLOT, .slot = test }
+    .test = { .kind = ARG_SLOT, .slot = test }
   };
   *truebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.true_blk);
   *falsebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.false_blk);

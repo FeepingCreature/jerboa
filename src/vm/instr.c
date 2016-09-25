@@ -44,6 +44,7 @@ int instr_size(Instr *instr) {
     CASE(INSTR_IDENTICAL, IdenticalInstr);
     CASE(INSTR_INSTANCEOF, InstanceofInstr);
     CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr);
+    CASE(INSTR_TEST, TestInstr);
     CASE(INSTR_RETURN, ReturnInstr);
     CASE(INSTR_BR, BranchInstr);
     CASE(INSTR_TESTBR, TestBranchInstr);

@@ -49,6 +49,7 @@ void slot_is_primitive(UserFunction *uf, bool** slots_p) {
           CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
             if (instr->obj.kind == ARG_SLOT) slots[instr->obj.slot] = false;
             if (instr->constraint.kind == ARG_SLOT) slots[instr->constraint.slot] = false;
+          CASE(INSTR_TEST, TestInstr)
           CASE(INSTR_CALL, CallInstr)
             if (instr->info.fn.kind == ARG_SLOT) slots[instr->info.fn.slot] = false;
             if (instr->info.this_arg.kind == ARG_SLOT) slots[instr->info.this_arg.slot] = false;
@@ -838,6 +839,8 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
             if (instr->obj.kind == ARG_SLOT) slot_live[instr->obj.slot] = true;
             if (instr->key.kind == ARG_SLOT) slot_live[instr->key.slot] = true;
             if (instr->constraint.kind == ARG_SLOT) slot_live[instr->constraint.slot] = true;
+          CASE(INSTR_TEST, TestInstr)
+            if (instr->value.kind == ARG_SLOT) slot_live[instr->value.slot] = true;
           CASE(INSTR_CALL, CallInstr)
             if (instr->info.fn.kind == ARG_SLOT) slot_live[instr->info.fn.slot] = true;
             if (instr->info.this_arg.kind == ARG_SLOT) slot_live[instr->info.this_arg.slot] = true;

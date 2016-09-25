@@ -446,6 +446,7 @@ static ParseResult parse_cond_cont_call(char **textp, FunctionBuilder *builder, 
     
     use_range_start(builder, expr_range);
     
+    rv_slot = addinstr_test(builder, rv_slot);
     addinstr_test_branch(builder, rv_slot, &branch_start_call, &branch_start_end);
     use_range_end(builder, expr_range);
     
@@ -556,7 +557,8 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
   
   int branch_start_lhs_nonnull, branch_start_end1;
   if (builder) {
-    addinstr_test_branch(builder, lhs_slot, &branch_start_lhs_nonnull, &branch_start_end1);
+    int lhs_test = addinstr_test(builder, lhs_slot);
+    addinstr_test_branch(builder, lhs_test, &branch_start_lhs_nonnull, &branch_start_end1);
     lhs_nonnull_blk = new_block(builder);
     set_int_var(builder, branch_start_lhs_nonnull, lhs_nonnull_blk);
   }
@@ -568,6 +570,7 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
     key_slot = addinstr_alloc_string_object(builder, keyname);
     key_in_slot = addinstr_key_in_obj(builder, key_slot, lhs_slot);
     
+    key_in_slot = addinstr_test(builder, key_in_slot);
     addinstr_test_branch(builder, key_in_slot, &branch_lhs_nonnull_rhs_in_lhs, &branch_lhs_nonnull_end2);
     
     rhs_in_lhs_blk = new_block(builder);
@@ -647,7 +650,8 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
   
   int branch_start_expr_nonnull, branch_start_end1;
   if (builder) {
-    addinstr_test_branch(builder, expr_slot, &branch_start_expr_nonnull, &branch_start_end1);
+    int expr_test = addinstr_test(builder, expr_slot);
+    addinstr_test_branch(builder, expr_test, &branch_start_expr_nonnull, &branch_start_end1);
     expr_nonnull_blk = new_block(builder);
     set_int_var(builder, branch_start_expr_nonnull, expr_nonnull_blk);
   }
@@ -659,6 +663,7 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
     key_slot = ref_access(builder, key);
     key_in_slot = addinstr_key_in_obj(builder, key_slot, expr_slot);
     
+    key_in_slot = addinstr_test(builder, key_in_slot);
     addinstr_test_branch(builder, key_in_slot, &branch_expr_nonnull_key_in_expr, &branch_key_nonnull_end2);
     
     idx_in_expr_blk = new_block(builder);
@@ -771,6 +776,7 @@ static void negate(FunctionBuilder *builder, FileRange *range, RefValue *rv) {
     int start_rv_slot = ref_access(builder, *rv);
     int start_blk = get_block(builder);
     int start_br_true, start_br_false;
+    start_rv_slot = addinstr_test(builder, start_rv_slot);
     addinstr_test_branch(builder, start_rv_slot, &start_br_true, &start_br_false);
     
     int true_blk = new_block(builder);
@@ -1110,7 +1116,9 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
         lhs_blk = get_block(builder);
         int lhs_br_true;
         use_range_start(builder, range);
-        addinstr_test_branch(builder, lhs_slot, &lhs_br_true, &lhs_br_false);
+        
+        int lhs_test = addinstr_test(builder, lhs_slot);
+        addinstr_test_branch(builder, lhs_test, &lhs_br_true, &lhs_br_false);
         
         rhs_blk = new_block(builder);
         set_int_var(builder, lhs_br_true, rhs_blk);
@@ -1166,7 +1174,9 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
         lhs_blk = get_block(builder);
         int lhs_br_false;
         use_range_start(builder, range);
-        addinstr_test_branch(builder, lhs_slot, &lhs_br_true, &lhs_br_false);
+        
+        int lhs_test = addinstr_test(builder, lhs_slot);
+        addinstr_test_branch(builder, lhs_test, &lhs_br_true, &lhs_br_false);
         
         rhs_blk = new_block(builder);
         set_int_var(builder, lhs_br_false, rhs_blk);
@@ -1222,6 +1232,7 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   }
   int true_blk, false_blk, end_blk;
   use_range_start(builder, keywd_range);
+  testslot = addinstr_test(builder, testslot);
   addinstr_test_branch(builder, testslot, &true_blk, &false_blk);
   use_range_end(builder, keywd_range);
   
@@ -1285,6 +1296,7 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, char *loo
     return PARSE_ERROR;
   }
   use_range_start(builder, range);
+  testslot = addinstr_test(builder, testslot);
   addinstr_test_branch(builder, testslot, &branch_test_loop, &branch_test_end);
   use_range_end(builder, range);
   
@@ -1518,6 +1530,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_
   use_range_start(builder, range);
   int testslot = ref_access(builder, test_expr);
 
+  testslot = addinstr_test(builder, testslot);
   addinstr_test_branch(builder, testslot, &loop_blk, &branch_test_end);
   use_range_end(builder, range);
   

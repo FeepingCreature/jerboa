@@ -96,6 +96,8 @@ int addinstr_alloc_string_object(FunctionBuilder *builder, char *value);
 
 int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn);
 
+int addinstr_test(FunctionBuilder *builder, int value_slot);
+
 int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len);
 
 int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot);

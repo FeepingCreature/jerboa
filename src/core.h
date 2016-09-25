@@ -42,6 +42,9 @@ typedef enum {
   INSTR_INSTANCEOF,
   INSTR_SET_CONSTRAINT,
   INSTR_CALL,
+  INSTR_TEST, // turns an arbitrary value into a bool (truthiness)
+  // Note: block-ending instructions must not access refslots!
+  // this is so we can insert stack-cleanup commands before them
   INSTR_RETURN,
   INSTR_BR,
   INSTR_TESTBR,

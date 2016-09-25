@@ -56,6 +56,10 @@ CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
   if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
   if (instr->key.kind == ARG_SLOT) CHKSLOT_READ(instr->key.slot);
   if (instr->constraint.kind == ARG_SLOT) CHKSLOT_READ(instr->constraint.slot);
+CASE(INSTR_TEST, TestInstr)
+  CHKSLOT_READ(instr->base.context_slot);
+  if (instr->value.kind == ARG_SLOT) CHKSLOT_READ(instr->value.slot);
+  if (instr->target.kind == ARG_SLOT) CHKSLOT_WRITE(instr->target.slot);
 CASE(INSTR_CALL, CallInstr)
   CHKSLOT_READ(instr->base.context_slot);
   if (instr->info.fn.kind == ARG_SLOT) CHKSLOT_READ(instr->info.fn.slot);

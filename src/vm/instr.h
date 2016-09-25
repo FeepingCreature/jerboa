@@ -118,6 +118,12 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  Arg value;
+  WriteArg target;
+} TestInstr;
+
+typedef struct {
+  Instr base;
   int size; // faster than recomputing
   CallInfo info;
 } CallInstr;
