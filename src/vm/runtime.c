@@ -850,7 +850,7 @@ static void keys_fn(VMState *state, CallInfo *info) {
   if (obj) {
     HashTable *tbl = &obj->tbl;
     for (int i = 0; i < tbl->entries_num; ++i) {
-      if (tbl->entries_ptr[i].key.ptr) res_len ++;
+      if (tbl->entries_ptr[i].key_ptr) res_len ++;
     }
   }
   Value *res_ptr = malloc(sizeof(Value) * res_len);
@@ -859,8 +859,8 @@ static void keys_fn(VMState *state, CallInfo *info) {
     HashTable *tbl = &obj->tbl;
     for (int i = 0; i < tbl->entries_num; ++i) {
       TableEntry *entry = &tbl->entries_ptr[i];
-      if (entry->key.ptr) {
-        res_ptr[k++] = make_string(state, entry->key.ptr, entry->key.len);
+      if (entry->key_ptr) {
+        res_ptr[k++] = make_string(state, entry->key_ptr, strlen(entry->key_ptr));
       }
     }
   }
@@ -1216,9 +1216,9 @@ static void obj_keys_fn(VMState *state, CallInfo *info) {
     keys_ptr = malloc(sizeof(Value) * keys_len);
     int k = 0;
     for (int i = 0; i < obj->tbl.entries_num; i++) {
-      const char *name_ptr = obj->tbl.entries_ptr[i].key.ptr;
-      int name_len = obj->tbl.entries_ptr[i].key.len;
+      const char *name_ptr = obj->tbl.entries_ptr[i].key_ptr;
       if (name_ptr) {
+        int name_len = strlen(name_ptr);
         keys_ptr[k++] = make_string(state, name_ptr, name_len);
       }
     }

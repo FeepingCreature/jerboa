@@ -828,10 +828,10 @@ static FnWrap vm_instr_define_refslot(VMState *state) {
   int obj_slot = dri->obj_slot;
   VM_ASSERT2_SLOT(obj_slot < state->frame->slots_len, "slot numbering error");
   
-  Object *obj = closest_obj(state, state->frame->slots_ptr[obj_slot]);
-  VM_ASSERT2(obj, "cannot define refslot for null obj");
+  Object *obj = OBJ_OR_NULL(state->frame->slots_ptr[obj_slot]);
+  VM_ASSERT2(obj, "cannot define refslot for null or primitive obj");
   
-  TableEntry *entry = object_lookup_ref_internal(obj, &dri->key);
+  TableEntry *entry = table_lookup_prepared(&obj->tbl, &dri->key);
   VM_ASSERT2(entry, "key not in object");
   state->frame->refslots_ptr[target_refslot] = entry;
   

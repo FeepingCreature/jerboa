@@ -127,7 +127,7 @@ void obj_mark(VMState *state, Object *obj) {
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->key.ptr && IS_OBJ(entry->value)) {
+    if (entry->key_ptr && IS_OBJ(entry->value)) {
       obj_mark(state, AS_OBJ(entry->value));
     }
   }
@@ -521,8 +521,8 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   int k = 0;
   for (int i = 0; i < direct_table->entries_num; ++i) {
     TableEntry *entry = &direct_table->entries_ptr[i];
-    if (entry->key.ptr) {
-      FileRange *range = (FileRange*) entry->key.ptr; // This hurts my soul.
+    if (entry->key_ptr) {
+      FileRange *range = (FileRange*) entry->key_ptr; // This hurts my soul.
       int samples = entry->value.i;
       // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_direct) max_samples_direct = samples;
@@ -532,8 +532,8 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   }
   for (int i = 0; i < indirect_table->entries_num; ++i) {
     TableEntry *entry = &indirect_table->entries_ptr[i];
-    if (entry->key.ptr) {
-      FileRange *range = (FileRange*) entry->key.ptr;
+    if (entry->key_ptr) {
+      FileRange *range = (FileRange*) entry->key_ptr;
       int samples = entry->value.i;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
       if (samples > max_samples_indirect) max_samples_indirect = samples;

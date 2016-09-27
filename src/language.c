@@ -192,7 +192,7 @@ static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *build
     }
     if (eat_string(&text, ",")) continue;
     if (eat_string(&text, "]")) break;
-    log_parser_error(text, "expected commad or closing square bracket");
+    log_parser_error(text, "expected comma or closing square bracket");
     return PARSE_ERROR;
   }
   *textp = text;

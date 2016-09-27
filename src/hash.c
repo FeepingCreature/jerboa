@@ -21,15 +21,15 @@ static inline TableEntry *table_lookup_prepared_internal(HashTable *tbl, FastKey
   size_t entries_mask = entries_num - 1;
   size_t early_index = key->last_index & entries_mask;
   TableEntry *early_entry = &tbl->entries_ptr[early_index];
-  if (LIKELY(early_entry->key.ptr == key->ptr)) {
+  if (LIKELY(early_entry->key_ptr == key->ptr)) {
     return early_entry;
   }
   
   size_t k = key->hash & entries_mask;
   while (true) {
     TableEntry *entry = &tbl->entries_ptr[k];
-    if (entry->key.ptr == NULL) break;
-    if (key->ptr == entry->key.ptr) {
+    if (entry->key_ptr == NULL) break;
+    if (key->ptr == entry->key_ptr) {
       key->last_index = k;
       return entry;
     }
@@ -50,7 +50,7 @@ void create_table_with_single_entry_prepared(HashTable *tbl, FastKey key, Value 
   tbl->entries_stored = 1;
   tbl->bloom = key.hash;
   tbl->entries_ptr[0] = (TableEntry) {
-    .key = key,
+    .key_ptr = key.ptr,
     .value = value,
     .constraint = NULL
   };
@@ -68,7 +68,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
   } else {
     int early_index = key->last_index & entries_mask;
     TableEntry *early_entry = &tbl->entries_ptr[early_index];
-    if (LIKELY(early_entry->key.ptr == key->ptr)) {
+    if (LIKELY(early_entry->key_ptr == key->ptr)) {
       return early_entry;
     }
     
@@ -76,8 +76,8 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
     for (int i = 0; i < entries_num; ++i) {
       int k = (key->hash + i) & entries_mask;
       TableEntry *entry = &tbl->entries_ptr[k];
-      if (entry->key.ptr == key->ptr) return entry;
-      if (entry->key.ptr == NULL) {
+      if (entry->key_ptr == key->ptr) return entry;
+      if (entry->key_ptr == NULL) {
         free_ptr = entry;
         break;
       }
@@ -86,7 +86,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
     if (fillrate < 70) {
       // printf("--%p:   fillrate is okay with %i, set %li to %s\n", (void*) tbl, fillrate, free_ptr - tbl->entries_ptr, key);
       assert(free_ptr); // should have been found above
-      free_ptr->key = *key;
+      free_ptr->key_ptr = key->ptr;
       tbl->entries_stored ++;
       tbl->bloom |= key->hash;
       *first_free_ptr = free_ptr;
@@ -103,11 +103,12 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
   if (tbl->entries_stored) {
     for (int i = 0; i < entries_num; ++i) {
       TableEntry *entry = &tbl->entries_ptr[i];
-      if (entry->key.ptr) {
+      if (entry->key_ptr) {
         TableEntry *freeptr;
-        TableEntry *nope = table_lookup_alloc_prepared_internal(&newtable, &entry->key, &freeptr);
+        FastKey cur_key = prepare_key(entry->key_ptr, strlen(entry->key_ptr));
+        TableEntry *nope = table_lookup_alloc_prepared_internal(&newtable, &cur_key, &freeptr);
         if (UNLIKELY(nope)) {
-          fprintf(stderr, "problem: %i '%.*s' %p already in table when reallocating\n", (int) entry->key.len, (int) entry->key.len, entry->key.ptr, entry->key.ptr);
+          fprintf(stderr, "problem: '%s' %p already in table when reallocating\n", entry->key_ptr, entry->key_ptr);
         }
         (void) nope; assert(nope == NULL); // double entry??
         *freeptr = tbl->entries_ptr[i];

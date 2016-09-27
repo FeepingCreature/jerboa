@@ -174,9 +174,9 @@ typedef struct {
 } FastKey;
 
 struct _TableEntry {
-  FastKey key;
-  Value value;
+  const char *key_ptr;
   Object *constraint;
+  Value value;
 };
 
 // TODO actually use

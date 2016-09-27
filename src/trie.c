@@ -213,8 +213,9 @@ FastKey prepare_key(const char *key_ptr, size_t key_len) {
   // const char *old_ptr = key_ptr;
   // hash will be identical
   if (!trie_lookup(intern_string_trie, key_ptr, key_len, &key_ptr)) {
-    char *copy = trie_alloc_uninitialized(key_len);
+    char *copy = trie_alloc_uninitialized(key_len + 1);
     memcpy(copy, key_ptr, key_len);
+    copy[key_len] = 0;
     // fprintf(stderr, "+ %.*s\n", (int) key_len, key_ptr);
     intern_string_trie = trie_insert(intern_string_trie, copy, key_len, copy);
     // trie_dump(stderr, intern_string_trie);

@@ -107,12 +107,12 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
   bool first = true;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->key.ptr) {
+    if (entry->key_ptr) {
       fprintf(fh, "\n");
       for (int k = 0; k < indent; ++k) fprintf(fh, "  ");
       if (first) { first = false; fprintf(fh, "| "); }
       else fprintf(fh, ", ");
-      fprintf(fh, "'%.*s': ", (int) entry->key.len, entry->key.ptr);
+      fprintf(fh, "'%s': ", entry->key_ptr);
       print_recursive_indent(state, fh, entry->value, allow_tostring, indent+1);
       if (state->runstate == VM_ERRORED) return;
     }
