@@ -27,10 +27,6 @@ void free_cache(VMState *state);
 
 void save_profile_output(char *file, VMProfileState *profile_state);
 
-Value *object_lookup_ref(Object *obj, FastKey *key);
-
-TableEntry *object_lookup_ref_internal(Object *obj, FastKey *key);
-
 Value object_lookup(Object *obj, FastKey *key, bool *key_found);
 
 Object *closest_obj(VMState *state, Value val);
@@ -74,9 +70,7 @@ bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constrain
 
 char *get_type_info(VMState*, Value);
 
-char *get_val_info(Value val);
-
-char *get_val_info_ext(VMState *state, Value val);
+char *get_val_info(VMState *state, Value val);
 
 static inline Value load_arg(Callframe *frame, Arg arg) {
   if (arg.kind == ARG_SLOT) {
@@ -164,15 +158,9 @@ void *alloc_object_internal(VMState *state, int size, bool stack);
 
 Value make_object(VMState *state, Object *parent, bool stack);
 
-Value make_int(VMState *state, int value);
-
-Value make_float(VMState *state, float value);
-
 Value make_string(VMState *state, const char *ptr, int len);
 
 Value make_string_static(VMState *state, char *value);
-
-Value make_bool(VMState *state, bool value);
 
 Value make_array(VMState *state, Value *ptr, int length, bool owned);
 

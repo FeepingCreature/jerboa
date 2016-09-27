@@ -71,7 +71,7 @@ static void bool_eq_fn(VMState *state, CallInfo *info) {
   
   VM_ASSERT(IS_BOOL(val1), "internal error: bool compare function called on wrong type of object");
   VM_ASSERT(IS_BOOL(val2), "can't compare bool with this value");
-  vm_return(state, info, make_bool(state, AS_BOOL(val1) == AS_BOOL(val2)));
+  vm_return(state, info, BOOL2VAL(AS_BOOL(val1) == AS_BOOL(val2)));
 }
 
 typedef enum {

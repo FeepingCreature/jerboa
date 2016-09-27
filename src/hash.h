@@ -11,12 +11,7 @@ FastKey prepare_key(const char *key_ptr, size_t key_len);
 // used for the profiler hack
 FastKey fixed_pointer_key(void *ptr);
 
-TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) __attribute__ ((pure));
-
 TableEntry *table_lookup_prepared(HashTable *tbl, FastKey *key) __attribute__ ((pure));
-
-// if the key was not found, return null but allocate a mapping in first_free_ptr
-TableEntry *table_lookup_alloc(HashTable *tbl, const char *key_ptr, size_t key_len, TableEntry **first_free_ptr);
 
 // added in case you've already precomputed the hash for other reasons, and wanna avoid double computing it
 TableEntry *table_lookup_alloc_prepared(HashTable *tbl, FastKey *key, TableEntry** first_free_ptr);

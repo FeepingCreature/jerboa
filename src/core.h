@@ -153,9 +153,8 @@ typedef struct {
   };
 } WriteArg;
 
-char *get_arg_info(Arg arg);
 char *get_write_arg_info(WriteArg warg);
-char *get_arg_info_ext(VMState *state, Arg arg);
+char *get_arg_info(VMState *state, Arg arg);
 
 typedef struct {
   Arg fn;

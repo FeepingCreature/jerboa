@@ -74,21 +74,6 @@ void free_cache(VMState *state) {
   state->shared->stack_data_len = 0;
 }
 
-TableEntry *object_lookup_ref_internal(Object *obj, FastKey *key) {
-  while (obj) {
-    TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
-    if (entry) return entry;
-    obj = obj->parent;
-  }
-  return NULL;
-}
-
-Value *object_lookup_ref(Object *obj, FastKey *key) {
-  TableEntry *entry = object_lookup_ref_internal(obj, key);
-  if (entry) return &entry->value;
-  return NULL;
-}
-
 Value object_lookup(Object *obj, FastKey *key, bool *key_found_p) {
   if (!key_found_p) {
     while (obj) {
@@ -353,18 +338,6 @@ Value make_object(VMState *state, Object *parent, bool stack) {
   return OBJ2VAL(obj);
 }
 
-Value make_int(VMState *state, int value) {
-  return INT2VAL(value);
-}
-
-Value make_bool(VMState *state, bool value) {
-  return BOOL2VAL(value);
-}
-
-Value make_float(VMState *state, float value) {
-  return FLOAT2VAL(value);
-}
-
 Value make_string(VMState *state, const char *ptr, int len) {
   // allocate the string as part of the object, so that it gets freed with the object
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1, false);
@@ -462,15 +435,7 @@ Value make_fn(VMState *state, VMFunctionPointer fn) {
   return make_fn_custom(state, fn, sizeof(FunctionObject));
 }
 
-char *get_val_info(Value val) {
-  if (IS_NULL(val)) return "<null>";
-  else if (IS_INT(val)) return my_asprintf("<int: %i>", AS_INT(val));
-  else if (IS_BOOL(val)) return my_asprintf("<bool: %s>", AS_BOOL(val)?"true":"false");
-  else if (IS_FLOAT(val)) return my_asprintf("<float: %f>", AS_FLOAT(val));
-  else return my_asprintf("<obj: %p>", (void*) AS_OBJ(val));
-}
-
-char *get_val_info_ext(VMState *state, Value val) {
+char *get_val_info(VMState *state, Value val) {
   if (IS_NULL(val)) return "<null>";
   else if (IS_INT(val)) return my_asprintf("<int: %i>", AS_INT(val));
   else if (IS_BOOL(val)) return my_asprintf("<bool: %s>", AS_BOOL(val)?"true":"false");

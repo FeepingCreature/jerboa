@@ -43,12 +43,6 @@ TableEntry *table_lookup_prepared(HashTable *tbl, FastKey *key) {
   return table_lookup_prepared_internal(tbl, key);
 }
 
-// if the key was not found, return null but allocate a mapping in first_free_ptr
-TableEntry *table_lookup(HashTable *tbl, const char *key_ptr, size_t key_len) {
-  FastKey key = prepare_key(key_ptr, key_len);
-  return table_lookup_prepared_internal(tbl, &key);
-}
-
 void create_table_with_single_entry_prepared(HashTable *tbl, FastKey key, Value value) {
   assert(tbl->entries_num == 0);
   tbl->entries_ptr = cache_alloc_uninitialized(sizeof(TableEntry) * 1);
@@ -128,10 +122,4 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
 
 TableEntry *table_lookup_alloc_prepared(HashTable *tbl, FastKey *key, TableEntry** first_free_ptr) {
   return table_lookup_alloc_prepared_internal(tbl, key, first_free_ptr);
-}
-
-// if the key was not found, return null but allocate a mapping in first_free_ptr
-TableEntry *table_lookup_alloc(HashTable *tbl, const char *key_ptr, size_t key_len, TableEntry** first_free_ptr) {
-  FastKey key = prepare_key(key_ptr, key_len);
-  return table_lookup_alloc_prepared_internal(tbl, &key, first_free_ptr);
 }

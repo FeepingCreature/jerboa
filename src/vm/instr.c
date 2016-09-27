@@ -5,18 +5,11 @@
 
 #include "object.h"
 
-char *get_arg_info(Arg arg) {
+char *get_arg_info(VMState *state, Arg arg) {
   if (arg.kind == ARG_SLOT) return my_asprintf("%%%i", arg.slot);
   if (arg.kind == ARG_REFSLOT) return my_asprintf("&%i", arg.refslot);
   assert(arg.kind == ARG_VALUE);
-  return get_val_info(arg.value);
-}
-
-char *get_arg_info_ext(VMState *state, Arg arg) {
-  if (arg.kind == ARG_SLOT) return my_asprintf("%%%i", arg.slot);
-  if (arg.kind == ARG_REFSLOT) return my_asprintf("&%i", arg.refslot);
-  assert(arg.kind == ARG_VALUE);
-  return get_val_info_ext(state, arg.value);
+  return get_val_info(state, arg.value);
 }
 
 char *get_write_arg_info(WriteArg warg) {
