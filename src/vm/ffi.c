@@ -184,7 +184,7 @@ bool ffi_pointer_write(VMState *state, Object *type, void *ptr, Value val) {
     return true;
   } else {
     Object *c_type_obj = AS_OBJ(OBJECT_LOOKUP_STRING(type, "c_type", NULL));
-    StringObject *c_type = (StringObject*) obj_instance_of_or_equal(c_type_obj, string_base);
+    StringObject *c_type = (StringObject*) obj_instance_of(c_type_obj, string_base);
     assert(c_type);
     VM_ASSERT(false, "unhandled pointer write type: %s", c_type->value) false;
   }
@@ -205,7 +205,7 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
     OBJECT_LOOKUP_STRING(type, "pointer", &has_pointer);
     if (!has_pointer) {
       Object *c_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(type, "c_type", NULL));
-      StringObject *c_type = (StringObject*) obj_instance_of_or_equal(c_type_obj, string_base);
+      StringObject *c_type = (StringObject*) obj_instance_of(c_type_obj, string_base);
       VM_ASSERT(c_type, "internal type error") VNULL;
       VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) VNULL;
     }

@@ -178,11 +178,6 @@ Object *obj_instance_of(Object *obj, Object *proto) {
   return NULL;
 }
 
-Object *obj_instance_of_or_equal(Object *obj, Object *proto) {
-  if (obj == proto) return obj;
-  return obj_instance_of(obj, proto);
-}
-
 bool value_instance_of(VMState *state, Value val, Object *proto) {
   if (proto == NULL) {
     fprintf(stderr, "vacuous case\n");

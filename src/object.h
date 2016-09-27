@@ -66,8 +66,6 @@ void obj_free(Object *obj);
 // returns the object in obj's prototype chain whose immediate prototype is `proto`
 Object *obj_instance_of(Object *obj, Object *proto);
 
-Object *obj_instance_of_or_equal(Object *obj, Object *proto);
-
 bool value_instance_of(VMState *state, Value val, Object *proto);
 
 bool value_is_truthy(Value value);
