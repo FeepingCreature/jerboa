@@ -257,29 +257,42 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
       if (instr->type == INSTR_INSTANCEOF) {
         InstanceofInstr *ins = (InstanceofInstr*) instr;
         instr = (Instr*) (ins + 1);
-        if (instr->type == INSTR_TESTBR) {
-          TestBranchInstr *tbr = (TestBranchInstr*) instr;
-          instr = (Instr*) (tbr + 1);
-          if (ins->target.kind == ARG_SLOT && tbr->test.kind == ARG_SLOT
-            && ins->target.slot == tbr->test.slot
-            && ins->proto.kind == ARG_VALUE && IS_OBJ(ins->proto.value)
-            && ins->obj.kind == ARG_REFSLOT
-            && cfg.nodes_ptr[tbr->true_blk].pred_len == 1)
-          {
-            assert(cfg.nodes_ptr[tbr->true_blk].pred_ptr[0] == i);
-            Object *constraint = AS_OBJ(ins->proto.value);
-            int refslot = ins->obj.refslot;
-            if (objslot_for_refslot[refslot] != -1) {
-              SlotIsStaticObjInfo *rec = &(*slots_p)[objslot_for_refslot[refslot]];
-              int field = field_for_refslot[refslot];
-              assert(field != -1);
-              if (rec->static_object) {
-                Instr *trueblk_start = BLOCK_START(uf, tbr->true_blk);
-                ConstraintInfo *info = &rec->constraints_ptr[field];
-                info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
-                info->constraint_ptr[info->constraint_len - 1] = constraint;
-                info->constraint_imposed_here_ptr = realloc(info->constraint_imposed_here_ptr, sizeof(Instr*) * info->constraint_len);
-                info->constraint_imposed_here_ptr[info->constraint_len - 1] = trueblk_start;
+        if (ins->proto.kind == ARG_VALUE && IS_OBJ(ins->proto.value)
+          && ins->obj.kind == ARG_REFSLOT
+          && ins->target.kind == ARG_SLOT)
+        {
+          int bool_slot = ins->target.slot;
+          
+          if (instr->type == INSTR_TEST) {
+            TestInstr *ti = (TestInstr*) instr;
+            if (ti->value.kind == ARG_SLOT && ti->value.slot == bool_slot
+              && ti->target.kind == ARG_SLOT)
+            {
+              bool_slot = ti->target.slot;
+              instr = (Instr*) (ti + 1);
+            }
+          }
+          if (instr->type == INSTR_TESTBR) {
+            TestBranchInstr *tbr = (TestBranchInstr*) instr;
+            instr = (Instr*) (tbr + 1);
+            if (tbr->test.kind == ARG_SLOT && bool_slot == tbr->test.slot
+              && cfg.nodes_ptr[tbr->true_blk].pred_len == 1)
+            {
+              assert(cfg.nodes_ptr[tbr->true_blk].pred_ptr[0] == i);
+              Object *constraint = AS_OBJ(ins->proto.value);
+              int refslot = ins->obj.refslot;
+              if (objslot_for_refslot[refslot] != -1) {
+                SlotIsStaticObjInfo *rec = &(*slots_p)[objslot_for_refslot[refslot]];
+                int field = field_for_refslot[refslot];
+                assert(field != -1);
+                if (rec->static_object) {
+                  Instr *trueblk_start = BLOCK_START(uf, tbr->true_blk);
+                  ConstraintInfo *info = &rec->constraints_ptr[field];
+                  info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
+                  info->constraint_ptr[info->constraint_len - 1] = constraint;
+                  info->constraint_imposed_here_ptr = realloc(info->constraint_imposed_here_ptr, sizeof(Instr*) * info->constraint_len);
+                  info->constraint_imposed_here_ptr[info->constraint_len - 1] = trueblk_start;
+                }
               }
             }
           }

@@ -1,0 +1,4 @@
+var i = 5;
+// will be optimized to direct lookup
+if (i instanceof int) i = i + 2;
+assert(i == 7);
