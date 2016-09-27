@@ -8,10 +8,6 @@ void dump_instr(VMState *state, Instr **instr_p) {
   fprintf(stderr, "    ");
   fprintf(stderr, "%i ", instr->context_slot);
   switch (instr->type) {
-    case INSTR_GET_ROOT:
-      fprintf(stderr, "get root: %%%i\n", ((GetRootInstr*) instr)->slot);
-      *instr_p = (Instr*) ((GetRootInstr*) instr + 1);
-      break;
     case INSTR_ALLOC_OBJECT:
       fprintf(stderr, "alloc object: %%%i = new object(%%%i, %s)\n",
               ((AllocObjectInstr*) instr)->target_slot, ((AllocObjectInstr*) instr)->parent_slot,

@@ -1,6 +1,4 @@
 /* first read slots, then write slots */
-CASE(INSTR_GET_ROOT, GetRootInstr)
-  CHKSLOT_READ(instr->base.context_slot); CHKSLOT_WRITE(instr->slot);
 CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
   CHKSLOT_READ(instr->base.context_slot); CHKSLOT_READ(instr->parent_slot); CHKSLOT_WRITE(instr->target_slot);
 CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)

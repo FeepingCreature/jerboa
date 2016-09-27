@@ -23,11 +23,6 @@ int instr_size(Instr*);
 #define BLOCK_START(FN, IDX) ((Instr*) ((char*) (FN)->body.instrs_ptr + (FN)->body.blocks_ptr[IDX].offset))
 #define BLOCK_END(FN, IDX) ((Instr*) ((char*) (FN)->body.instrs_ptr + (FN)->body.blocks_ptr[IDX].offset + (FN)->body.blocks_ptr[IDX].size))
 
-typedef struct {
-  Instr base;
-  int slot;
-} GetRootInstr;
-
 struct _Object;
 typedef struct _Object Object;
 

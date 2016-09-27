@@ -253,15 +253,6 @@ static FnWrap vm_halt(VMState *state);
 
 static VMInstrFn instr_fns[INSTR_LAST] = {0};
 
-static FnWrap vm_instr_get_root(VMState *state) {
-  GetRootInstr * __restrict__ get_root_instr = (GetRootInstr*) state->instr;
-  int slot = get_root_instr->slot;
-  VM_ASSERT2_SLOT(slot < state->frame->slots_len, "internal slot error");
-  state->frame->slots_ptr[slot] = OBJ2VAL(state->root);
-  state->instr = (Instr*)(get_root_instr + 1);
-  return (FnWrap) { state->instr->fn };
-}
-
 static FnWrap vm_instr_alloc_object(VMState *state) {
   AllocObjectInstr * __restrict__ alloc_obj_instr = (AllocObjectInstr*) state->instr;
   int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
@@ -927,7 +918,6 @@ static void vm_step(VMState *state) {
 }
 
 void init_instr_fn_table() {
-  instr_fns[INSTR_GET_ROOT] = vm_instr_get_root;
   instr_fns[INSTR_ALLOC_OBJECT] = vm_instr_alloc_object;
   instr_fns[INSTR_ALLOC_INT_OBJECT] = vm_instr_alloc_int_object;
   instr_fns[INSTR_ALLOC_BOOL_OBJECT] = vm_instr_alloc_bool_object;

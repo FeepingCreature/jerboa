@@ -21,7 +21,6 @@ void slot_is_primitive(UserFunction *uf, bool** slots_p) {
         case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
       switch (instr_cur->type) {
         case INSTR_INVALID: { abort();
-          CASE(INSTR_GET_ROOT, GetRootInstr)
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
             slots[instr->parent_slot] = false;
           CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
@@ -795,8 +794,6 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
       switch (instr_cur->type) {
         // mark all slots that are accessed in an instr other than INSTR_WRITE_SLOT
         case INSTR_INVALID: { abort();
-          CASE(INSTR_GET_ROOT, GetRootInstr)
-            slot_live[instr->slot] = true;
           CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
             slot_live[instr->parent_slot] = true;
           CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)

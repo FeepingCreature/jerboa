@@ -21,7 +21,6 @@ char *get_write_arg_info(WriteArg warg) {
 int instr_size(Instr *instr) {
   switch (instr->type) {
 #define CASE(EN, TY) case EN: return sizeof(TY)
-    CASE(INSTR_GET_ROOT, GetRootInstr);
     CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr);
     CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr);
     CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr);

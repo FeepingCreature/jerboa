@@ -25,7 +25,6 @@ typedef struct _Callframe Callframe;
 
 typedef enum {
   INSTR_INVALID = -1,
-  INSTR_GET_ROOT = 0,
   INSTR_ALLOC_OBJECT,
   INSTR_ALLOC_INT_OBJECT,
   INSTR_ALLOC_BOOL_OBJECT,
