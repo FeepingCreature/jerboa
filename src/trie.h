@@ -31,7 +31,7 @@ struct _TrieNode {
   };
 };
 
-void trie_dump(FILE *file, TrieNode *node);
+// void trie_dump(FILE *file, TrieNode *node);
 
 TrieNode *trie_insert(TrieNode *target, const char *key_ptr, size_t key_len, const char *value);
 

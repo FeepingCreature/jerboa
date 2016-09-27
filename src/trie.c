@@ -33,6 +33,7 @@ static size_t common_len(const char *a_ptr, size_t a_len, const char *b_ptr, siz
   return i;
 }
 
+/*
 static void trie_dump_internal(FILE *file, TrieNode *node) {
   if (node == NULL) fprintf(file, "<null>");
   else if (node->type == TRIE_LEAF) {
@@ -64,6 +65,7 @@ void trie_dump(FILE *file, TrieNode *node) {
   trie_dump_internal(file, node);
   fprintf(file, "\n");
 }
+*/
 
 static TrieNode *trie_insert_node(TrieNode *target, TrieNode *node);
 

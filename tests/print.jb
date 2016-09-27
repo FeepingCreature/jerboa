@@ -1,0 +1,14 @@
+print(1);
+print(1.0);
+print(function() { });
+print(malloc(16));
+var obj = { a = 5; };
+obj["obj"] = obj;
+print(obj);
+obj["toString"] = function() { return "toString test"; };
+print(obj);
+const obj2 = {};
+freeze(obj2);
+print(obj2);
+var meth = method() { print(this); };
+meth();

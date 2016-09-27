@@ -1,0 +1,8 @@
+/* this is a comment */
+var i = 255;
+var k = 0xff;
+assert(i == k);
+var str = "abcd \" \\ \n \r \t";
+var foo = { a = 5; "b  " = 8; };
+var i = 1 % 2 * 3 + 4 / 5 & 6 | 7;
+assert(i == 3 && i >= 2 && i <= 4 && i > 2 && i < 4 && i !>= 4);
