@@ -1,5 +1,5 @@
-#ifndef LANGUAGE_H
-#define LANGUAGE_H
+#ifndef JERBOA_LANGUAGE_H
+#define JERBOA_LANGUAGE_H
 
 #include "vm/instr.h"
 #include "parser.h"

@@ -1,5 +1,5 @@
-#ifndef GC_H
-#define GC_H
+#ifndef JERBOA_GC_H
+#define JERBOA_GC_H
 
 #include "object.h"
 

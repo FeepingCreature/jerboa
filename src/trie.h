@@ -1,5 +1,5 @@
-#ifndef TRIE_H
-#define TRIE_H
+#ifndef JERBOA_TRIE_H
+#define JERBOA_TRIE_H
 
 #include <stdio.h>
 #include <stddef.h>

@@ -1,5 +1,5 @@
-#ifndef HASH_H
-#define HASH_H
+#ifndef JERBOA_HASH_H
+#define JERBOA_HASH_H
 
 #include <stddef.h>
 #include <stdbool.h>

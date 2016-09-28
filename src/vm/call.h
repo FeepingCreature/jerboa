@@ -1,5 +1,5 @@
-#ifndef VM_CALL_H
-#define VM_CALL_H
+#ifndef JERBOA_VM_CALL_H
+#define JERBOA_VM_CALL_H
 
 #include "object.h"
 

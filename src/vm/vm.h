@@ -1,5 +1,5 @@
-#ifndef VM_VM_H
-#define VM_VM_H
+#ifndef JERBOA_VM_VM_H
+#define JERBOA_VM_VM_H
 
 #include "core.h"
 

@@ -1,5 +1,5 @@
-#ifndef VM_CFG_H
-#define VM_CFG_H
+#ifndef JERBOA_VM_CFG_H
+#define JERBOA_VM_CFG_H
 
 #include "vm/instr.h"
 

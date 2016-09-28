@@ -1,5 +1,5 @@
-#ifndef VM_FFI_H
-#define VM_FFI_H
+#ifndef JERBOA_VM_FFI_H
+#define JERBOA_VM_FFI_H
 
 #include <ffi.h>
 

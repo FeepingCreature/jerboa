@@ -1,5 +1,5 @@
-#ifndef UTIL_H
-#define UTIL_H
+#ifndef JERBOA_UTIL_H
+#define JERBOA_UTIL_H
 
 #include <time.h>
 #include <stdbool.h>

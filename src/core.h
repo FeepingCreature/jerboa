@@ -1,5 +1,5 @@
-#ifndef CORE_H
-#define CORE_H
+#ifndef JERBOA_CORE_H
+#define JERBOA_CORE_H
 
 #include <stdio.h>
 #include <stdlib.h>

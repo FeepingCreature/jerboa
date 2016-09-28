@@ -1,5 +1,5 @@
-#ifndef VM_RUNTIME_H
-#define VM_RUNTIME_H
+#ifndef JERBOA_VM_RUNTIME_H
+#define JERBOA_VM_RUNTIME_H
 
 #include "object.h"
 

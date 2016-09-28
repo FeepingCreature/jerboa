@@ -1,5 +1,5 @@
-#ifndef OPTIMIZE_H
-#define OPTIMIZE_H
+#ifndef JERBOA_VM_OPTIMIZE_H
+#define JERBOA_VM_OPTIMIZE_H
 
 #include "object.h"
 

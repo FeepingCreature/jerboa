@@ -1,5 +1,5 @@
-#ifndef VM_BUILDER_H
-#define VM_BUILDER_H
+#ifndef JERBOA_VM_BUILDER_H
+#define JERBOA_VM_BUILDER_H
 
 #include <stddef.h>
 

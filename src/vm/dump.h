@@ -1,5 +1,5 @@
-#ifndef VM_DUMP_H
-#define VM_DUMP_H
+#ifndef JERBOA_VM_DUMP_H
+#define JERBOA_VM_DUMP_H
 
 #include "object.h"
 

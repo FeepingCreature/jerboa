@@ -1,5 +1,5 @@
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef JERBOA_PARSER_H
+#define JERBOA_PARSER_H
 
 #include <stdbool.h>
 

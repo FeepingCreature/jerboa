@@ -1,5 +1,5 @@
-#ifndef PRINT_H
-#define PRINT_H
+#ifndef JERBOA_PRINT_H
+#define JERBOA_PRINT_H
 
 #include <stdio.h>
 #include "object.h"

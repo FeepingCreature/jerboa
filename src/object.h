@@ -1,5 +1,5 @@
-#ifndef OBJECT_H
-#define OBJECT_H
+#ifndef JERBOA_OBJECT_H
+#define JERBOA_OBJECT_H
 
 #include <time.h>
 #include <stdlib.h>
