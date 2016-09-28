@@ -200,7 +200,6 @@ static inline void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   if (IS_FLOAT(obj2)) v2 = AS_FLOAT(obj2);
   else if (IS_INT(obj2)) v2 = AS_INT(obj2);
   else { vm_error(state, "don't know how to perform float math with %s", get_type_info(state, obj2)); return; }
-  fprintf(stderr, "v1 = %f v2 = %f\n", v1, v2);
   
   float res;
   switch (mop) {
