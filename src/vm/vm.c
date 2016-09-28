@@ -335,6 +335,8 @@ static FnWrap vm_instr_free_object(VMState *state) {
       vm_stack_free(state, obj, obj->size);
       cf->last_stack_obj = prev_obj;
     }
+    // important! don't gc scan anymore
+    state->frame->slots_ptr[slot] = VNULL;
   } else abort();
   state->instr = (Instr*)(free_object_instr + 1);
   return (FnWrap) { state->instr->fn };
@@ -456,9 +458,9 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
     
     return call_internal(state, info, instr_after);
   } else {
-    Value val = VNULL;
-    if (obj) val = OBJ2VAL(obj);
-    print_recursive(state, stderr, val, true);
+    // Value val = VNULL;
+    // if (obj) val = OBJ2VAL(obj);
+    // print_recursive(state, stderr, val, true);
     fprintf(stderr, "\n");
     VM_ASSERT(false, "[3] property not found: '%.*s'", (int) aski->key.len, aski->key.ptr) (FnWrap) { vm_halt };
   }

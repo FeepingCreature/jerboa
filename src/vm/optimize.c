@@ -1059,8 +1059,10 @@ UserFunction *inline_static_lookups_to_constants(VMState *state, UserFunction *u
                 bool key_found = false;
                 known_values_table[aski->target.slot] = object_lookup(constraint, &aski->key, &key_found);
                 if (!key_found) {
-                  fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", (int) aski->key.len, aski->key.ptr);
-                  abort();
+                  // That's alright - it'll just error at runtime.
+                  object_known[aski->target.slot] = false;
+                  // fprintf(stderr, "wat? static lookup on primitive-constrained field to %.*s not found in constraint object??\n", (int) aski->key.len, aski->key.ptr);
+                  // abort();
                 }
                 num_dominant ++;
               }
