@@ -51,8 +51,7 @@ int instr_size(Instr *instr) {
 #undef CASE
     case INSTR_ALLOC_STATIC_OBJECT:
       return sizeof(AllocStaticObjectInstr)
-      + sizeof(Object)
-      + sizeof(StaticFieldInfo) * ((AllocStaticObjectInstr*)instr)->info_len;
+      + sizeof(StaticFieldInfo) * ((AllocStaticObjectInstr*)instr)->tbl.entries_stored;
     case INSTR_CALL: return ((CallInstr*)instr)->size;
     case INSTR_CALL_FUNCTION_DIRECT: return ((CallFunctionDirectInstr*)instr)->size;
     default: fprintf(stderr, "unknown instruction size for %i\n", instr->type); abort();

@@ -844,44 +844,53 @@ static FnWrap vm_instr_alloc_static_object(VMState * __restrict__ state) {
   AllocStaticObjectInstr * __restrict__ asoi = (AllocStaticObjectInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
   Value * __restrict__ slots_ptr = frame->slots_ptr;
-  Object * __restrict__ obj_template = (Object*)(asoi + 1);
+  TableEntry ** __restrict__ refslots_ptr = frame->refslots_ptr;
   
   int target_slot = asoi->target_slot, parent_slot = asoi->parent_slot;
   VM_ASSERT2_SLOT(target_slot < frame->slots_len, "slot numbering error");
   VM_ASSERT2_SLOT(parent_slot < frame->slots_len, "slot numbering error");
   Object *parent_obj = OBJ_OR_NULL(slots_ptr[parent_slot]);
   
-  int tbl_size = sizeof(TableEntry) * obj_template->tbl.entries_num;
-  Object * __restrict__ obj = alloc_object_internal(state, sizeof(Object) + tbl_size, asoi->alloc_stack);
-  if (!obj) return (FnWrap) { vm_halt }; // oom, possibly stack oom
+  int tbl_num = asoi->tbl.entries_num;
+  Object * __restrict__ obj = alloc_object_internal(state, sizeof(Object) + sizeof(TableEntry) * tbl_num, asoi->alloc_stack);
+  if (UNLIKELY(!obj)) return (FnWrap) { vm_halt }; // oom, possibly stack oom
   
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
   obj->parent = parent_obj;
   
   // TODO don't gen instr if 0
   TableEntry * __restrict__ obj_entries_ptr = (TableEntry*) ((Object*) obj + 1); // fixed table, hangs off the end
-  obj->tbl = obj_template->tbl;
+  obj->tbl = asoi->tbl;
   obj->tbl.entries_ptr = obj_entries_ptr;
-  memcpy(obj_entries_ptr, obj_template->tbl.entries_ptr, tbl_size);
-  
-  for (int i = 0; i < asoi->info_len; ++i) {
-    StaticFieldInfo *info = &ASOI_INFO(asoi)[i];
-    VM_ASSERT2_SLOT(info->slot < frame->slots_len, "slot numbering error");
-    TableEntry * __restrict__ entry = &obj_entries_ptr[info->tbl_offset];
-    entry->value = slots_ptr[info->slot]; // 0 is null
-    entry->constraint = info->constraint;
-    VM_ASSERT2(!info->constraint || value_instance_of(state, entry->value, info->constraint), "type constraint violated on variable");
-    frame->refslots_ptr[info->refslot] = entry;
-  }
-  
   obj->flags = OBJ_CLOSED | OBJ_INLINE_TABLE;
+  bzero(obj_entries_ptr, sizeof(TableEntry) * tbl_num);
+  
+  StaticFieldInfo * __restrict__ info = ASOI_INFO(asoi);
+  int entries_stored = asoi->tbl.entries_stored;
+  for (int i = 0; i != entries_stored; i++, info++) {
+    VM_ASSERT2_SLOT(info->slot < frame->slots_len, "slot numbering error");
+    TableEntry * __restrict__ entry = (TableEntry*) ((char*) obj_entries_ptr + info->offset);
+    __builtin_prefetch(entry, 1 /* write */, 1 /* 1/3 locality */);
+    // fprintf(stderr, ":: %p\n", (void*) &entry->value);
+    const char *key = info->key;
+    Object *constraint = info->constraint;
+    TableEntry **refslot = &refslots_ptr[info->refslot];
+    Value value = slots_ptr[info->slot];
+    *refslot = entry;
+    entry->key_ptr = key;
+    entry->constraint = constraint;
+    entry->value = value;
+    VM_ASSERT2(!constraint || value_instance_of(state, value, constraint), "type constraint violated on variable");
+  }
   
   slots_ptr[target_slot] = OBJ2VAL(obj);
   
+  /*fprintf(stderr, "%i = %li + %li + %li * %i + %li * %i\n", instr_size(state->instr), sizeof(AllocStaticObjectInstr), sizeof(Object),
+    sizeof(TableEntry), asoi->tbl_len, sizeof(StaticFieldInfo), asoi->info_len
+  );*/
   state->instr = (Instr*)((char*) asoi
                           + sizeof(AllocStaticObjectInstr)
-                          + sizeof(Object)
-                          + sizeof(StaticFieldInfo) * asoi->info_len);
+                          + sizeof(StaticFieldInfo) * asoi->tbl.entries_stored);
   return (FnWrap) { state->instr->fn };
 }
 

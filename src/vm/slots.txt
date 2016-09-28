@@ -118,7 +118,7 @@ CASE(INSTR_MOVE, MoveInstr)
   if (instr->target.kind == ARG_SLOT) CHKSLOT_WRITE(instr->target.slot);
 CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  for (int k = 0; k < instr->info_len; ++k) {
+  for (int k = 0; k < instr->tbl.entries_stored; ++k) {
     CHKSLOT_READ(ASOI_INFO(instr)[k].slot);
   }
   CHKSLOT_READ(instr->parent_slot);

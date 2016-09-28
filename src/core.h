@@ -124,7 +124,7 @@ typedef struct {
     bool b;
     Object *obj;
   };
-} /*__attribute__((aligned (16)))*/ Value; // TODO
+} Value;
 
 typedef enum {
   // DO NOT CHANGE ORDER (see object.h:load_arg)

@@ -235,12 +235,12 @@ void dump_instr(VMState *state, Instr **instr_p) {
     {
       AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) instr;
       fprintf(stderr, "%%%i = new frame %%%i { ", asoi->target_slot, asoi->parent_slot);
-      for (int i = 0; i < asoi->info_len; ++i) {
+      for (int i = 0; i < asoi->tbl.entries_stored; ++i) {
         StaticFieldInfo *info = &ASOI_INFO(asoi)[i];
         char *infostr = "";
         if (info->constraint) infostr = get_type_info(state, OBJ2VAL(info->constraint));
-        fprintf(stderr, "%.*s%s%s = %%%i (&%i); ",
-                (int) info->name.len, info->name.ptr, info->constraint?": ":"", infostr, info->slot, info->refslot);
+        fprintf(stderr, "%s%s%s = %%%i (&%i); ",
+                info->key, info->constraint?": ":"", infostr, info->slot, info->refslot);
       }
       fprintf(stderr, "} %s\n", asoi->alloc_stack?"stack":"heap");
       *instr_p = (Instr*) ((char*) instr + instr_size(instr));

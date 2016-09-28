@@ -197,11 +197,9 @@ typedef struct {
 } MoveInstr;
 
 typedef struct {
-  FastKey name;
-  int tbl_offset;
-  
+  int offset;
+  const char *key;
   Object *constraint;
-  
   int slot;
   int refslot;
 } StaticFieldInfo;
@@ -210,13 +208,13 @@ typedef struct {
 typedef struct {
   Instr base;
   int target_slot, parent_slot;
-  
-  int info_len;
   bool alloc_stack;
+  
+  // entries_stored is len of ASOI_INFO
+  HashTable tbl;
 } AllocStaticObjectInstr;
 
-#define ASOI_OBJ(I) *((Object*)((AllocStaticObjectInstr*)(I) + 1))
-#define ASOI_INFO(I) ((StaticFieldInfo*)((Object*)((AllocStaticObjectInstr*)(I) + 1) + 1))
+#define ASOI_INFO(I) ((StaticFieldInfo*)((AllocStaticObjectInstr*)(I) + 1))
 
 typedef struct {
   Instr base;

@@ -105,7 +105,7 @@ Object *closest_obj(VMState *state, Value val) {
 }
 
 Object *proto_obj(VMState *state, Value val) {
-  if (IS_OBJ(val)) return AS_OBJ(val)->parent;
+  if (LIKELY(IS_OBJ(val))) return AS_OBJ(val)->parent;
   Object *options[] = {
     NULL,
     state->shared->vcache.int_base,

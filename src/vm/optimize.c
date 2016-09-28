@@ -579,7 +579,7 @@ UserFunction *stackify_nonescaping_heap_allocs(UserFunction *uf) {
         AllocStaticObjectInstr *instr = (AllocStaticObjectInstr*) instr_cur;
         escape_stat[instr->parent_slot].test_escapes = true;
         ia_append(&escape_stat[instr->parent_slot], instr->target_slot);
-        for (int k = 0; k < instr->info_len; ++k) {
+        for (int k = 0; k < instr->tbl.entries_stored; ++k) {
           int slot = ASOI_INFO(instr)[k].slot;
           // TODO track through refslots
           escape_stat[slot].test_escapes = true;
@@ -883,7 +883,7 @@ UserFunction *remove_dead_slot_writes(UserFunction *uf) {
           CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr)
             slot_live[instr->obj_slot] = true;
           CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
-            for (int k = 0; k < instr->info_len; ++k)
+            for (int k = 0; k < instr->tbl.entries_stored; ++k)
               slot_live[ASOI_INFO(instr)[k].slot] = true;
           CASE(INSTR_LAST, Instr) abort();
         } break;
@@ -1655,7 +1655,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
             info_ptr = realloc(info_ptr, sizeof(StaticFieldInfo) * ++info_len);
             info_ptr[info_len - 1] = (StaticFieldInfo) {0};
             StaticFieldInfo *info = &info_ptr[info_len - 1];
-            info->name = aski->key;
+            info->key = aski->key.ptr;
             info->slot = aski->value.slot;
             info->refslot = -1;
             
@@ -1669,7 +1669,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
             DefineRefslotInstr *dri = (DefineRefslotInstr*) instr_reading;
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
-              if (info->name.len == dri->key.len && strncmp(info->name.ptr, dri->key.ptr, info->name.len) == 0) {
+              if (info->key == dri->key.ptr) {
                 if (info->refslot != -1) {
                   failed = true;
                   break; // wat wat wat
@@ -1698,7 +1698,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
             
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
-              if (info->name.len == scski->key_len && strncmp(info->name.ptr, scski->key_ptr, info->name.len) == 0) {
+              if (info->key == scski->key_ptr) {
                 if (info->constraint) abort(); // wat wat wat
                 if (scski->constraint.kind == ARG_SLOT) info->constraint = AS_OBJ(constant_slots[scski->constraint.slot]);
                 else info->constraint = AS_OBJ(scski->constraint.value);
@@ -1710,29 +1710,43 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
           Object sample_obj = {0};
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
-            char *error = object_set(state, &sample_obj, &info->name, VNULL);
+            FastKey key = prepare_key(info->key, strlen(info->key));
+            char *error = object_set(state, &sample_obj, &key, VNULL);
             if (error) { fprintf(stderr, "INTERNAL LOGIC ERROR: %s\n", error); abort(); }
           }
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
-            TableEntry *entry = table_lookup_prepared(&sample_obj.tbl, &info->name);
-            if (!entry) { fprintf(stderr, "where has it gone?? missing %.*s\n", (int) info->name.len, info->name.ptr); abort(); }
-            info->tbl_offset = entry - sample_obj.tbl.entries_ptr;
+            FastKey key = prepare_key(info->key, strlen(info->key));
+            TableEntry *entry = table_lookup_prepared(&sample_obj.tbl, &key);
+            if (!entry) { fprintf(stderr, "where has it gone?? missing %s\n", info->key); abort(); }
+            info->offset = (char*) entry - (char*) sample_obj.tbl.entries_ptr;
           }
           
           AllocStaticObjectInstr *asoi = alloca(sizeof(AllocStaticObjectInstr)
-                                                + sizeof(Object)
                                                 + sizeof(StaticFieldInfo) * info_len);
           *asoi = (AllocStaticObjectInstr) {
             .base = { .type = INSTR_ALLOC_STATIC_OBJECT },
-            .info_len = info_len,
+            .tbl = sample_obj.tbl,
             .parent_slot = alobi->parent_slot,
             .target_slot = alobi->target_slot,
           };
-          ASOI_OBJ(asoi) = sample_obj;
-          for (int k = 0; k < info_len; ++k) {
-            ASOI_INFO(asoi)[k] = info_ptr[k];
+          int info_idx = 0;
+          for (int k = 0; k < sample_obj.tbl.entries_num; k++) {
+            TableEntry *entry = &sample_obj.tbl.entries_ptr[k];
+            if (entry->key_ptr) {
+              StaticFieldInfo *info_entry = NULL;
+              for (int l = 0; l < info_len; ++l) {
+                if (info_ptr[l].key == entry->key_ptr) {
+                  info_entry = &info_ptr[l];
+                  break;
+                }
+              }
+              assert(info_entry);
+              ASOI_INFO(asoi)[info_idx++] = *info_entry;
+            }
           }
+          assert(info_idx == info_len);
+          
           addinstr_like(&builder, &uf->body, instr, instr_size((Instr*) asoi), (Instr*) asoi);
           instr = instr_reading;
           continue;
