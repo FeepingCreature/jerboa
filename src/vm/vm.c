@@ -237,13 +237,13 @@ void vm_maybe_record_profile(VMState *state) {
   }
 }
 
-static FnWrap vm_halt(VMState *state) FAST_FN;
-
 #define VM_ASSERT2(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return (FnWrap) { vm_halt }
 
 #ifndef NDEBUG
+#define VM_ASSERT2_DEBUG(cond, ...) VM_ASSERT2(cond, __VA_ARGS__)
 #define VM_ASSERT2_SLOT(cond, ...) VM_ASSERT2(cond, __VA_ARGS__)
 #else
+#define VM_ASSERT2_DEBUG(cond, ...) (void) 0
 #define VM_ASSERT2_SLOT(cond, ...) (void) 0
 #endif
 
@@ -326,21 +326,30 @@ static FnWrap vm_instr_free_object(VMState *state) {
   VM_ASSERT2_SLOT(slot < state->frame->slots_len, "slot numbering error");
   Value val = state->frame->slots_ptr[slot];
   // non-object values are always OBJ_CLOSED
-  VM_ASSERT2(free_object_instr->on_stack, "TODO heap free()");
-  if (free_object_instr->on_stack) {
-    VM_ASSERT2(IS_OBJ(val), "tried to free object that wasn't stack allocated");
-    Object *obj = AS_OBJ(val);
-    obj->flags |= OBJ_STACK_FREED;
-    Callframe *cf = state->frame;
+  if (LIKELY(free_object_instr->on_stack)) {
+    // this instr should only be applied to static objects
+    VM_ASSERT2_DEBUG(IS_OBJ(val), "tried to free object that wasn't stack allocated");
+    AS_OBJ(val)->flags |= OBJ_STACK_FREED;
+    
+    Callframe * __restrict__ cf = state->frame;
+    // important! don't gc scan anymore
+#ifndef NDEBUG
+    for (int i = 0; i < cf->slots_len; i++) {
+      if (i != slot && cf->slots_ptr[i].type == TYPE_OBJECT && cf->slots_ptr[i].obj == AS_OBJ(val)) {
+        fprintf(stderr, "bad - stack reference to freed object");
+        abort();
+      }
+    }
+#endif
+    cf->slots_ptr[slot].type = TYPE_NULL;
+    
     while (cf->last_stack_obj && cf->last_stack_obj->flags & OBJ_STACK_FREED) {
-      Object *obj = cf->last_stack_obj;
-      obj_free_aux(obj);
-      Object *prev_obj = obj->prev;
+      Object * __restrict__ obj = cf->last_stack_obj;
+      obj_free_aux(obj); // hence not necessary
+      Object * __restrict__ prev_obj = obj->prev;
       vm_stack_free(state, obj, obj->size);
       cf->last_stack_obj = prev_obj;
     }
-    // important! don't gc scan anymore
-    state->frame->slots_ptr[slot] = VNULL;
   } else abort();
   state->instr = (Instr*)(free_object_instr + 1);
   return (FnWrap) { state->instr->fn };
@@ -748,35 +757,33 @@ static FnWrap vm_instr_call_function_direct(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static FnWrap vm_halt(VMState *state) {
+FnWrap vm_halt(VMState *state) {
   (void) state;
   return (FnWrap) { vm_halt };
 }
 
-static FnWrap vm_instr_return(VMState *state) {
-  ReturnInstr * __restrict__ ret_instr = (ReturnInstr*) state->instr;
-  assert(ret_instr->ret.kind != ARG_REFSLOT);
-  Value res = load_arg(state->frame, ret_instr->ret);
-  WriteArg target = state->frame->target;
-  gc_remove_roots(state, &state->frame->frameroot_slots);
-  vm_remove_frame(state);
-  
-  set_arg(state, target, res);
-  
-  if (UNLIKELY(!state->frame)) {
-    return (FnWrap) { vm_halt };
-  }
-  
-#ifndef NDEBUG
-  state->instr = state->frame->instr_ptr;
-  state->instr = (Instr*)((char*) state->instr + instr_size(state->instr));
-  assert(state->instr == state->frame->return_next_instr);
-#else
-  state->instr = state->frame->return_next_instr;
-#endif
-  
-  return (FnWrap) { state->instr->fn };
-}
+#include "vm/instrs/return.h"
+
+#define VALUE_KIND ARG_SLOT
+#define FN_NAME vm_instr_return_s
+  #include "vm/instrs/return.h"
+#undef VALUE_KIND
+#undef FN_NAME
+
+
+#define VALUE_KIND ARG_REFSLOT
+#define FN_NAME vm_instr_return_r
+  #include "vm/instrs/return.h"
+#undef VALUE_KIND
+#undef FN_NAME
+
+
+#define VALUE_KIND ARG_VALUE
+#define FN_NAME vm_instr_return_v
+  #include "vm/instrs/return.h"
+#undef VALUE_KIND
+#undef FN_NAME
+
 
 static FnWrap vm_instr_br(VMState *state) FAST_FN;
 static FnWrap vm_instr_br(VMState *state) {
@@ -790,33 +797,48 @@ static FnWrap vm_instr_br(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static FnWrap vm_instr_test(VMState * __restrict__ state) FAST_FN;
-static FnWrap vm_instr_test(VMState * __restrict__ state) {
-  TestInstr * __restrict__ test_instr = (TestInstr*) state->instr;
-  Callframe * __restrict__ frame = state->frame;
-  Value val = load_arg(frame, test_instr->value);
-  bool res = value_is_truthy(val);
-  set_arg(state, test_instr->target, BOOL2VAL(res));
-  state->instr = (Instr*) (test_instr + 1);
-  return (FnWrap) { state->instr->fn };
-}
+#include "vm/instrs/test.h"
 
-static FnWrap vm_instr_testbr(VMState * __restrict__ state) FAST_FN;
-static FnWrap vm_instr_testbr(VMState * __restrict__ state) {
-  TestBranchInstr * __restrict__ tbr_instr = (TestBranchInstr*) state->instr;
-  Callframe * __restrict__ frame = state->frame;
-  int true_blk = tbr_instr->true_blk, false_blk = tbr_instr->false_blk;
-  assert(tbr_instr->test.kind != ARG_REFSLOT);
-  Value test_value = load_arg(frame, tbr_instr->test);
-  VM_ASSERT2(IS_BOOL(test_value), "can't branch on non-bool"); // TODO move to debug - should be language assured
-  bool test = AS_BOOL(test_value);
+#define VALUE_KIND ARG_SLOT
+  #define TARGET_KIND ARG_SLOT
+  #define FN_NAME vm_instr_test_vs_ts
+    #include "vm/instrs/test.h"
+  #undef TARGET_KIND
+  #undef FN_NAME
+
+  #define TARGET_KIND ARG_REFSLOT
+  #define FN_NAME vm_instr_test_vs_tr
+    #include "vm/instrs/test.h"
+  #undef TARGET_KIND
+  #undef FN_NAME
+#undef VALUE_KIND
+#define VALUE_KIND ARG_REFSLOT
+  #define TARGET_KIND ARG_SLOT
+  #define FN_NAME vm_instr_test_vr_ts
+    #include "vm/instrs/test.h"
+  #undef TARGET_KIND
+  #undef FN_NAME
   
-  int target_blk = test ? true_blk : false_blk;
-  state->instr = (Instr*) ((char*) frame->uf->body.instrs_ptr + frame->uf->body.blocks_ptr[target_blk].offset);
-  frame->prev_block = state->frame->block;
-  frame->block = target_blk;
-  return (FnWrap) { state->instr->fn };
-}
+  #define TARGET_KIND ARG_REFSLOT
+  #define FN_NAME vm_instr_test_vr_tr
+    #include "vm/instrs/test.h"
+  #undef TARGET_KIND
+  #undef FN_NAME
+#undef VALUE_KIND
+
+#include "vm/instrs/testbr.h"
+
+#define TEST_KIND ARG_SLOT
+#define FN_NAME vm_instr_testbr_s
+#include "vm/instrs/testbr.h"
+#undef TEST_KIND
+#undef FN_NAME
+
+#define TEST_KIND ARG_VALUE
+#define FN_NAME vm_instr_testbr_v
+#include "vm/instrs/testbr.h"
+#undef TEST_KIND
+#undef FN_NAME
 
 static FnWrap vm_instr_phi(VMState *state) FAST_FN;
 static FnWrap vm_instr_phi(VMState *state) {
@@ -982,13 +1004,52 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ALLOC_STATIC_OBJECT] = vm_instr_alloc_static_object;
 }
 
+
 void vm_resolve(UserFunction *uf) {
   assert(!uf->resolved);
   for (int i = 0; i < uf->body.blocks_len; i++) {
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
+      instr_cur->fn = NULL;
+      if (instr_cur->type == INSTR_TEST) {
+        TestInstr *instr = (TestInstr*) instr_cur;
+        if (instr->target.kind == ARG_SLOT) {
+          if (instr->value.kind == ARG_SLOT) {
+            instr_cur->fn = vm_instr_test_vs_ts;
+          } else if (instr->value.kind == ARG_REFSLOT) {
+            instr_cur->fn = vm_instr_test_vr_ts;
+          };
+        } else if (instr->target.kind == ARG_REFSLOT) {
+          if (instr->value.kind == ARG_SLOT) {
+            instr_cur->fn = vm_instr_test_vs_tr;
+          } else if (instr->value.kind == ARG_REFSLOT) {
+            instr_cur->fn = vm_instr_test_vr_tr;
+          }
+        }
+      } else if (instr_cur->type == INSTR_TESTBR) {
+        TestBranchInstr *instr = (TestBranchInstr*) instr_cur;
+        if (instr->test.kind == ARG_SLOT) {
+          instr_cur->fn = vm_instr_testbr_s;
+        } else if (instr->test.kind == ARG_VALUE) {
+          instr_cur->fn = vm_instr_testbr_v;
+        }
+      } else if (instr_cur->type == INSTR_RETURN) {
+        ReturnInstr *instr = (ReturnInstr*) instr_cur;
+        if (instr->ret.kind == ARG_SLOT) {
+          instr_cur->fn = vm_instr_return_s;
+        } else if (instr->ret.kind == ARG_REFSLOT) {
+          instr_cur->fn = vm_instr_return_r;
+        } else if (instr->ret.kind == ARG_VALUE) {
+          instr_cur->fn = vm_instr_return_v;
+        }
+      } else if (instr_cur->type == INSTR_CALL_FUNCTION_DIRECT) {
+        CallFunctionDirectInstr *instr = (CallFunctionDirectInstr*) instr_cur;
+        if (instr->fast) {
+          instr_cur->fn = instr->dispatch_fn(instr_cur).self;
+        }
+      }
+      if (!instr_cur->fn) instr_cur->fn = instr_fns[instr_cur->type];
       int size = instr_size(instr_cur);
-      instr_cur->fn = instr_fns[instr_cur->type];
       instr_cur = (Instr*) ((char*) instr_cur + size);
     }
   }

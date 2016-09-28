@@ -695,7 +695,7 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   
   VMFunctionPointer ffi_spec_fn = ffi_get_specialized_call_fn((FFIObject*) ffi, ret_type, par_types);
   
-  Object *fn_obj = AS_OBJ(make_fn_custom(state, ffi_spec_fn, sizeof(FFIFunctionObject)));
+  Object *fn_obj = AS_OBJ(make_fn_custom(state, ffi_spec_fn, NULL, sizeof(FFIFunctionObject)));
   FFIFunctionObject *ffi_fn = (FFIFunctionObject*) fn_obj;
   Object *_sym_pointer = AS_OBJ(make_ptr(state, fnptr));
   Object *_ffi_pointer = AS_OBJ(make_ptr(state, (void*) ffihdl));

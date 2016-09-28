@@ -933,13 +933,20 @@ FunctionBuilder builder = {0};
         if (instr->info.fn.kind == ARG_VALUE && IS_OBJ(instr->info.fn.value)) {
           Object *fn_obj_n = AS_OBJ(instr->info.fn.value);
           if (fn_obj_n->parent == state->shared->vcache.function_base) {
+            FunctionObject *fn_obj = (FunctionObject*) fn_obj_n;
             int size = sizeof(CallFunctionDirectInstr) + sizeof(Arg) * instr->size;
             CallFunctionDirectInstr *cfdi = alloca(size);
             cfdi->base = (Instr) {
               .type = INSTR_CALL_FUNCTION_DIRECT,
             };
             cfdi->size = size;
-            cfdi->fn = ((FunctionObject*)fn_obj_n)->fn_ptr;
+            if (fn_obj->dispatch_fn_ptr) {
+              cfdi->fast = true;
+              cfdi->dispatch_fn = fn_obj->dispatch_fn_ptr;
+            } else {
+              cfdi->fast = false;
+              cfdi->fn = fn_obj->fn_ptr;
+            }
             cfdi->info = instr->info;
             for (int i = 0; i < instr->info.args_len; ++i) {
               ((Arg*)(&cfdi->info + 1))[i] = ((Arg*)(&instr->info + 1))[i];

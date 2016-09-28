@@ -81,11 +81,9 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
   
   if (arg.kind == ARG_SLOT) {
     return frame->slots_ptr[arg.slot];
-  }
-  if (arg.kind == ARG_REFSLOT) {
+  } else if (arg.kind == ARG_REFSLOT) {
     return frame->refslots_ptr[arg.refslot]->value;
-  }
-  return arg.value;
+  } else return arg.value;
   // NOT faster
   /*
   Value *ptrs[] = {
@@ -97,6 +95,23 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
   */
 }
 
+// used when generating an instr-specialized version of a vm function
+static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) __attribute__ ((always_inline));
+static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) {
+  assert(arg.kind == kind);
+  if (kind == ARG_SLOT) {
+    assert(arg.slot < frame->slots_len);
+  } else if (kind == ARG_REFSLOT) {
+    assert(arg.refslot < frame->refslots_len);
+  } else assert(kind == ARG_VALUE);
+  
+  if (kind == ARG_SLOT) {
+    return frame->slots_ptr[arg.slot];
+  } else if (kind == ARG_REFSLOT) {
+    return frame->refslots_ptr[arg.refslot]->value;
+  } else return arg.value;
+}
+
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
   if (warg.kind == ARG_REFSLOT) {
     assert(warg.refslot < state->frame->refslots_len);
@@ -106,24 +121,46 @@ static inline void set_arg(VMState *state, WriteArg warg, Value value) {
               "value failed type constraint: constraint was %s, but value was %s",
               get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
     entry->value = value;
-    return;
-  }
-  if (UNLIKELY(warg.kind == ARG_POINTER)) {
+  } else if (UNLIKELY(warg.kind == ARG_POINTER)) {
     *warg.pointer = value;
-    return;
+  } else {
+    assert(warg.kind == ARG_SLOT);
+    state->frame->slots_ptr[warg.slot] = value;
   }
-  assert(warg.kind == ARG_SLOT);
-  state->frame->slots_ptr[warg.slot] = value;
+}
+
+static inline void set_arg_specialized(VMState *state, WriteArg warg, Value value, int kind) __attribute__ ((always_inline));
+static inline void set_arg_specialized(VMState *state, WriteArg warg, Value value, int kind) {
+  assert(warg.kind == kind);
+  if (kind == ARG_REFSLOT) {
+    assert(warg.refslot < state->frame->refslots_len);
+    TableEntry *entry = state->frame->refslots_ptr[warg.refslot];
+    Object *constraint = entry->constraint;
+    VM_ASSERT(!constraint || value_fits_constraint(state->shared, value, constraint),
+              "value failed type constraint: constraint was %s, but value was %s",
+              get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
+    entry->value = value;
+  } else if (kind == ARG_POINTER) {
+    *warg.pointer = value;
+  } else {
+    assert(kind == ARG_SLOT);
+    state->frame->slots_ptr[warg.slot] = value;
+  }
 }
 
 static inline void vm_return(VMState *state, CallInfo *info, Value val) {
   set_arg(state, info->target, val);
 }
 
+static inline void vm_return_specialized(VMState *state, CallInfo *info, Value val, int kind) {
+  set_arg_specialized(state, info->target, val, kind);
+}
+
 // such as intrinsics
 typedef struct {
   Object base;
   VMFunctionPointer fn_ptr;
+  InstrDispatchFn dispatch_fn_ptr;
 } FunctionObject;
 
 // such as script functions
@@ -168,9 +205,11 @@ void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_le
 
 Value make_ptr(VMState *state, void *ptr);
 
-Value make_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom);
+Value make_fn_custom(VMState *state, VMFunctionPointer fn, InstrDispatchFn fast_fn, int size_custom);
 
 Value make_fn(VMState *state, VMFunctionPointer fn);
+
+Value make_fn_fast(VMState *state, VMFunctionPointer fn, InstrDispatchFn fast_fn);
 
 Value make_custom_gc(VMState *state);
 

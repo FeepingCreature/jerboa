@@ -178,10 +178,10 @@ bool value_instance_of(VMState *state, Value val, Object *proto) {
 }
 
 bool value_is_truthy(Value value) {
-  if (IS_NULL(value)) return false;
-  if (IS_BOOL(value)) return AS_BOOL(value);
-  if (IS_INT(value)) return AS_INT(value) != 0;
-  return true;
+  if (LIKELY(IS_BOOL(value))) return AS_BOOL(value);
+  else if (IS_NULL(value)) return false;
+  else if (IS_INT(value)) return AS_INT(value) != 0;
+  else return true; // generic object
 }
 
 bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constraint) {
@@ -422,17 +422,22 @@ Value make_ptr(VMState *state, void *ptr) {
 }
 
 // used to allocate "special functions" like ffi functions, that need to store more data
-Value make_fn_custom(VMState *state, VMFunctionPointer fn, int size_custom) {
+Value make_fn_custom(VMState *state, VMFunctionPointer fn, InstrDispatchFn dispatch_fn, int size_custom) {
   assert(size_custom >= sizeof(FunctionObject));
   FunctionObject *obj = alloc_object_internal(state, size_custom, false);
   obj->base.parent = state->shared->vcache.function_base;
   obj->base.flags |= OBJ_NOINHERIT;
   obj->fn_ptr = fn;
+  obj->dispatch_fn_ptr = dispatch_fn;
   return OBJ2VAL((Object*) obj);
 }
 
 Value make_fn(VMState *state, VMFunctionPointer fn) {
-  return make_fn_custom(state, fn, sizeof(FunctionObject));
+  return make_fn_custom(state, fn, NULL, sizeof(FunctionObject));
+}
+
+Value make_fn_fast(VMState *state, VMFunctionPointer fn, InstrDispatchFn dispatch_fn) {
+  return make_fn_custom(state, fn, dispatch_fn, sizeof(FunctionObject));
 }
 
 char *get_val_info(VMState *state, Value val) {

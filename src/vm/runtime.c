@@ -93,7 +93,7 @@ static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   Value val1 = load_arg(state->frame, info->this_arg);
   Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   
-  if (LIKELY(IS_INT(val2))) {
+  if (LIKELY(IS_INT(val2))) { // int math mostly with int
     int i1 = AS_INT(val1), i2 = AS_INT(val2);
     int res;
     switch (mop) {
@@ -117,20 +117,20 @@ static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   }
   
   if (LIKELY(IS_FLOAT(val2))) {
-    float v1 = AS_INT(val1), v2 = AS_FLOAT(val2);
+    int i1 = AS_INT(val1); float v2 = AS_FLOAT(val2);
     float res;
     switch (mop) {
-      case MATH_ADD: res = v1 + v2; break;
-      case MATH_SUB: res = v1 - v2; break;
-      case MATH_MUL: res = v1 * v2; break;
+      case MATH_ADD: res = i1 + v2; break;
+      case MATH_SUB: res = i1 - v2; break;
+      case MATH_MUL: res = i1 * v2; break;
       case MATH_MOD:
         VM_ASSERT(v2 > 0.0f, "what are you even doing");
-        res = fmodf(v1, v2);
+        res = fmodf(i1, v2);
         if (res < 0) res += v2;
         break;
       case MATH_DIV:
         VM_ASSERT(v2 != 0.0f, "float division by zero");
-        res = v1 / v2;
+        res = i1 / v2;
         break;
       case MATH_BIT_OR: case MATH_BIT_AND:
         VM_ASSERT(false, "bit math with float operands is not supported");
@@ -200,6 +200,7 @@ static inline void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   if (IS_FLOAT(obj2)) v2 = AS_FLOAT(obj2);
   else if (IS_INT(obj2)) v2 = AS_INT(obj2);
   else { vm_error(state, "don't know how to perform float math with %s", get_type_info(state, obj2)); return; }
+  fprintf(stderr, "v1 = %f v2 = %f\n", v1, v2);
   
   float res;
   switch (mop) {
@@ -449,53 +450,7 @@ static void string_byte_len_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, INT2VAL(strlen(str)));
 }
 
-typedef enum {
-  CMP_EQ,
-  CMP_LT,
-  CMP_GT,
-  CMP_LE,
-  CMP_GE
-} CompareOp;
-
-static inline void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) __attribute__ ((always_inline));
-static inline void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
-  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  
-  Value val1 = load_arg(state->frame, info->this_arg);
-  Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  
-  VM_ASSERT(IS_INT(val1), "internal error: int compare function called on wrong type of object");
-  if (IS_INT(val2)) {
-    int i1 = AS_INT(val1), i2 = AS_INT(val2);
-    bool res;
-    switch (cmp) {
-      case CMP_EQ: res = i1 == i2; break;
-      case CMP_LT: res = i1 <  i2; break;
-      case CMP_GT: res = i1 >  i2; break;
-      case CMP_LE: res = i1 <= i2; break;
-      case CMP_GE: res = i1 >= i2; break;
-      default: abort();
-    }
-    vm_return(state, info, BOOL2VAL(res));
-    return;
-  }
-  
-  if (LIKELY(IS_FLOAT(val2))) {
-    float v1 = AS_INT(val1), v2 = AS_FLOAT(val2);
-    bool res;
-    switch (cmp) {
-      case CMP_EQ: res = v1 == v2; break;
-      case CMP_LT: res = v1 <  v2; break;
-      case CMP_GT: res = v1 >  v2; break;
-      case CMP_LE: res = v1 <= v2; break;
-      case CMP_GE: res = v1 >= v2; break;
-      default: abort();
-    }
-    vm_return(state, info, BOOL2VAL(res));
-    return;
-  }
-  VM_ASSERT(false, "don't know how to compare int with %s", get_type_info(state, load_arg(state->frame, INFO_ARGS_PTR(info)[0])));
-}
+#include "vm/instrs/int_cmp.h"
 
 static void int_eq_fn(VMState *state, CallInfo *info) {
   int_cmp_fn(state, info, CMP_EQ);
@@ -515,6 +470,53 @@ static void int_le_fn(VMState *state, CallInfo *info) {
 
 static void int_ge_fn(VMState *state, CallInfo *info) {
   int_cmp_fn(state, info, CMP_GE);
+}
+
+#include "vm/instrs/int_eq.h"
+
+#define LHS_KIND ARG_SLOT
+#define RHS_KIND ARG_SLOT
+#define TARGET_KIND ARG_SLOT
+#define FN_NAME int_eq_fn_ls_rs_ts
+#define FAST_FN_NAME int_eq_fn_ls_rs_ts_fast
+  #include "vm/instrs/int_cmp.h"
+  #include "vm/instrs/int_eq.h"
+#undef LHS_KIND
+#undef RHS_KIND
+#undef TARGET_KIND
+#undef FN_NAME
+#undef FAST_FN_NAME
+
+#define LHS_KIND ARG_REFSLOT
+#define RHS_KIND ARG_VALUE
+#define TARGET_KIND ARG_SLOT
+#define FN_NAME int_eq_fn_lr_rv_ts
+#define FAST_FN_NAME int_eq_fn_lr_rv_ts_fast
+  #include "vm/instrs/int_cmp.h"
+  #include "vm/instrs/int_eq.h"
+#undef LHS_KIND
+#undef RHS_KIND
+#undef TARGET_KIND
+#undef FN_NAME
+#undef FAST_FN_NAME
+
+FnWrap int_eq_fn_dispatch(Instr *instr) {
+  assert(instr->type == INSTR_CALL_FUNCTION_DIRECT);
+  CallFunctionDirectInstr *cfdi = (CallFunctionDirectInstr*) instr;
+  CallInfo *info = &cfdi->info;
+  if (cfdi->info.this_arg.kind == ARG_REFSLOT
+    && INFO_ARGS_PTR(info)[0].kind == ARG_VALUE
+    && cfdi->info.target.kind == ARG_SLOT
+  ) {
+    return (FnWrap) { &int_eq_fn_lr_rv_ts_fast };
+  }
+  if (cfdi->info.this_arg.kind == ARG_SLOT
+    && INFO_ARGS_PTR(info)[0].kind == ARG_SLOT
+    && cfdi->info.target.kind == ARG_SLOT
+  ) {
+    return (FnWrap) { &int_eq_fn_ls_rs_ts_fast };
+  }
+  return (FnWrap) { &int_eq_fn_fast };
 }
 
 static inline void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) __attribute__ ((always_inline));
@@ -1466,7 +1468,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, int_obj, "%" , make_fn(state, int_mod_fn));
   OBJECT_SET_STRING(state, int_obj, "|" , make_fn(state, int_bit_or_fn));
   OBJECT_SET_STRING(state, int_obj, "&" , make_fn(state, int_bit_and_fn));
-  OBJECT_SET_STRING(state, int_obj, "==", make_fn(state, int_eq_fn));
+  OBJECT_SET_STRING(state, int_obj, "==", make_fn_fast(state, int_eq_fn, int_eq_fn_dispatch));
   OBJECT_SET_STRING(state, int_obj, "<" , make_fn(state, int_lt_fn));
   OBJECT_SET_STRING(state, int_obj, ">" , make_fn(state, int_gt_fn));
   OBJECT_SET_STRING(state, int_obj, "<=", make_fn(state, int_le_fn));

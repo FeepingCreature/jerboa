@@ -298,6 +298,10 @@ struct _FnWrap {
   VMInstrFn self;
 };
 
+// "halt execution" marker
+// (doesn't need to be fast)
+FnWrap vm_halt(VMState *state) FAST_DECL;
+
 typedef struct {
   union {
     void *filler; // Instr must be at least (void*) sized

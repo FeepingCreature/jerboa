@@ -216,11 +216,17 @@ typedef struct {
 
 #define ASOI_INFO(I) ((StaticFieldInfo*)((AllocStaticObjectInstr*)(I) + 1))
 
+typedef FnWrap (*InstrDispatchFn)(Instr*);
+
 typedef struct {
   Instr base;
   int size; // faster than recomputing
-  VMFunctionPointer fn;
-  CallInfo info;
+  bool fast; // fn returned by dispatch takes care of vmstate management; behaves like a vm instr function
+  union {
+    VMFunctionPointer fn;
+    InstrDispatchFn dispatch_fn;
+  };
+  CallInfo info; // must be last! has tail!
 } CallFunctionDirectInstr;
 
 #endif
