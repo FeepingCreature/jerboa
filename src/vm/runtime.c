@@ -84,7 +84,8 @@ typedef enum {
   MATH_BIT_AND
 } MathOp;
 
-static void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
+static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) __attribute__ ((always_inline));
+static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   Value this_val = load_arg(state->frame, info->this_arg);
@@ -187,7 +188,8 @@ static void int_parse_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, INT2VAL(res));
 }
 
-static void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
+static inline void float_math_fn(VMState *state, CallInfo *info, MathOp mop) __attribute__ ((always_inline));
+static inline void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   Value obj1 = load_arg(state->frame, info->this_arg);
@@ -455,7 +457,8 @@ typedef enum {
   CMP_GE
 } CompareOp;
 
-static void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
+static inline void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) __attribute__ ((always_inline));
+static inline void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   Value val1 = load_arg(state->frame, info->this_arg);
@@ -477,7 +480,7 @@ static void int_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
     return;
   }
   
-  if (IS_FLOAT(val2)) {
+  if (LIKELY(IS_FLOAT(val2))) {
     float v1 = AS_INT(val1), v2 = AS_FLOAT(val2);
     bool res;
     switch (cmp) {
@@ -514,7 +517,8 @@ static void int_ge_fn(VMState *state, CallInfo *info) {
   int_cmp_fn(state, info, CMP_GE);
 }
 
-static void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
+static inline void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) __attribute__ ((always_inline));
+static inline void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   Value val1 = load_arg(state->frame, info->this_arg);
@@ -523,7 +527,7 @@ static void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
   
   float v1 = AS_FLOAT(val1), v2;
   if (IS_FLOAT(val2)) v2 = AS_FLOAT(val2);
-  else if (IS_INT(val2)) v2 = AS_INT(val2);
+  else if (LIKELY(IS_INT(val2))) v2 = AS_INT(val2);
   else { vm_error(state, "don't know how to compare float with %s", get_type_info(state, val2)); return; }
   
   bool res;

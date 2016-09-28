@@ -290,7 +290,10 @@ typedef struct {
 struct _FnWrap;
 typedef struct _FnWrap FnWrap;
 
-typedef FnWrap (*VMInstrFn)(VMState *state);
+#define FAST_DECL __attribute__ ((regparm (3)))
+#define FAST_FN __attribute__ ((hot)) FAST_DECL
+
+typedef FnWrap (*VMInstrFn)(VMState *state) FAST_DECL;
 struct _FnWrap {
   VMInstrFn self;
 };

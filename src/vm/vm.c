@@ -97,7 +97,7 @@ void vm_remove_frame(VMState *state) {
   vm_stack_free(state, cf, sizeof(Callframe));
 }
 
-static FnWrap vm_instr_return(VMState *state);
+static FnWrap vm_instr_return(VMState *state) FAST_FN;
 const static __thread struct __attribute__((__packed__)) {
   CallInstr stub_call;
   ReturnInstr stub_ret0;
@@ -241,7 +241,7 @@ void vm_maybe_record_profile(VMState *state) {
   }
 }
 
-static FnWrap vm_halt(VMState *state);
+static FnWrap vm_halt(VMState *state) FAST_FN;
 
 #define VM_ASSERT2(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return (FnWrap) { vm_halt }
 
@@ -253,6 +253,7 @@ static FnWrap vm_halt(VMState *state);
 
 static VMInstrFn instr_fns[INSTR_LAST] = {0};
 
+static FnWrap vm_instr_alloc_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_object(VMState *state) {
   AllocObjectInstr * __restrict__ alloc_obj_instr = (AllocObjectInstr*) state->instr;
   int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
@@ -265,6 +266,7 @@ static FnWrap vm_instr_alloc_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_alloc_int_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_int_object(VMState *state) {
   AllocIntObjectInstr * __restrict__ alloc_int_obj_instr = (AllocIntObjectInstr*) state->instr;
   int value = alloc_int_obj_instr->value;
@@ -273,6 +275,7 @@ static FnWrap vm_instr_alloc_int_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_alloc_bool_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_bool_object(VMState *state) {
   AllocBoolObjectInstr * __restrict__ alloc_bool_obj_instr = (AllocBoolObjectInstr*) state->instr;
   bool value = alloc_bool_obj_instr->value;
@@ -281,6 +284,7 @@ static FnWrap vm_instr_alloc_bool_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_alloc_float_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_float_object(VMState *state) {
   AllocFloatObjectInstr * __restrict__ alloc_float_obj_instr = (AllocFloatObjectInstr*) state->instr;
   float value = alloc_float_obj_instr->value;
@@ -289,6 +293,7 @@ static FnWrap vm_instr_alloc_float_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_alloc_array_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_array_object(VMState *state) {
   AllocArrayObjectInstr * __restrict__ alloc_array_obj_instr = (AllocArrayObjectInstr*) state->instr;
   set_arg(state, alloc_array_obj_instr->target, make_array(state, NULL, 0, true));
@@ -296,6 +301,7 @@ static FnWrap vm_instr_alloc_array_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_alloc_string_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_string_object(VMState *state) {
   AllocStringObjectInstr * __restrict__ alloc_string_obj_instr = (AllocStringObjectInstr*) state->instr;
   char *value = alloc_string_obj_instr->value;
@@ -304,6 +310,7 @@ static FnWrap vm_instr_alloc_string_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_alloc_closure_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_closure_object(VMState *state) {
   AllocClosureObjectInstr * __restrict__ alloc_closure_obj_instr = (AllocClosureObjectInstr*) state->instr;
   int context_slot = alloc_closure_obj_instr->base.context_slot;
@@ -316,6 +323,7 @@ static FnWrap vm_instr_alloc_closure_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_free_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_free_object(VMState *state) {
   FreeObjectInstr * __restrict__ free_object_instr = (FreeObjectInstr*) state->instr;
   int slot = free_object_instr->obj_slot;
@@ -342,6 +350,7 @@ static FnWrap vm_instr_free_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_close_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_close_object(VMState *state) {
   CloseObjectInstr * __restrict__ close_object_instr = (CloseObjectInstr*) state->instr;
   int slot = close_object_instr->slot;
@@ -354,6 +363,7 @@ static FnWrap vm_instr_close_object(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_freeze_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_freeze_object(VMState *state) {
   FreezeObjectInstr * __restrict__ freeze_object_instr = (FreezeObjectInstr*) state->instr;
   int slot = freeze_object_instr->slot;
@@ -394,6 +404,7 @@ FnWrap call_internal(VMState *state, CallInfo *info, Instr *instr_after_call) {
   }
 }
 
+static FnWrap vm_instr_access(VMState *state) FAST_FN;
 static FnWrap vm_instr_access(VMState *state) {
   AccessInstr * __restrict__ access_instr = (AccessInstr*) state->instr;
   
@@ -466,6 +477,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
   }
 }
 
+static FnWrap vm_instr_access_string_key(VMState *state) FAST_FN;
 static FnWrap vm_instr_access_string_key(VMState *state) {
   AccessStringKeyInstr * __restrict__ aski = (AccessStringKeyInstr*) state->instr;
   
@@ -483,6 +495,7 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   }
 }
 
+static FnWrap vm_instr_assign(VMState *state) FAST_FN;
 static FnWrap vm_instr_assign(VMState *state) {
   AssignInstr * __restrict__ assign_instr = (AssignInstr*) state->instr;
   int target_slot = assign_instr->target_slot;
@@ -541,6 +554,7 @@ static FnWrap vm_instr_assign(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_key_in_obj(VMState *state) FAST_FN;
 static FnWrap vm_instr_key_in_obj(VMState *state) {
   KeyInObjInstr * __restrict__ key_in_obj_instr = (KeyInObjInstr*) state->instr;
   Object *obj = closest_obj(state, load_arg(state->frame, key_in_obj_instr->obj));
@@ -563,6 +577,7 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_string_key_in_obj(VMState *state) FAST_FN;
 static FnWrap vm_instr_string_key_in_obj(VMState *state) {
   StringKeyInObjInstr * __restrict__ skioi = (StringKeyInObjInstr*) state->instr;
   Object *obj = closest_obj(state, load_arg(state->frame, skioi->obj));
@@ -575,6 +590,7 @@ static FnWrap vm_instr_string_key_in_obj(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_identical(VMState *state) FAST_FN;
 static FnWrap vm_instr_identical(VMState *state) {
   IdenticalInstr * __restrict__ instr= (IdenticalInstr*) state->instr;
   Value arg1 = load_arg(state->frame, instr->obj1);
@@ -596,6 +612,7 @@ static FnWrap vm_instr_identical(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_instanceof(VMState *state) FAST_FN;
 static FnWrap vm_instr_instanceof(VMState *state) {
   InstanceofInstr * __restrict__ instr = (InstanceofInstr*) state->instr;
   
@@ -610,7 +627,7 @@ static FnWrap vm_instr_instanceof(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static FnWrap vm_instr_set_constraint(VMState *state) __attribute__ ((hot));
+static FnWrap vm_instr_set_constraint(VMState *state) FAST_FN;
 static FnWrap vm_instr_set_constraint(VMState *state) {
   SetConstraintInstr * __restrict__ set_constraint_instr = (SetConstraintInstr*) state->instr;
   Value val = load_arg(state->frame, set_constraint_instr->obj);
@@ -634,6 +651,7 @@ static FnWrap vm_instr_set_constraint(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_assign_string_key(VMState *state) FAST_FN;
 static FnWrap vm_instr_assign_string_key(VMState *state) {
   AssignStringKeyInstr * __restrict__ aski = (AssignStringKeyInstr*) state->instr;
   Value obj_val = load_arg(state->frame, aski->obj);
@@ -684,6 +702,7 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_set_constraint_string_key(VMState *state) FAST_FN;
 static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
   SetConstraintStringKeyInstr * __restrict__ scski = (SetConstraintStringKeyInstr*) state->instr;
   Value val = load_arg(state->frame, scski->obj);
@@ -704,7 +723,7 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
 
 #include "vm/optimize.h"
 
-static FnWrap vm_instr_call(VMState *state) __attribute__ ((hot));
+static FnWrap vm_instr_call(VMState *state) FAST_FN;
 static FnWrap vm_instr_call(VMState *state) {
   CallInstr * __restrict__ call_instr = (CallInstr*) state->instr;
   CallInfo *info = &call_instr->info;
@@ -712,7 +731,7 @@ static FnWrap vm_instr_call(VMState *state) {
   return call_internal(state, info, (Instr*) ((char*) call_instr + call_instr->size));
 }
 
-static FnWrap vm_instr_call_function_direct(VMState *state) __attribute__ ((hot));
+static FnWrap vm_instr_call_function_direct(VMState *state) FAST_FN;
 static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallFunctionDirectInstr * __restrict__ instr = (CallFunctionDirectInstr*) state->instr;
   CallInfo *info = &instr->info;
@@ -763,6 +782,7 @@ static FnWrap vm_instr_return(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_br(VMState *state) FAST_FN;
 static FnWrap vm_instr_br(VMState *state) {
   BranchInstr * __restrict__ br_instr = (BranchInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
@@ -774,6 +794,7 @@ static FnWrap vm_instr_br(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_test(VMState * __restrict__ state) FAST_FN;
 static FnWrap vm_instr_test(VMState * __restrict__ state) {
   TestInstr * __restrict__ test_instr = (TestInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
@@ -784,7 +805,7 @@ static FnWrap vm_instr_test(VMState * __restrict__ state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static FnWrap vm_instr_testbr(VMState * __restrict__ state) __attribute__ ((hot));
+static FnWrap vm_instr_testbr(VMState * __restrict__ state) FAST_FN;
 static FnWrap vm_instr_testbr(VMState * __restrict__ state) {
   TestBranchInstr * __restrict__ tbr_instr = (TestBranchInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
@@ -801,6 +822,7 @@ static FnWrap vm_instr_testbr(VMState * __restrict__ state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_phi(VMState *state) FAST_FN;
 static FnWrap vm_instr_phi(VMState *state) {
   PhiInstr * __restrict__ phi = (PhiInstr*) state->instr;
   if (state->frame->prev_block == phi->block1) {
@@ -814,6 +836,7 @@ static FnWrap vm_instr_phi(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_define_refslot(VMState *state) FAST_FN;
 static FnWrap vm_instr_define_refslot(VMState *state) {
   DefineRefslotInstr * __restrict__ dri = (DefineRefslotInstr*) state->instr;
   
@@ -832,6 +855,7 @@ static FnWrap vm_instr_define_refslot(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
+static FnWrap vm_instr_move(VMState *state) FAST_FN;
 static FnWrap vm_instr_move(VMState *state) {
   MoveInstr * __restrict__ mi = (MoveInstr*) state->instr;
   
@@ -841,7 +865,7 @@ static FnWrap vm_instr_move(VMState *state) {
   return (FnWrap) { state->instr->fn };
 }
 
-static FnWrap vm_instr_alloc_static_object(VMState *state) __attribute__ ((hot));
+static FnWrap vm_instr_alloc_static_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_static_object(VMState * __restrict__ state) {
   AllocStaticObjectInstr * __restrict__ asoi = (AllocStaticObjectInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
@@ -854,6 +878,8 @@ static FnWrap vm_instr_alloc_static_object(VMState * __restrict__ state) {
   Object *parent_obj = OBJ_OR_NULL(slots_ptr[parent_slot]);
   
   int tbl_num = asoi->tbl.entries_num;
+  int entries_stored = asoi->tbl.entries_stored;
+  
   Object * __restrict__ obj = alloc_object_internal(state, sizeof(Object) + sizeof(TableEntry) * tbl_num, asoi->alloc_stack);
   if (UNLIKELY(!obj)) return (FnWrap) { vm_halt }; // oom, possibly stack oom
   
@@ -868,7 +894,6 @@ static FnWrap vm_instr_alloc_static_object(VMState * __restrict__ state) {
   bzero(obj_entries_ptr, sizeof(TableEntry) * tbl_num);
   
   StaticFieldInfo * __restrict__ info = ASOI_INFO(asoi);
-  int entries_stored = asoi->tbl.entries_stored;
   for (int i = 0; i != entries_stored; i++, info++) {
     VM_ASSERT2_SLOT(info->slot < frame->slots_len, "slot numbering error");
     TableEntry * __restrict__ entry = (TableEntry*) ((char*) obj_entries_ptr + info->offset);
@@ -892,7 +917,7 @@ static FnWrap vm_instr_alloc_static_object(VMState * __restrict__ state) {
   );*/
   state->instr = (Instr*)((char*) asoi
                           + sizeof(AllocStaticObjectInstr)
-                          + sizeof(StaticFieldInfo) * asoi->tbl.entries_stored);
+                          + sizeof(StaticFieldInfo) * entries_stored);
   return (FnWrap) { state->instr->fn };
 }
 
