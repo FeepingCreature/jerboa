@@ -22,6 +22,9 @@ int main(int argc, char **argv) {
   VMState vmstate = {0};
   vmstate.runstate = VM_TERMINATED;
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
+  vmstate.shared->stack_data_len = 16*1024*1024;
+  vmstate.shared->stack_data_ptr = malloc(vmstate.shared->stack_data_len);
+  
   vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);
   Value rootval = OBJ2VAL(root);

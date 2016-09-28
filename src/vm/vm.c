@@ -9,12 +9,8 @@
 
 const long long sample_stepsize = 200000LL; // 0.2ms
 
-static void *vm_stack_alloc_internal(VMState *state, int size) {
-  VMSharedState *shared = state->shared;
-  if (UNLIKELY(shared->stack_data_len == 0)) {
-    shared->stack_data_len = 16*1024*1024;
-    shared->stack_data_ptr = malloc(shared->stack_data_len);
-  }
+static void *vm_stack_alloc_internal(VMState * __restrict__ state, int size) {
+  VMSharedState * __restrict__ shared = state->shared;
   int new_offset = shared->stack_data_offset + size;
   if (UNLIKELY(new_offset > shared->stack_data_len)) {
     vm_error(state, "VM stack overflow!");
