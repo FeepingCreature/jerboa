@@ -359,4 +359,18 @@ struct _Callframe {
 
 typedef void (*VMFunctionPointer)(VMState *state, CallInfo *info);
 
+static inline bool values_identical(Value arg1, Value arg2) {
+  if (arg1.type != arg2.type) return false;
+  else if (arg1.type == TYPE_NULL) return true;
+  else if (arg1.type == TYPE_OBJECT) {
+    return arg1.obj == arg2.obj;
+  } else if (arg1.type == TYPE_BOOL) {
+    return arg1.b == arg2.b;
+  } else if (arg1.type == TYPE_INT) {
+    return arg1.i == arg2.i;
+  } else if (arg1.type == TYPE_FLOAT) {
+    return arg1.f == arg2.f;
+  } else abort();
+}
+
 #endif

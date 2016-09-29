@@ -1068,7 +1068,64 @@ static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
   ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   gc_disable(state);
   xml_node_find_by_name_recurse(state, load_arg(state->frame, info->this_arg), name_obj->value, aobj);
-  array_resize(state, aobj, aobj->length, true);
+  array_resize(state, aobj, aobj->length, true); // set length
+  vm_return(state, info, OBJ2VAL((Object*)aobj));
+  gc_enable(state);
+}
+
+static bool values_identical_plus_str(VMState *state, Value v1, Value v2) {
+  if (LIKELY(IS_OBJ(v1) && IS_OBJ(v2))) {
+    Object *string_base = state->shared->vcache.string_base;
+    StringObject *str1 = (StringObject*) obj_instance_of(AS_OBJ(v1), string_base);
+    StringObject *str2 = (StringObject*) obj_instance_of(AS_OBJ(v2), string_base);
+    return strcmp(str1->value, str2->value) == 0;
+  }
+  return values_identical(v1, v2);
+}
+
+static void xml_node_find_by_attr_recurse(VMState *state, Value node, char *attr, Value value, ArrayObject *aobj)
+{
+  Object *array_base = state->shared->vcache.array_base;
+  Object *node_obj = closest_obj(state, node);
+  Value node_type = OBJECT_LOOKUP_STRING(node_obj, "nodeType", NULL);
+  VM_ASSERT(IS_INT(node_type), "invalid xml node");
+  if (AS_INT(node_type) == 3) return; // text
+  VM_ASSERT(AS_INT(node_type), "node is not element");
+  
+  Object *attr_obj = closest_obj(state, OBJECT_LOOKUP_STRING(node_obj, "attr", NULL));
+  VM_ASSERT(attr_obj, "attr property must not be null");
+  
+  bool entry_found = false;
+  Value attr_entry = OBJECT_LOOKUP_STRING(attr_obj, attr, &entry_found);
+  // TODO is handling the "=" overload necessary here? I think not?
+  if (entry_found && values_identical_plus_str(state, attr_entry, value)) {
+    array_resize(state, aobj, aobj->length + 1, false);
+    aobj->ptr[aobj->length - 1] = node;
+  }
+  
+  Value children = OBJECT_LOOKUP_STRING(node_obj, "children", NULL);
+  VM_ASSERT(NOT_NULL(children), "missing 'children' property in node");
+  ArrayObject *children_arr = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(children), array_base);
+  VM_ASSERT(children_arr, "'children' property in node is not an array");
+  for (int i = 0; i < children_arr->length; ++i) {
+    Value child = children_arr->ptr[i];
+    xml_node_find_by_attr_recurse(state, child, attr, value, aobj);
+    if (state->runstate == VM_ERRORED) return;
+  }
+}
+
+static void xml_node_find_by_attr_array_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  
+  StringObject *key_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
+  VM_ASSERT(key_obj, "first parameter to find_array_by_attr must be string!");
+  Value cmp_value = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
+  
+  ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
+  gc_disable(state);
+  xml_node_find_by_attr_recurse(state, load_arg(state->frame, info->this_arg), key_obj->value, cmp_value, aobj);
+  array_resize(state, aobj, aobj->length, true); // set length
   vm_return(state, info, OBJ2VAL((Object*)aobj));
   gc_enable(state);
 }
@@ -1557,6 +1614,7 @@ Object *create_root(VMState *state) {
   Object *node_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, node_obj, "find_array", make_fn(state, xml_node_find_array_fn));
   OBJECT_SET_STRING(state, node_obj, "find_array_by_name", make_fn(state, xml_node_find_by_name_array_fn));
+  OBJECT_SET_STRING(state, node_obj, "find_array_by_attr", make_fn(state, xml_node_find_by_attr_array_fn));
   OBJECT_SET_STRING(state, xml_obj, "node", OBJ2VAL(node_obj));
   
   Object *element_node_obj = AS_OBJ(make_object(state, node_obj, false));

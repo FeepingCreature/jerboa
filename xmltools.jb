@@ -121,10 +121,17 @@ xml.node["find"] = method(pred) {
   if (pred instanceof string) {
     // TODO full jquery-style predicate parsing
     var rest = pred.startsWith("#");
-    if (rest) pred = function(node) { return node.nodeType == 1 && "id" in node.attr && node.attr.id == rest; };
+    if (rest) return this.findByAttr("id", rest);
     else return this.findByName(pred);
   }
   var array = this.find_array(pred);
+  return new XmlResults {
+    array = array;
+    length = array.length;
+  };
+};
+xml.node["findByAttr"] = method(key, value) {
+  var array = this.find_array_by_attr(key, value);
   return new XmlResults {
     array = array;
     length = array.length;

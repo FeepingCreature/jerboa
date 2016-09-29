@@ -600,18 +600,7 @@ static FnWrap vm_instr_identical(VMState *state) {
   IdenticalInstr * __restrict__ instr= (IdenticalInstr*) state->instr;
   Value arg1 = load_arg(state->frame, instr->obj1);
   Value arg2 = load_arg(state->frame, instr->obj2);
-  bool res;
-  if (arg1.type != arg2.type) res = false;
-  else if (arg1.type == TYPE_NULL) res = true;
-  else if (arg1.type == TYPE_OBJECT) {
-    res = arg1.obj == arg2.obj;
-  } else if (arg1.type == TYPE_BOOL) {
-    res = arg1.b == arg2.b;
-  } else if (arg1.type == TYPE_INT) {
-    res = arg1.i == arg2.i;
-  } else if (arg1.type == TYPE_FLOAT) {
-    res = arg1.f == arg2.f;
-  } else abort();
+  bool res = values_identical(arg1, arg2);
   set_arg(state, instr->target, BOOL2VAL(res));
   state->instr = (Instr*)(instr + 1);
   return (FnWrap) { state->instr->fn };
