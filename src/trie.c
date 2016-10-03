@@ -175,7 +175,7 @@ TrieNode *trie_insert(TrieNode *target, const char *key_ptr, size_t key_len, con
   return trie_insert_node(target, new_leaf);
 }
 
-bool trie_lookup(TrieNode *node, const char *key_ptr, size_t key_len, const char **value_p) {
+bool trie_lookup(TrieNode * __restrict__ node, const char *key_ptr, size_t key_len, const char **value_p) {
   if (!node) return false;
   // printf(": '%.*s' against '%.*s'\n", (int) key_len, key_ptr, (int) node->key_len, node->key_ptr);
   if (node->key_len > key_len) return false;

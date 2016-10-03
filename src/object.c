@@ -319,7 +319,7 @@ void *alloc_object_internal(VMState *state, int size, bool stack) {
       __asm__("int $3");
     }*/
     state->shared->gcstate.last_obj_allocated = res;
-    state->shared->gcstate.num_obj_allocated ++;
+    state->shared->gcstate.bytes_allocated += size;
   }
   
 #if DEBUG_MEM

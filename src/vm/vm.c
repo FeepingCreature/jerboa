@@ -1060,12 +1060,12 @@ void vm_run(VMState *state) {
       state->runstate = VM_TERMINATED;
       break;
     }
-    if (state->shared->gcstate.num_obj_allocated > state->shared->gcstate.next_gc_run) {
-      // fprintf(stderr, "allocated %i, next_gc_run %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
+    if (state->shared->gcstate.bytes_allocated > state->shared->gcstate.next_gc_run) {
+      // fprintf(stderr, "allocated %i, next_gc_run %i\n", state->shared->gcstate.bytes_allocated, state->shared->gcstate.next_gc_run);
       gc_run(state);
       // run gc after 50% growth or 10000000 allocated or thereabouts
-      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.num_obj_allocated * 1.5) + (10000000/32); // don't even get out of bed for less than 10MB
-      // fprintf(stderr, "left over %i, set next to %i\n", state->shared->gcstate.num_obj_allocated, state->shared->gcstate.next_gc_run);
+      state->shared->gcstate.next_gc_run = (int) (state->shared->gcstate.bytes_allocated * 1.5) + 10000000; // don't even get out of bed for less than 10MB
+      // fprintf(stderr, "left over %i, set next to %i\n", state->shared->gcstate.bytes_allocated, state->shared->gcstate.next_gc_run);
     }
   }
 }

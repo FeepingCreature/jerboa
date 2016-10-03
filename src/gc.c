@@ -41,8 +41,8 @@ static void gc_sweep(VMState *state) {
     int flags = (*curp)->flags;
     if (!(flags & (OBJ_GC_MARK|OBJ_IMMORTAL))) {
       Object *prev = (*curp)->prev;
+      state->shared->gcstate.bytes_allocated -= (*curp)->size;
       obj_free(*curp);
-      state->shared->gcstate.num_obj_allocated --;
       *curp = prev; // update pointer
     } else {
       (*curp)->flags &= ~OBJ_GC_MARK; // remove flag for next run

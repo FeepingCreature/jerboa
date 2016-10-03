@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
   gc_run(&vmstate);
   
   if (vmstate.shared->verbose) {
-    fprintf(stderr, "(%i remaining objects)\n", vmstate.shared->gcstate.num_obj_allocated);
+    fprintf(stderr, "(%i bytes remaining)\n", vmstate.shared->gcstate.bytes_allocated);
   }
   
   return resvalue;

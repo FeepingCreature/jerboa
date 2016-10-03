@@ -11,4 +11,4 @@ OPTFLAGS="-O3 -ffast-math -march=native -flto -fwhole-program"
 # OPTFLAGS="-O3 -ffast-math -march=native -flto -fwhole-program -fno-omit-frame-pointer"
 # OPTFLAGS="-O2 -ffast-math -march=native -fno-omit-frame-pointer"
 # gcc $FLAGS $OPTFLAGS $@ -pedantic $SOURCES
-clang $FLAGS -Ofast $@ -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -pedantic $SOURCES
+clang $FLAGS -Ofast $@ -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -pedantic -fno-omit-frame-pointer $SOURCES

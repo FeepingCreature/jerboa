@@ -443,7 +443,7 @@ static void string_byte_len_fn(VMState *state, CallInfo *info) {
   Object *string_base = state->shared->vcache.string_base;
   
   Object *sobj = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
-  VM_ASSERT(sobj, "internal error: string.endsWith() called on wrong type of object");
+  VM_ASSERT(sobj, "internal error: string.byte_len() called on wrong type of object");
   
   char *str = ((StringObject*) sobj)->value;
   vm_return(state, info, INT2VAL(strlen(str)));

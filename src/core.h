@@ -256,7 +256,7 @@ typedef struct {
   GCRootSet *tail;
   
   Object *last_obj_allocated;
-  int num_obj_allocated, next_gc_run;
+  int bytes_allocated, next_gc_run;
 #if COUNT_OBJECTS
   int num_obj_allocated_total;
 #endif

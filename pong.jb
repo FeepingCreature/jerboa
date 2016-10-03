@@ -58,8 +58,8 @@ function winRound(side) {
 }
 
 var area = scene.append('<list id="play-area" width="620" height="440" left="10" top="30"></list>');
-var paddleLeft = area.append('<square id="paddle" width="10" height="40" left="50" top="50" tex="bumper.png"></square>');
-var paddleRight = area.append('<square id="paddle" width="10" height="40" right="50" top="50" tex="bumper.png"></square>');
+var paddleLeft = area.append('<square id="paddle" width="10" height="40" left="50" top="50" tex="bumper.png"/>');
+var paddleRight = area.append('<square id="paddle" width="10" height="40" right="50" top="50" tex="bumper.png"/>');
 area.append('<rect width="100%" height="100%"/>');
 
 area.append('<rect id="goal-left" width="10px" height="100%" left="-5px" visibility="hidden"></rect>')
@@ -74,7 +74,7 @@ area.append('<rect id="goal-right" width="10px" height="100%" right="-5px" visib
 
 scene.append('<center><margin size="5" id="score"/></center>');
 
-scene.append('<square id="ball" width="10" height="10"></square>');
+scene.append('<square id="ball" width="10" height="10"/>');
 
 score.set(0, 0);
 resetGame();

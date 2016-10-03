@@ -2253,7 +2253,9 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     return uf;
   }
   if (uf->num_optimized == 5) {
+    // vm_print_backtrace(state);
     fprintf(stderr, "function optimized too many times.\n");
+    // __asm__("int $3");
   }
   uf->num_optimized ++;
   

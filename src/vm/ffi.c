@@ -589,7 +589,8 @@ static void ffi_call_fn_special_d_d(VMState *state, CallInfo *info) {
   vm_return(state, info, FLOAT2VAL((float) *(double*) ret_ptr));
 }
 
-static void ffi_call_fn_special_fx_v(VMState *state, CallInfo *info) {
+static void ffi_call_fn_special_fx_v(VMState * __restrict__ state, CallInfo * __restrict__ info) __attribute__ ((hot));
+static void ffi_call_fn_special_fx_v(VMState * __restrict__ state, CallInfo * __restrict__ info) {
   Object *pointer_base = state->shared->vcache.pointer_base; (void) pointer_base;
   Object *function_base = state->shared->vcache.function_base;
   
