@@ -8,7 +8,7 @@ print(obj);
 obj["toString"] = function() { return "toString test"; };
 print(obj);
 const obj2 = {};
-freeze(obj2);
+Object.freeze(obj2);
 print(obj2);
 var meth = method() { print(this); };
 meth();

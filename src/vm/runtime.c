@@ -1653,7 +1653,6 @@ Object *create_root(VMState *state) {
   setup_default_searchpath(state, root);
   
   OBJECT_SET_STRING(state, root, "require", make_fn(state, require_fn));
-  OBJECT_SET_STRING(state, root, "freeze", make_fn(state, freeze_fn));
   OBJECT_SET_STRING(state, root, "_mark_const", make_fn(state, mark_const_fn));
   OBJECT_SET_STRING(state, root, "assert", make_fn(state, assert_fn));
   
@@ -1674,8 +1673,9 @@ Object *create_root(VMState *state) {
   Object *obj_tools = AS_OBJ(make_object(state, NULL, false));
   obj_tools->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, obj_tools, "keys", make_fn(state, obj_keys_fn));
+  OBJECT_SET_STRING(state, obj_tools, "freeze", make_fn(state, freeze_fn));
   
-  OBJECT_SET_STRING(state, root, "object", OBJ2VAL(obj_tools));
+  OBJECT_SET_STRING(state, root, "Object", OBJ2VAL(obj_tools));
   
   ffi_setup_root(state, root);
   

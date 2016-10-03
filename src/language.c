@@ -880,7 +880,7 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
  * 1: &&
  * 2: == != < > <= >=
  * 3: + -
- * 4: * /
+ * 4: * / %
  * 5: |
  * 6: &
  * 7: in, is, instanceof
