@@ -1233,10 +1233,23 @@ static void require_fn(VMState *state, CallInfo *info) {
 
 static void freeze_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  VM_ASSERT(NOT_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), "can't freeze null");
-  VM_ASSERT(IS_OBJ(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), "can't freeze primitive (implicitly frozen!)");
-  Object *obj = AS_OBJ(load_arg(state->frame, INFO_ARGS_PTR(info)[0]));
-  obj->flags |= OBJ_FROZEN;
+  Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
+  VM_ASSERT(NOT_NULL(arg), "can't freeze null");
+  if (IS_OBJ(arg)) { // else implicitly frozen - no-op
+    Object *obj = AS_OBJ(arg);
+    obj->flags |= OBJ_FROZEN;
+  }
+  vm_return(state, info, VNULL);
+}
+
+static void close_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
+  VM_ASSERT(NOT_NULL(arg), "can't close null");
+  if (IS_OBJ(arg)) { // else implicitly closed - no-op
+    Object *obj = AS_OBJ(arg);
+    obj->flags |= OBJ_CLOSED;
+  }
   vm_return(state, info, VNULL);
 }
 
@@ -1674,6 +1687,7 @@ Object *create_root(VMState *state) {
   obj_tools->flags |= OBJ_NOINHERIT;
   OBJECT_SET_STRING(state, obj_tools, "keys", make_fn(state, obj_keys_fn));
   OBJECT_SET_STRING(state, obj_tools, "freeze", make_fn(state, freeze_fn));
+  OBJECT_SET_STRING(state, obj_tools, "close", make_fn(state, close_fn));
   
   OBJECT_SET_STRING(state, root, "Object", OBJ2VAL(obj_tools));
   
