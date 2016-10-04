@@ -1482,6 +1482,18 @@ void setup_default_searchpath(VMState *state, Object *root) {
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, cwd);
   
+  char *readlink_buf = malloc(1024);
+  int rl_res = readlink("/proc/self/exe", readlink_buf, 1023);
+  if (rl_res == -1) {
+    fprintf(stderr, "cannot determine path of executable: %s\n", strerror(errno));
+    abort();
+  }
+  readlink_buf[rl_res] = 0;
+  
+  char *share_dir = dir_sub(readlink_buf, "../share/jerboa");
+  paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
+  paths_ptr[paths_len - 1] = make_string_static(state, share_dir);
+  
   char *xdg_home = getenv("XDG_DATA_HOME");
   if (xdg_home) xdg_home = dir_sub(xdg_home, "jerboa");
   else {
