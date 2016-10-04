@@ -19,6 +19,9 @@ typedef struct {
   int key;
   RefMode mode;
   FileRange *range;
+  // some expressions such as variable definitions create accesses as side effect
+  // those are
+  bool safe_to_discard;
 } RefValue;
 
 static ParseResult parse_function_expr(char **textp, UserFunction **uf);
@@ -80,10 +83,12 @@ static void end_lex_scope(FunctionBuilder *builder, int backup) {
  - assign closure to "foo"
 */
 
-static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv);
+static ParseResult parse_expr(char **textp, FunctionBuilder *builder, RefValue *rv);
+static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int level, RefValue *rv);
 static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefValue *rv);
 static ParseResult parse_expr_continuation(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range);
 static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder, RefValue *rv, FileRange *expr_range);
+static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, FileRange *var_range, bool isconst, RefValue *var_value);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
   if (!builder) return (RefValue) {0, 0, REFMODE_VARIABLE, NULL};
@@ -125,7 +130,7 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     
     RefValue value;
     if (eat_string(&text, "=")) {
-      ParseResult res = parse_expr(&text, builder, 0, &value);
+      ParseResult res = parse_expr(&text, builder, &value);
       if (res == PARSE_ERROR) return res;
       assert(res == PARSE_OK);
     } else {
@@ -182,7 +187,7 @@ static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *build
   RefValue *values_ptr = NULL; int values_len = 0;
   while (!eat_string(&text, "]")) {
     RefValue value;
-    ParseResult res = parse_expr(&text, builder, 0, &value);
+    ParseResult res = parse_expr(&text, builder, &value);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
@@ -303,7 +308,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   if (eat_string(&text, "(")) {
     free(range);
     
-    res = parse_expr(&text, builder, 0, rv);
+    res = parse_expr(&text, builder, rv);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
@@ -345,7 +350,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     record_end(text, range);
     
     RefValue parent_var;
-    ParseResult res = parse_expr(&text, builder, 0, &parent_var);
+    ParseResult res = parse_expr(&text, builder, &parent_var);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
@@ -399,7 +404,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
       return PARSE_ERROR;
     }
     RefValue arg;
-    ParseResult res = parse_expr(&text, builder, 0, &arg);
+    ParseResult res = parse_expr(&text, builder, &arg);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
@@ -488,7 +493,7 @@ static ParseResult parse_array_access(char **textp, FunctionBuilder *builder, Re
   }
   
   RefValue key;
-  ParseResult res = parse_expr(&text, builder, 0, &key);
+  ParseResult res = parse_expr(&text, builder, &key);
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
   
@@ -626,7 +631,7 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
   }
   
   RefValue key;
-  ParseResult res = parse_expr(&text, builder, 0, &key);
+  ParseResult res = parse_expr(&text, builder, &key);
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
   
@@ -885,7 +890,7 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
  * 6: &
  * 7: in, is, instanceof
  */
-static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level, RefValue *rv) {
+static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int level, RefValue *rv) {
   char *text = *textp;
   
   ParseResult res = parse_expr_base(&text, builder, rv);
@@ -908,7 +913,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_keyword(&text2, "instanceof")) {
       text = text2;
       record_end(text, range);
-      res = parse_expr(&text, builder, 7, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 7, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       
@@ -926,7 +931,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_keyword(&text2, "in")) {
       text = text2;
       record_end(text, range);
-      res = parse_expr(&text, builder, 7, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 7, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       int key_slot = ref_access(builder, *rv);
@@ -942,7 +947,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     if (eat_keyword(&text2, "is")) {
       text = text2;
       record_end(text, range);
-      res = parse_expr(&text, builder, 7, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 7, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       int obj1_slot = ref_access(builder, *rv);
@@ -966,7 +971,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     char *text2 = text;
     if (!eat_string(&text2, "&&") && eat_string(&text, "&")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 7, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 7, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "&", rv, *rv, rhs_expr, range);
       continue;
@@ -982,7 +987,7 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     char *text2 = text;
     if (!eat_string(&text2, "||") && eat_string(&text, "|")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 6, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 6, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "|", rv, *rv, rhs_expr, range);
       continue;
@@ -997,21 +1002,21 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     FileRange *range = alloc_and_record_start(text);
     if (eat_string(&text, "*")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 5, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 5, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "*", rv, *rv, rhs_expr, range);
       continue;
     }
     if (eat_string(&text, "/")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 5, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 5, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "/", rv, *rv, rhs_expr, range);
       continue;
     }
     if (eat_string(&text, "%")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 5, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 5, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "%", rv, *rv, rhs_expr, range);
       continue;
@@ -1026,14 +1031,14 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     FileRange *range = alloc_and_record_start(text);
     if (eat_string(&text, "+")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 4, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 4, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "+", rv, *rv, rhs_expr, range);
       continue;
     }
     if (eat_string(&text, "-")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 4, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 4, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "-", rv, *rv, rhs_expr, range);
       continue;
@@ -1049,12 +1054,12 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   FileRange *range = alloc_and_record_start(text);
   if (eat_string(&text, "==")) {
     record_end(text, range);
-    res = parse_expr(&text, builder, 3, &rhs_expr);
+    res = parse_expr_oper(&text, builder, 3, &rhs_expr);
     if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
     build_op(builder, "==", rv, *rv, rhs_expr, range);
   } else if (eat_string(&text, "!=")) {
     record_end(text, range);
-    res = parse_expr(&text, builder, 3, &rhs_expr);
+    res = parse_expr_oper(&text, builder, 3, &rhs_expr);
     if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
     build_op(builder, "==", rv, *rv, rhs_expr, range);
     negate_expr = true;
@@ -1064,22 +1069,22 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
     }
     if (eat_string(&text, "<=")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 3, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "<=", rv, *rv, rhs_expr, range);
     } else if (eat_string(&text, ">=")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 3, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, ">=", rv, *rv, rhs_expr, range);
     } else if (eat_string(&text, "<")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 3, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, "<", rv, *rv, rhs_expr, range);
     } else if (eat_string(&text, ">")) {
       record_end(text, range);
-      res = parse_expr(&text, builder, 3, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 3, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR; assert(res == PARSE_OK);
       build_op(builder, ">", rv, *rv, rhs_expr, range);
     } else if (negate_expr) {
@@ -1124,13 +1129,13 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
         set_int_var(builder, lhs_br_true, rhs_blk);
         use_range_end(builder, range);
       }
-      res = parse_expr(&text, builder, 2, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 2, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       if (builder) {
         int rhs_slot = ref_access(builder, rhs_expr);
         use_range_start(builder, range);
-        rhs_blk = get_block(builder); // update because parse_expr
+        rhs_blk = get_block(builder); // update because parse_expr_oper
         int rhs_br;
         addinstr_branch(builder, &rhs_br);
         
@@ -1182,13 +1187,13 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
         set_int_var(builder, lhs_br_false, rhs_blk);
         use_range_end(builder, range);
       }
-      res = parse_expr(&text, builder, 1, &rhs_expr);
+      res = parse_expr_oper(&text, builder, 1, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       if (builder) {
         int rhs_slot = ref_access(builder, rhs_expr);
         use_range_start(builder, range);
-        rhs_blk = get_block(builder); // parse_expr may have changed block
+        rhs_blk = get_block(builder); // parse_expr_oper may have changed block
         int rhs_br;
         addinstr_branch(builder, &rhs_br);
         
@@ -1213,6 +1218,25 @@ static ParseResult parse_expr(char **textp, FunctionBuilder *builder, int level,
   return PARSE_OK;
 }
 
+static ParseResult parse_expr(char **textp, FunctionBuilder *builder, RefValue *rv) {
+  char *text = *textp;
+  FileRange *keyword_range = alloc_and_record_start(text);
+  if (eat_string(&text, "var")) {
+    record_end(text, keyword_range);
+    ParseResult res = parse_vardecl_expr(&text, builder, keyword_range, false, rv);
+    if (res == PARSE_OK) { *textp = text; }
+    return res;
+  }
+  if (eat_string(&text, "const")) {
+    record_end(text, keyword_range);
+    ParseResult res = parse_vardecl_expr(&text, builder, keyword_range, true, rv);
+    if (res == PARSE_OK) { *textp = text; }
+    return res;
+  }
+  free(keyword_range);
+  return parse_expr_oper(textp, builder, 0, rv);
+}
+
 static ParseResult parse_block(char **textp, FunctionBuilder *builder, bool force_brackets);
 
 static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *keywd_range) {
@@ -1221,8 +1245,9 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
     log_parser_error(text, "if expected opening paren");
     return PARSE_ERROR;
   }
+  int if_scope = begin_lex_scope(builder);
   RefValue test_expr;
-  ParseResult res = parse_expr(&text, builder, 0, &test_expr);
+  ParseResult res = parse_expr(&text, builder, &test_expr);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   int testslot = ref_access(builder, test_expr);
@@ -1263,6 +1288,7 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
   } else {
     set_int_var(builder, end_blk, false_blk_idx);
   }
+  end_lex_scope(builder, if_scope);
   *textp = text;
   return PARSE_OK;
 }
@@ -1285,8 +1311,9 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, char *loo
   
   int branch_test_loop, branch_test_end;
   
+  int while_scope = begin_lex_scope(builder);
   RefValue test_expr;
-  ParseResult res = parse_expr(&text, builder, 0, &test_expr);
+  ParseResult res = parse_expr(&text, builder, &test_expr);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
@@ -1317,11 +1344,13 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, char *loo
   
   close_loop(builder, loop_record, end_blk, test_blk);
   
+  end_lex_scope(builder, while_scope);
+  
   *textp = text;
   return PARSE_OK;
 }
 
-static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRange *var_range, bool isconst) {
+static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, FileRange *var_range, bool isconst, RefValue *var_value) {
   char *text = *textp;
   
   FileRange *alloc_var_name = alloc_and_record_start(text);
@@ -1375,7 +1404,7 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     RefValue rv;
     
     FileRange *calc_init_expr = alloc_and_record_start(text);
-    ParseResult res = parse_expr(&text, builder, 0, &rv);
+    ParseResult res = parse_expr(&text, builder, &rv);
     record_end(text, calc_init_expr);
     
     if (res == PARSE_ERROR) return res;
@@ -1400,10 +1429,14 @@ static ParseResult parse_vardecl(char **textp, FunctionBuilder *builder, FileRan
     use_range_end(builder, assign_value);
   }
   
+  if (builder) {
+    if (var_value) *var_value = (RefValue) {var_scope, varname_slot, REFMODE_VARIABLE, alloc_var_name, .safe_to_discard = true};
+  }
+  
   // var a, b;
   if (eat_string(&text, ",")) {
     *textp = text;
-    return parse_vardecl(textp, builder, var_range, isconst);
+    return parse_vardecl_expr(textp, builder, var_range, isconst, var_value);
   }
   
   *textp = text;
@@ -1434,7 +1467,7 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
   record_end(text, assign_range);
   
   RefValue value_expr;
-  res = parse_expr(&text, builder, 0, &value_expr);
+  res = parse_expr(&text, builder, &value_expr);
   if (res == PARSE_ERROR) {
     free(assign_range);
     return res;
@@ -1475,7 +1508,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_
   FileRange *decl_range = alloc_and_record_start(text);
   if (eat_keyword(&text, "var")) {
     record_end(text, decl_range);
-    ParseResult res = parse_vardecl(&text, builder, decl_range, false);
+    ParseResult res = parse_vardecl_expr(&text, builder, decl_range, false, NULL);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
   } else {
@@ -1502,7 +1535,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_
   int loop_blk, branch_test_end;
   
   RefValue test_expr;
-  ParseResult res = parse_expr(&text, builder, 0, &test_expr);
+  ParseResult res = parse_expr(&text, builder, &test_expr);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
@@ -1575,7 +1608,7 @@ static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRang
   if (eat_string(&text2, ";")) {
     value = 0; // null slot
   } else {
-    ParseResult res = parse_expr(textp, builder, 0, &ret_value);
+    ParseResult res = parse_expr(textp, builder, &ret_value);
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
@@ -1636,14 +1669,6 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
     record_end(text, keyword_range);
     res = parse_return(&text, builder, keyword_range);
   }
-  else if (eat_keyword(&text, "var")) {
-    record_end(text, keyword_range);
-    res = parse_vardecl(&text, builder, keyword_range, false);
-  }
-  else if (eat_keyword(&text, "const")) {
-    record_end(text, keyword_range);
-    res = parse_vardecl(&text, builder, keyword_range, true);
-  }
   else if (eat_keyword(&text, "continue")) {
     record_end(text, keyword_range);
     res = parse_contbrk(&text, builder, keyword_range, false);
@@ -1657,13 +1682,13 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
     if (res == PARSE_NONE) {
       // expr as statement
       RefValue rv;
-      res = parse_expr_base(&text, builder, &rv);
+      res = parse_expr(&text, builder, &rv);
       if (res == PARSE_NONE) {
         return PARSE_NONE;
       }
       char *text2 = text;
       if (eat_string(&text2, ";")) { // otherwise it was just a syntax error after all
-        if (rv.key != -1) {
+        if (rv.key != -1 && !rv.safe_to_discard) {
           log_parser_error(text, "property access discarded without effect");
           return PARSE_ERROR;
         }

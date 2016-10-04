@@ -1,0 +1,2 @@
+if (var a = 5) assert(a == 5);
+assert(a == 5); // must fail

@@ -1,0 +1,2 @@
+while (var i = 5) { assert(i == 5); break; }
+assert(i == 5); // must fail
