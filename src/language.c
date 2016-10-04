@@ -1427,10 +1427,10 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
     use_range_start(builder, assign_value);
     if (isconst) addinstr_freeze_object(builder, var_scope);
     use_range_end(builder, assign_value);
-  }
-  
-  if (builder) {
+    
     if (var_value) *var_value = (RefValue) {var_scope, varname_slot, REFMODE_VARIABLE, alloc_var_name, .safe_to_discard = true};
+  } else {
+    if (var_value) *var_value = (RefValue) {0, 0, REFMODE_VARIABLE, 0, .safe_to_discard = true};
   }
   
   // var a, b;
