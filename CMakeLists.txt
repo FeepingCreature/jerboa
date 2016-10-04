@@ -22,6 +22,16 @@ target_link_libraries (jerboa dl ffi icuuc xml2 m)
 target_link_libraries (repl dl ffi icuuc xml2 m)
 install(TARGETS jerboa RUNTIME DESTINATION bin)
 install(TARGETS repl RUNTIME DESTINATION bin)
+install(DIRECTORY c DESTINATION share/jerboa)
+install(FILES game.jb geom.jb minheap.jb sched.jb sound.jb swig_xml_to_c.jb xmltools.jb
+  DESTINATION share/jerboa)
 
 enable_testing()
 add_subdirectory( tests )
+
+# CPack
+include (InstallRequiredSystemLibraries)
+set (CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set (CPACK_PACKAGE_VERSION_MAJOR "0")
+set (CPACK_PACKAGE_VERSION_MINOR "1")
+include (CPack)
