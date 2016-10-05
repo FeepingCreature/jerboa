@@ -1221,13 +1221,13 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
 static ParseResult parse_expr(char **textp, FunctionBuilder *builder, RefValue *rv) {
   char *text = *textp;
   FileRange *keyword_range = alloc_and_record_start(text);
-  if (eat_string(&text, "var")) {
+  if (eat_keyword(&text, "var")) {
     record_end(text, keyword_range);
     ParseResult res = parse_vardecl_expr(&text, builder, keyword_range, false, rv);
     if (res == PARSE_OK) { *textp = text; }
     return res;
   }
-  if (eat_string(&text, "const")) {
+  if (eat_keyword(&text, "const")) {
     record_end(text, keyword_range);
     ParseResult res = parse_vardecl_expr(&text, builder, keyword_range, true, rv);
     if (res == PARSE_OK) { *textp = text; }

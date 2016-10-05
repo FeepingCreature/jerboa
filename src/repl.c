@@ -52,6 +52,7 @@ int main(int argc, char **argv) {
     Value rootval;
     null_call.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &rootval };
     call_function(&vmstate, root, line_fn, &null_call);
+    vm_update_frame(&vmstate);
     vm_run(&vmstate);
     if (vmstate.runstate == VM_ERRORED) {
       fprintf(stderr, "vm errored: %s\n", vmstate.error);
