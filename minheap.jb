@@ -1,0 +1,67 @@
+const MinHeap = {
+  keys = [];
+  values = [];
+  create = method() { return new MinHeap { keys = []; values = []; }; };
+  insert = method(k, v) {
+    this.keys.push(k);
+    this.values.push(v);
+    this.bubbleUp(this.values.length - 1);
+  };
+  empty = method() {
+    return !this.keys.length;
+  };
+  peek_key = method() {
+    assert(this.keys.length);
+    return this.keys[0];
+  };
+  take = method() {
+    assert(this.keys.length);
+    var res = { key = this.keys[0]; value = this.values[0]; };
+    if (this.keys.length > 1) {
+      this.keys[0] = this.keys.pop();
+      this.values[0] = this.values.pop();
+    } else {
+      // last entry
+      this.keys.pop();
+      this.values.pop();
+    }
+    this.bubbleDown(0);
+    return res;
+  };
+  bubbleUp = method(n) {
+    if (n == 0) return; // root
+    var parent = (n - 1) / 2;
+    var key = this.keys[n];
+    var par_key = this.keys[parent];
+    if (key >= par_key) return; // correct order
+    // swap
+    var temp = this.values[n];
+    this.values[n] = this.values[parent];
+    this.values[parent] = temp;
+    this.keys[n] = par_key;
+    this.keys[parent] = key;
+    this.bubbleUp(parent); // and recurse
+  };
+  bubbleDown = method(n) {
+    var child0 = n * 2 + 1;
+    var child1 = n * 2 + 2;
+    if (child0 >= this.keys.length) return; // bottomed
+    var child = null;
+    if (child1 >= this.keys.length) child = child0; // only child
+    else {
+      var k0 = this.keys[child0];
+      var k1 = this.keys[child1];
+      if (k0 < k1) child = child0;
+      else child = child1;
+    }
+    // swap
+    var k_temp = this.keys[n];
+    var v_temp = this.values[n];
+    this.keys[n] = this.keys[child];
+    this.values[n] = this.values[child];
+    this.keys[child] = k_temp;
+    this.values[child] = v_temp;
+    // and recurse
+    this.bubbleDown(child);
+  };
+};
