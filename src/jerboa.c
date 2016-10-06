@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
   
   Value retval;
   
-  CallInfo info = {0};
+  CallInfo info = {{0}};
   info.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &retval };
   call_function(&vmstate, root, module, &info);
   vm_update_frame(&vmstate);

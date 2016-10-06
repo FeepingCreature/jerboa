@@ -1,5 +1,7 @@
 #include "vm/builder.h"
 
+#include "win32_compat.h"
+
 #include "core.h"
 #include "util.h"
 #include "parser.h"

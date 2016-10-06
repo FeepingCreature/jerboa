@@ -6,6 +6,8 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#include "win32_compat.h"
+
 // core definitions (factored out because they're all super circular)
 
 // **IMPORTANT**
@@ -290,7 +292,11 @@ typedef struct {
 struct _FnWrap;
 typedef struct _FnWrap FnWrap;
 
+#ifdef _WIN32
+#define FAST_DECL
+#else
 #define FAST_DECL __attribute__ ((regparm (3)))
+#endif
 #define FAST_FN __attribute__ ((hot)) FAST_DECL
 
 typedef FnWrap (*VMInstrFn)(VMState *state) FAST_DECL;

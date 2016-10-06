@@ -74,7 +74,7 @@ iconv -f ISO-8859-15 -t UTF-8 swig.xml > swig.2.xml
 echo "-- Running XML -> C"
 ./swig_xml_to_c.jb swig.2.xml "$LIB_FILE" ${swigargs[@]}
 echo "-- Building C"
-gcc swig_c_gen.c -o swig_c_gen $@
+gcc $CFLAGS swig_c_gen.c -o swig_c_gen $@
 echo "-- Running C -> Jb"
 ./swig_c_gen > "$JB_FILE"
 echo "-- Done."

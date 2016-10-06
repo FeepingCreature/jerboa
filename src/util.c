@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include "win32_compat.h"
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
@@ -180,7 +182,7 @@ long long get_clock_and_difference(struct timespec *target_clock, struct timespe
   return (long long) s_diff * 1000000000LL + (long long) ns_diff;
 }
 
-char *my_asprintf(char *fmt, ...) {
+char *my_asprintf(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   int len = vsnprintf(NULL, 0, fmt, ap);
@@ -189,5 +191,51 @@ char *my_asprintf(char *fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(res, len + 1, fmt, ap);
   va_end(ap);
+  return res;
+}
+
+char *my_vasprintf(const char *fmt, va_list ap) {
+  int len = vsnprintf(NULL, 0, fmt, ap);
+  char *res = malloc(len + 1);
+  vsnprintf(res, len + 1, fmt, ap);
+  return res;
+}
+
+typedef struct {
+  void **lib_ptr;
+  int lib_len;
+  const char *error;
+} LibraryList;
+
+void *my_dlopen(int files_len, const char **files_ptr) {
+  LibraryList *list = malloc(sizeof(LibraryList));
+  list->lib_len = files_len;
+  list->lib_ptr = malloc(sizeof(void*) * files_len);
+  list->error = NULL;
+  for (int i = 0; i < files_len; i++) {
+    list->lib_ptr[i] = dlopen(files_ptr[i], RTLD_LAZY);
+    if (!list->lib_ptr[i]) {
+      fprintf(stderr, "dlopen failed: %s\n", dlerror());
+      abort();
+    }
+  }
+  return list;
+}
+
+void *my_dlsym(void *ptr, const char *symbol) {
+  LibraryList *list = (LibraryList*) ptr;
+  for (int i = 0; i < list->lib_len; i++) {
+    void *sym = dlsym(list->lib_ptr[i], symbol);
+    // fprintf(stderr, "dlsym %i try load %s => %p\n", i, symbol, sym);
+    if (sym) return sym;
+  }
+  list->error = my_asprintf("Symbol %s not found.", symbol);
+  return NULL;
+}
+
+const char *my_dlerror(void *ptr) {
+  LibraryList *list = (LibraryList*) ptr;
+  const char *res = list->error;
+  list->error = NULL;
   return res;
 }

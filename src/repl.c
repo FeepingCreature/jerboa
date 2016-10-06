@@ -16,6 +16,10 @@
 #include "language.h"
 #include "util.h"
 
+#ifdef _WIN32
+#include <readline/readline.h>
+#endif
+
 int main(int argc, char **argv) {
   init_instr_fn_table();
   
@@ -37,12 +41,16 @@ int main(int argc, char **argv) {
   if (!isatty(1)) { fprintf(stderr, "repl must be running in a terminal!\n"); return 1; }
   while (true) {
     char *line = NULL;
+#ifdef _WIN32
+    line = readline("> ");
+#else
     size_t length = 0;
     printf("> ");
     if (getline(&line, &length, stdin) == -1) {
       fprintf(stderr, "error reading line: %s\n", strerror(errno));
       abort();
     }
+#endif
     UserFunction *line_fn;
     ParseResult res = parse_module(&line, &line_fn);
     if (res == PARSE_ERROR) continue;

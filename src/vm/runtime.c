@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <unistd.h>
 
+#include "win32_compat.h"
+
 #include "vm/call.h"
 #include "vm/ffi.h"
 #include "gc.h"
@@ -798,6 +800,20 @@ static void file_print_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, VNULL);
 }
 
+static void file_exists_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
+  Object *string_base = state->shared->vcache.string_base;
+  assert(file_base);
+  
+  VM_ASSERT(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)) == file_base, "exists() called on object other than file!");
+  StringObject *fnobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
+  VM_ASSERT(fnobj, "first parameter to file.exists() must be string!");
+  
+  bool validfile = access(fnobj->value, F_OK) != -1;
+  vm_return(state, info, BOOL2VAL(validfile));
+}
+
 static void file_open_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
@@ -1201,7 +1217,7 @@ static void require_fn(VMState *state, CallInfo *info) {
   
   Value resval;
   
-  CallInfo info2 = {0};
+  CallInfo info2 = {{0}};
   info2.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &resval };
   call_function(&substate, root, module, &info2);
   vm_update_frame(&substate);
@@ -1482,6 +1498,8 @@ void setup_default_searchpath(VMState *state, Object *root) {
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, cwd);
   
+  // TODO win32 version
+#ifndef _WIN32
   char *readlink_buf = malloc(1024);
   int rl_res = readlink("/proc/self/exe", readlink_buf, 1023);
   if (rl_res == -1) {
@@ -1493,6 +1511,7 @@ void setup_default_searchpath(VMState *state, Object *root) {
   char *share_dir = dir_sub(readlink_buf, "../share/jerboa");
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, share_dir);
+#endif
   
   char *xdg_home = getenv("XDG_DATA_HOME");
   if (xdg_home) xdg_home = dir_sub(xdg_home, "jerboa");
@@ -1660,6 +1679,7 @@ Object *create_root(VMState *state) {
   Object *file_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET_STRING(state, file_obj, "_handle", VNULL);
   OBJECT_SET_STRING(state, file_obj, "print", make_fn(state, file_print_fn));
+  OBJECT_SET_STRING(state, file_obj, "exists", make_fn(state, file_exists_fn));
   OBJECT_SET_STRING(state, file_obj, "open", make_fn(state, file_open_fn));
   OBJECT_SET_STRING(state, file_obj, "close", make_fn(state, file_close_fn));
   file_obj->flags |= OBJ_FROZEN;

@@ -1,8 +1,11 @@
 #ifndef JERBOA_UTIL_H
 #define JERBOA_UTIL_H
 
+#include "win32_compat.h"
+
 #include <time.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 typedef struct {
   char *start, *end;
@@ -31,6 +34,15 @@ bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_
 
 long long get_clock_and_difference(struct timespec *target_clock, struct timespec *compare_clock);
 
-char *my_asprintf(char *fmt, ...);
+char *my_asprintf(const char *fmt, ...);
+
+char *my_vasprintf(const char *fmt, va_list ap);
+
+// open multiple libraries "at once"
+void *my_dlopen(int files_len, const char **files_ptr);
+
+void *my_dlsym(void *ptr, const char *symbol);
+
+const char *my_dlerror(void *ptr);
 
 #endif

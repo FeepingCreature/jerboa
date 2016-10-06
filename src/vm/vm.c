@@ -71,7 +71,7 @@ void vm_error(VMState *state, const char *fmt, ...) {
   char *errorstr;
   va_list ap;
   va_start(ap, fmt);
-  if (-1 == vasprintf(&errorstr, fmt, ap)) abort();
+  errorstr = my_vasprintf(fmt, ap);
   va_end(ap);
   state->runstate = VM_ERRORED;
   state->error = errorstr;

@@ -253,7 +253,7 @@ for (var i = 0; i < structs.length; i++) {
       cfile.print("    ", struct_decl, " ", "var;");
       cfile.print("    printf(\"const ", short_name(structname), " = new ffi.struct {\\n\");");
       cfile.print("    printf(\"  pointer = null;\\n\");");
-      cfile.print("    printf(\"  sizeof = %lu;\\n\", sizeof(var));");
+      cfile.print("    printf(\"  sizeof = %u;\\n\", (unsigned) sizeof(var));");
       cfile.print("    printf(\"  \\\"[]\\\" = method(key) {\\n\");");
       var ffi_members = [];
       var assign_fns = {};
@@ -272,11 +272,11 @@ for (var i = 0; i < structs.length; i++) {
           if (ffi_type != "null") {
             ffi_members.push(ffi_type);
             // print(ffi_type, " ", structname, " . ", name, "?");
-            cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", ffi_type, ", %li);\\n\",");
-            cfile.print("           (char*)&var.", name, " - (char*)&var);");
+            cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") return this.pointer.dereference(", ffi_type, ", %i);\\n\",");
+            cfile.print("           (int) ((char*)&var.", name, " - (char*)&var));");
             assign_fns[name] = function() {
-              cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") this.pointer.dereference_assign(", ffi_type, ", %li, value);\\n\",");
-              cfile.print("           (char*)&var.", name, " - (char*)&var);");
+              cfile.print("    printf(\"    if (key == \\\"", short_name(name), "\\\") this.pointer.dereference_assign(", ffi_type, ", %i, value);\\n\",");
+              cfile.print("           (int) ((char*)&var.", name, " - (char*)&var));");
             };
           } else {
             print("skip ", name, " (unknown type ", combined_type, ")");

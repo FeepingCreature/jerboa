@@ -71,7 +71,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     
     Value str;
     
-    CallInfo info = {0};
+    CallInfo info = {{0}};
     info.this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
     info.fn = (Arg) { .kind = ARG_VALUE, .value = toString_fn };
     info.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &str };

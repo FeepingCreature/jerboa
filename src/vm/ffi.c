@@ -1,10 +1,14 @@
 #include "vm/ffi.h"
 #include "object.h"
+#include "util.h"
 
-#include <dlfcn.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <alloca.h>
+#ifdef _WIN32
+  #include <malloc.h>
+#else
+  #include <alloca.h>
+#endif
 
 typedef struct {
   ffi_cif cif;
@@ -15,15 +19,44 @@ static void ffi_open_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
+  Object *array_base = state->shared->vcache.array_base;
   Object *ffi = AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
   Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle", NULL));
   
   StringObject *sarg = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sarg, "argument to ffi.open must be string!");
   
+  Object *libmap = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "library_map", NULL));
+  
   char *file = sarg->value;
-  void *dlptr = dlopen(file, RTLD_LAZY);
-  VM_ASSERT(dlptr, "dlopen failed: %s", dlerror());
+  
+  bool file_found = false;
+  Value mapping = OBJECT_LOOKUP_STRING(libmap, file, &file_found);
+  const char **file_list_ptr = NULL;
+  int file_list_len = 0;
+  if (file_found) {
+    ArrayObject *aobj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(mapping), array_base);
+    StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(mapping), string_base);
+    if (aobj) {
+      file_list_len = aobj->length;
+      file_list_ptr = malloc(sizeof(char*) * file_list_len);
+      for (int i = 0; i < file_list_len; i++) {
+        StringObject *file = (StringObject*) obj_instance_of(OBJ_OR_NULL(aobj->ptr[i]), string_base);
+        VM_ASSERT(file, "library_map sub-entries must be string");
+        file_list_ptr[i] = my_asprintf("%s", file->value); // outside gc, make copy
+      }
+    } else if (sobj) {
+      file_list_len = 1;
+      file_list_ptr = malloc(sizeof(char*) * 1);
+      file_list_ptr[0] = my_asprintf("%s", sobj->value);
+    } else VM_ASSERT(false, "library_map entries must be string or array");
+  } else {
+    file_list_len = 1;
+    file_list_ptr = malloc(sizeof(char*) * 1);
+    file_list_ptr[0] = file;
+  }
+  
+  void *dlptr = my_dlopen(file_list_len, file_list_ptr);
   
   Object *handle_obj = AS_OBJ(make_object(state, handle_base, false));
   handle_obj->flags |= OBJ_FROZEN;
@@ -666,8 +699,8 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   StringObject *fn_name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(fn_name_obj, "symbol name must be string");
   
-  void *fnptr = dlsym(handle, fn_name_obj->value);
-  char *error = dlerror();
+  void *fnptr = my_dlsym(handle, fn_name_obj->value);
+  const char *error = my_dlerror(handle);
   // VM_ASSERT(!error, "dlsym failed: %s", error);
   if (error) { vm_return(state, info, VNULL); return; }
   
@@ -778,6 +811,24 @@ void ffi_setup_root(VMState *state, Object *root) {
   OBJECT_SET_STRING(state, struct_obj, "complete", BOOL2VAL(false));
   OBJECT_SET_STRING(state, struct_obj, "pointer", VNULL);
   OBJECT_SET_STRING(state, struct_obj, "members", VNULL);
+  
+  Object *lib_map = AS_OBJ(make_object(state, NULL, false));
+#ifdef _WIN32
+  OBJECT_SET_STRING(state, lib_map, "libGL.so", make_string_static(state, "opengl32.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libglfw.so", make_string_static(state, "glfw3.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libglfwq.so", make_string_static(state, "glfwq.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libcsfml-audio.so", make_string_static(state, "csfml-audio-2.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libcsfml-system.so", make_string_static(state, "csfml-system-2.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libcairo.so", make_string_static(state, "libcairo-2.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libc.so.6", make_string_static(state, "msvcrt.dll"));
+  OBJECT_SET_STRING(state, lib_map, "libSOIL.so", make_string_static(state, "libSOIL.dll"));
+  Value *cairo_list = malloc(sizeof(Value) * 3);
+  cairo_list[0] = make_string_static(state, "libpangocairo-1.0-0.dll");
+  cairo_list[1] = make_string_static(state, "libpango-1.0-0.dll");
+  cairo_list[2] = make_string_static(state, "libgobject-2.0-0.dll");
+  OBJECT_SET_STRING(state, lib_map, "libpangocairo-1.0.so", make_array(state, cairo_list, 3, true));
+#endif
+  OBJECT_SET_STRING(state, ffi_obj, "library_map", OBJ2VAL(lib_map));
   
   OBJECT_SET_STRING(state, root, "ffi", OBJ2VAL(ffi_obj));
   

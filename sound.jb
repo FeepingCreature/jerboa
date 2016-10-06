@@ -5,8 +5,10 @@ var sfml_system = require("c/sfml-system.jb");
 // TODO cleanup handler
 game.handlers["sound"] = {
   init = method(sound) {
-    var file = sound.attr["file"];
-    var buffer = sfml_audio.SoundBuffer_createFromFile(file);
+    var filename = sound.attr["file"];
+    
+    assert(file.exists(filename), "cannot open sound file");
+    var buffer = sfml_audio.SoundBuffer_createFromFile(filename);
     
     var sfml_snd = sfml_audio.Sound_create();
     sfml_audio.Sound_setBuffer(sfml_snd, buffer);
