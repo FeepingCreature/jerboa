@@ -21,8 +21,8 @@ const GameMode = {
 
 var scene = xml.parse("<list></list>");
 
-scene.append('<sound id="impact" file="/usr/share/sounds/error.wav"/>');
-scene.append('<sound id="goal" file="/usr/share/sounds/question.wav"/>');
+scene.append('<sound id="impact" file="error.wav"/>');
+scene.append('<sound id="goal" file="question.wav"/>');
 
 function resetGame() {
   scene.attr["mode"] = GameMode.Waiting;

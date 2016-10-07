@@ -1,5 +1,9 @@
 #include "util.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "win32_compat.h"
 
 #include <fcntl.h>
@@ -180,6 +184,26 @@ long long get_clock_and_difference(struct timespec *target_clock, struct timespe
   long ns_diff = target_clock->tv_nsec - compare_clock->tv_nsec;
   int s_diff = target_clock->tv_sec - compare_clock->tv_sec;
   return (long long) s_diff * 1000000000LL + (long long) ns_diff;
+}
+
+void format_bold(FILE *target) {
+#ifdef _WIN32
+  assert(target == stderr);
+  HANDLE hdl = GetStdHandle(STD_ERROR_HANDLE);
+  SetConsoleTextAttribute(hdl, FOREGROUND_RED|FOREGROUND_GREEN|FOREGROUND_BLUE|FOREGROUND_INTENSITY);
+#else
+  fprintf(target, "\x1b[1m");
+#endif
+}
+
+void format_reset(FILE *target) {
+#ifdef _WIN32
+  assert(target == stderr);
+  HANDLE hdl = GetStdHandle(STD_ERROR_HANDLE);
+  SetConsoleTextAttribute(hdl, FOREGROUND_RED|FOREGROUND_GREEN|FOREGROUND_BLUE);
+#else
+  fprintf(target, "\x1b[0m");
+#endif
 }
 
 char *my_asprintf(const char *fmt, ...) {

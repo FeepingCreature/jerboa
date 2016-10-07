@@ -4,6 +4,7 @@
 #include "win32_compat.h"
 
 #include <time.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <stdarg.h>
 
@@ -33,6 +34,10 @@ void utf8_step(const char **ptr, int num, const char **error_p);
 bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_p, int *col_p);
 
 long long get_clock_and_difference(struct timespec *target_clock, struct timespec *compare_clock);
+
+void format_bold(FILE *output);
+
+void format_reset(FILE *output);
 
 char *my_asprintf(const char *fmt, ...);
 

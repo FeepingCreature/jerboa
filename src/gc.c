@@ -69,6 +69,10 @@ void gc_run(VMState *state) {
     state->shared->gcstate.missed_gc = true;
     return;
   }
+  // fprintf(stderr, "run gc\n");
+  // int bytes_before = state->shared->gcstate.bytes_allocated;
   gc_mark(state);
   gc_sweep(state);
+  // int bytes_after = state->shared->gcstate.bytes_allocated;
+  // fprintf(stderr, "done gc, %i -> %i (%f%% kept)\n", bytes_before, bytes_after, (bytes_after * 100.0) / bytes_before);
 }

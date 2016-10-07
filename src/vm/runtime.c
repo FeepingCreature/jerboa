@@ -16,6 +16,11 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shlwapi.h>
+#endif
+
 FnWrap call_internal(VMState *state, CallInfo *info, Instr *instr_after_call);
 
 /* why does 'apply' take 'this' as an explicit first parameter?
@@ -1498,8 +1503,19 @@ void setup_default_searchpath(VMState *state, Object *root) {
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, cwd);
   
-  // TODO win32 version
-#ifndef _WIN32
+#ifdef _WIN32
+  TCHAR ownPath[MAX_PATH];
+  DWORD len = GetModuleFileName(NULL, ownPath, MAX_PATH);
+  if (len == MAX_PATH || len == 0) {
+    fprintf(stderr, "cannot determine path of executable\n");
+    abort();
+  }
+  ownPath[len] = 0;
+  PathRemoveFileSpec(ownPath);
+  
+  paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
+  paths_ptr[paths_len - 1] = make_string_static(state, my_asprintf("%s", ownPath));
+#else  
   char *readlink_buf = malloc(1024);
   int rl_res = readlink("/proc/self/exe", readlink_buf, 1023);
   if (rl_res == -1) {

@@ -138,7 +138,9 @@ void vm_print_backtrace(VMState *state) {
       // if (strcmp(file, "test4.jb") == 0 && row == 18) __asm__("int $3");
       fprintf(stderr, "#%i\t%s:%i\t", k+1, file, row1+1); // file:line
       fprintf(stderr, "%.*s", col1, line1.start); // line up to the range start
-      fprintf(stderr, "\x1b[1m%.*s\x1b[0m", belongs_to->text_len, belongs_to->text_from); // actual range
+      format_bold(stderr);
+      fprintf(stderr, "%.*s", belongs_to->text_len, belongs_to->text_from); // actual range
+      format_reset(stderr);
       fprintf(stderr, "%.*s\n", len2 - col2, line2.start + col2); // end of range to end of line
     }
     state = state->parent;
@@ -228,7 +230,7 @@ void vm_maybe_record_profile(VMState *state) {
     vm_record_profile(state);
     long long ns_taken = get_clock_and_difference(NULL, &prof_time);
     if (num_msg_printed <= 10 && ns_taken > sample_stepsize / 3) {
-      fprintf(stderr, "warning: collecting profiling info took %lli%% of the last step.\n", ns_taken * 100LL / sample_stepsize);
+      fprintf(stderr, "warning: collecting profiling info took %i%% of the last step.\n", (int) (ns_taken * 100LL / sample_stepsize));
       num_msg_printed++;
       if (num_msg_printed > 10) {
         fprintf(stderr, "warning will not be shown again.\n");
