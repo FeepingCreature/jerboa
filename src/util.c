@@ -219,7 +219,10 @@ char *my_asprintf(const char *fmt, ...) {
 }
 
 char *my_vasprintf(const char *fmt, va_list ap) {
-  int len = vsnprintf(NULL, 0, fmt, ap);
+  // vsnprintf may mess up its va_list parameter, so make a copy
+  va_list ap2;
+  va_copy(ap2, ap);
+  int len = vsnprintf(NULL, 0, fmt, ap2);
   char *res = malloc(len + 1);
   vsnprintf(res, len + 1, fmt, ap);
   return res;
