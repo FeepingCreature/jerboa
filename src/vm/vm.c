@@ -419,8 +419,7 @@ static FnWrap vm_instr_access(VMState *state) {
   Object *obj = closest_obj(state, val);
   
   char *key;
-  bool has_char_key = false;
-      
+  
   Value key_val = load_arg(state->frame, access_instr->key);
   VM_ASSERT2(NOT_NULL(key_val), "key is null");
   Object *string_base = state->shared->vcache.string_base;
@@ -428,7 +427,6 @@ static FnWrap vm_instr_access(VMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(key_obj, string_base);
   bool object_found = false;
   if (skey) {
-    has_char_key = true;
     key = skey->value;
     // otherwise, skey->value is independent of skey
     // TODO length in StringObject
@@ -448,7 +446,7 @@ static FnWrap vm_instr_access(VMState *state) {
     }
   }
   if (!object_found) {
-    if (has_char_key) {
+    if (skey) {
       VM_ASSERT2(false, "[1] property not found: '%s'", key);
     } else {
       VM_ASSERT2(false, "[2] property not found!");
@@ -564,21 +562,36 @@ static FnWrap vm_instr_assign(VMState *state) {
 static FnWrap vm_instr_key_in_obj(VMState *state) FAST_FN;
 static FnWrap vm_instr_key_in_obj(VMState *state) {
   KeyInObjInstr * __restrict__ key_in_obj_instr = (KeyInObjInstr*) state->instr;
-  Object *obj = closest_obj(state, load_arg(state->frame, key_in_obj_instr->obj));
+  Value val = load_arg(state->frame, key_in_obj_instr->obj);
+  Object *obj = closest_obj(state, val);
   Object *string_base = state->shared->vcache.string_base;
   Value key_val = load_arg(state->frame, key_in_obj_instr->key);
   VM_ASSERT2(NOT_NULL(key_val), "key is null");
   StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
-  if (!skey) {
-    VM_ASSERT2(false, "'in' key is not string! todo overload?");
-  }
-  char *key = skey->value;
-  /*if (key_in_obj_instr->key.kind == ARG_VALUE) {
-    printf(": %s\n", key);
-  }*/
   bool object_found = false;
-  OBJECT_LOOKUP_STRING(obj, key, &object_found);
-  set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
+  char *key;
+  if (skey) {
+    key = skey->value;
+    /*if (key_in_obj_instr->key.kind == ARG_VALUE) {
+      printf(": %s\n", key);
+    }*/
+    OBJECT_LOOKUP_STRING(obj, key, &object_found);
+    set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
+  }
+  
+  if (!object_found) {
+    Value in_overload_op = OBJECT_LOOKUP_STRING(obj, "in", NULL);
+    if (NOT_NULL(in_overload_op)) {
+      CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 1);
+      info->args_len = 1;
+      info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
+      info->fn = (Arg) { .kind = ARG_VALUE, .value = in_overload_op };
+      info->target = key_in_obj_instr->target;
+      INFO_ARGS_PTR(info)[0] = key_in_obj_instr->key;
+      
+      return call_internal(state, info, (Instr*)(key_in_obj_instr + 1));
+    }
+  }
   
   state->instr = (Instr*)(key_in_obj_instr + 1);
   return (FnWrap) { state->instr->fn };

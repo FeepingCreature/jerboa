@@ -632,12 +632,26 @@ static void array_index_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
+  VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(arg), "array '[]' overload called with non-int");
-  VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   int index = AS_INT(arg);
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   vm_return(state, info, arr_obj->ptr[index]);
+}
+
+static void array_in_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
+  VM_ASSERT(arr_obj, "internal error: array 'in' overload called on object that is not an array");
+  Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
+  if (!IS_INT(arg)) {
+    vm_return(state, info, BOOL2VAL(false));
+    return;
+  }
+  int index = AS_INT(arg);
+  vm_return(state, info, BOOL2VAL(index >= 0 && index < arr_obj->length));
 }
 
 static void array_index_assign_fn(VMState *state, CallInfo *info) {
@@ -1649,6 +1663,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, array_obj, "push", make_fn(state, array_push_fn));
   OBJECT_SET_STRING(state, array_obj, "pop", make_fn(state, array_pop_fn));
   OBJECT_SET_STRING(state, array_obj, "[]", make_fn(state, array_index_fn));
+  OBJECT_SET_STRING(state, array_obj, "in", make_fn(state, array_in_fn));
   OBJECT_SET_STRING(state, array_obj, "[]=", make_fn(state, array_index_assign_fn));
   OBJECT_SET_STRING(state, array_obj, "==", make_fn(state, array_compare_fn));
   OBJECT_SET_STRING(state, array_obj, "splice", make_fn(state, array_splice_fn));
