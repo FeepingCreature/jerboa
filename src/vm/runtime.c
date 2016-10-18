@@ -634,10 +634,52 @@ static void array_index_fn(VMState *state, CallInfo *info) {
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
   VM_ASSERT(arr_obj, "internal error: array '[]' called on object that is not an array");
   Value arg = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  VM_ASSERT(IS_INT(arg), "array '[]' overload called with non-int");
+  if (!IS_INT(arg)) {
+    VM_ASSERT(false, "No such key in array object.");
+  }
   int index = AS_INT(arg);
   VM_ASSERT(index >= 0 && index < arr_obj->length, "array index out of bounds!");
   vm_return(state, info, arr_obj->ptr[index]);
+}
+
+static void array_iterator_next_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  Object *this_obj = OBJ_OR_NULL(load_arg(state->frame, info->this_arg));
+  VM_ASSERT(this_obj, "internal error");
+  
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(this_obj, "array", NULL)), array_base);
+  VM_ASSERT(arr_obj, "internal error");
+  
+  Value index_val = OBJECT_LOOKUP_STRING(this_obj, "index", NULL);
+  VM_ASSERT(IS_INT(index_val), "internal error");
+  
+  Object *iter_obj = AS_OBJ(make_object(state, NULL, false));
+  
+  int index = AS_INT(index_val);
+  if (index >= arr_obj->length) {
+    OBJECT_SET_STRING(state, iter_obj, "done", BOOL2VAL(true));
+  } else {
+    OBJECT_SET_STRING(state, iter_obj, "done", BOOL2VAL(false));
+    OBJECT_SET_STRING(state, iter_obj, "key", index_val);
+    OBJECT_SET_STRING(state, iter_obj, "value", arr_obj->ptr[AS_INT(index_val)]);
+  }
+  OBJECT_SET_STRING(state, this_obj, "index", INT2VAL(index + 1));
+  
+  vm_return(state, info, OBJ2VAL(iter_obj));
+}
+
+static void array_iterator_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
+  Object *array_base = state->shared->vcache.array_base;
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
+  VM_ASSERT(arr_obj, "internal error: array iterator called on object that is not an array");
+  Object *iterator = AS_OBJ(make_object(state, NULL, false));
+  OBJECT_SET_STRING(state, iterator, "array", OBJ2VAL((Object*) arr_obj));
+  OBJECT_SET_STRING(state, iterator, "index", INT2VAL(0));
+  OBJECT_SET_STRING(state, iterator, "next", make_fn(state, array_iterator_next_fn));
+  
+  vm_return(state, info, OBJ2VAL(iterator));
 }
 
 static void array_in_fn(VMState *state, CallInfo *info) {
@@ -1666,6 +1708,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, array_obj, "in", make_fn(state, array_in_fn));
   OBJECT_SET_STRING(state, array_obj, "[]=", make_fn(state, array_index_assign_fn));
   OBJECT_SET_STRING(state, array_obj, "==", make_fn(state, array_compare_fn));
+  OBJECT_SET_STRING(state, array_obj, "iterator", make_fn(state, array_iterator_fn));
   OBJECT_SET_STRING(state, array_obj, "splice", make_fn(state, array_splice_fn));
   OBJECT_SET_STRING(state, array_obj, "join", make_fn(state, array_join_fn));
   OBJECT_SET_STRING(state, array_obj, "dup", make_fn(state, array_dup_fn));

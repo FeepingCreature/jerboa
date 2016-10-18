@@ -1,0 +1,33 @@
+var array = [7, 6, 5];
+
+{
+  var array_cmp = [];
+  for (var value in array) {
+    array_cmp.push(value);
+  }
+  assert(array_cmp == array);
+}
+
+{
+  var array_cmp = [];
+  var index_cmp = [];
+  for (var key, value in array) {
+    index_cmp.push(key);
+    array_cmp.push(value);
+  }
+  assert(array_cmp == array);
+  assert(index_cmp == [0, 1, 2]);
+}
+
+{
+  var array_cmp = [];
+  var index_cmp = [];
+  for (var key, value in array) {
+    index_cmp.push(key);
+    array_cmp.push(value);
+    if (key == 1) break;
+    else continue;
+  }
+  assert(array_cmp == [7, 6]);
+  assert(index_cmp == [0, 1]);
+}

@@ -1492,8 +1492,123 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
 
 static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *builder);
 
+static ParseResult parse_for_in(char **textp, FunctionBuilder *builder, char *loop_label, FileRange *range) {
+  char *text = *textp;
+  if (!eat_string(&text, "(")) {
+    return PARSE_NONE;
+  }
+  if (!eat_keyword(&text, "var")) return PARSE_NONE;
+  char *var_name = parse_identifier(&text);
+  char *key_name = NULL;
+  if (!var_name) return PARSE_NONE;
+  
+  // key, value notation
+  if (eat_string(&text, ",")) {
+    key_name = var_name;
+    var_name = parse_identifier(&text);
+    if (!var_name) return PARSE_NONE;
+  }
+  
+  if (!eat_keyword(&text, "in")) return PARSE_NONE;
+  // we know it's an "in" loop now - can start erroring; this is where syntax diverges
+  
+  RefValue rv;
+  ParseResult res = parse_expr(&text, builder, &rv);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  if (res == PARSE_NONE) {
+    log_parser_error(text, "'for-in' expected iterator expression");
+    return PARSE_ERROR;
+  }
+  
+  if (!eat_string(&text, ")")) {
+    log_parser_error(text, "'for-in' expected closing paren");
+    return PARSE_ERROR;
+  }
+  
+  LoopRecord *loop_record = open_loop(builder, loop_label);
+  
+  int scope_backup, test_blk, branch_test_body, branch_test_exit;
+  if (builder) {
+    scope_backup = begin_lex_scope(builder);
+    
+    use_range_start(builder, range);
+    
+    int obj_slot = ref_access(builder, rv);
+    int iter_key = addinstr_alloc_string_object(builder, "iterator");
+    int iterfn = ref_access(builder, (RefValue) {obj_slot, iter_key, REFMODE_OBJECT, range});
+    int iter_slot = addinstr_call0(builder, iterfn, obj_slot);
+    
+    int next_key = addinstr_alloc_string_object(builder, "next");
+    int nextfn = ref_access(builder, (RefValue) {iter_slot, next_key, REFMODE_OBJECT, range});
+    
+    int branch_enter_test;
+    
+    addinstr_branch(builder, &branch_enter_test);
+    
+    test_blk = new_block(builder);
+    set_int_var(builder, branch_enter_test, test_blk);
+    
+    int pass_obj = addinstr_call0(builder, nextfn, iter_slot);
+    int done_key = addinstr_alloc_string_object(builder, "done");
+    int done_slot = ref_access(builder, (RefValue) { pass_obj, done_key, REFMODE_OBJECT, range});
+    
+    done_slot = addinstr_test(builder, done_slot);
+    addinstr_test_branch(builder, done_slot, &branch_test_exit, &branch_test_body);
+    
+    int body_blk = new_block(builder);
+    set_int_var(builder, branch_test_body, body_blk);
+    
+    builder->scope = addinstr_alloc_object(builder, builder->scope);
+    int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
+    
+    int varname_slot = addinstr_alloc_string_object(builder, var_name);
+    int value_key = addinstr_alloc_string_object(builder, "value");
+    int value_slot = ref_access(builder, (RefValue) { pass_obj, value_key, REFMODE_OBJECT, range});
+    addinstr_assign(builder, var_scope, varname_slot, value_slot, ASSIGN_PLAIN);
+    
+    if (key_name) {
+      int keyname_slot = addinstr_alloc_string_object(builder, key_name);
+      int key_key = addinstr_alloc_string_object(builder, "key");
+      int key_slot = ref_access(builder, (RefValue) { pass_obj, key_key, REFMODE_OBJECT, range});
+      addinstr_assign(builder, var_scope, keyname_slot, key_slot, ASSIGN_PLAIN);
+    }
+    addinstr_close_object(builder, var_scope);
+    
+    use_range_end(builder, range);
+  }
+  
+  res = parse_block(&text, builder, false);
+  if (res == PARSE_ERROR) return PARSE_ERROR;
+  assert(res == PARSE_OK);
+  
+  if (builder) {
+    int branch_body_test;
+    
+    use_range_start(builder, range);
+    addinstr_branch(builder, &branch_body_test);
+    use_range_end(builder, range);
+    set_int_var(builder, branch_body_test, test_blk);
+    
+    int exit_blk = new_block(builder);
+    set_int_var(builder, branch_test_exit, exit_blk);
+    
+    close_loop(builder, loop_record, exit_blk, test_blk);
+    end_lex_scope(builder, scope_backup);
+  }
+  
+  *textp = text;
+  
+  return PARSE_OK;
+}
+
 static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_label, FileRange *range) {
   char *text = *textp;
+  
+  {
+    ParseResult res = parse_for_in(textp, builder, loop_label, range);
+    if (res == PARSE_ERROR) return res;
+    if (res == PARSE_OK) return res;
+  }
   
   LoopRecord *loop_record = open_loop(builder, loop_label);
   

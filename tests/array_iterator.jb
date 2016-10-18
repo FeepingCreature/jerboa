@@ -1,0 +1,9 @@
+var array = [2, 3, 4];
+var iter = array.iterator();
+var array_cmp = [], index_cmp = [];
+while ((var iterstate = iter.next()) && !iterstate.done)  {
+  index_cmp.push(iterstate.key);
+  array_cmp.push(iterstate.value);
+}
+assert(array_cmp == array);
+assert(index_cmp == [0, 1, 2]);
