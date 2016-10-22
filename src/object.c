@@ -193,6 +193,12 @@ bool value_fits_constraint(VMSharedState *sstate, Value value, Object *constrain
   return obj_instance_of(AS_OBJ(value), constraint) != NULL;
 }
 
+void value_failed_type_constraint_error(VMState *state, Object *constraint, Value value) {
+  VM_ASSERT(false,
+            "value failed type constraint: constraint was %s, but value was %s",
+            get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
+}
+
 // returns error or null
 char *object_set_constraint(VMState *state, Object *obj, FastKey *key, Object *constraint) {
   assert(obj != NULL);
@@ -343,7 +349,7 @@ Value make_string(VMState *state, const char *ptr, int len) {
   StringObject *obj = alloc_object_internal(state, sizeof(StringObject) + len + 1, false);
   obj->base.parent = state->shared->vcache.string_base;
   // obj->base.flags = OBJ_IMMUTABLE | OBJ_CLOSED;
-  obj->static_ptr = true;
+  obj->static_ptr = true; // value must not be freed; it is included in the object
   obj->value = ((char*) obj) + sizeof(StringObject);
   strncpy(obj->value, ptr, len);
   obj->value[len] = 0;

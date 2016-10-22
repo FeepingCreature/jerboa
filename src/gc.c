@@ -1,30 +1,27 @@
 #include "gc.h"
 
 void gc_add_roots(VMState *state, Value *values, int num_values, GCRootSet *set) {
-  GCRootSet *prevTail = state->shared->gcstate.tail;
-  state->shared->gcstate.tail = set;
-  if (prevTail) prevTail->next = state->shared->gcstate.tail;
-  state->shared->gcstate.tail->prev = prevTail;
-  state->shared->gcstate.tail->next = NULL;
-  state->shared->gcstate.tail->values = values;
-  state->shared->gcstate.tail->num_values = num_values;
+  GCRootSet *prevTail = state->shared->gcstate.tail.prev;
+  prevTail->next = set;
+  state->shared->gcstate.tail.prev = set;
+  set->prev = prevTail;
+  set->next = &state->shared->gcstate.tail;
+  set->values = values;
+  set->num_values = num_values;
   return;
 }
 
 void gc_remove_roots(VMState *state, GCRootSet *entry) {
-  if (entry == state->shared->gcstate.tail) {
-    state->shared->gcstate.tail = entry->prev;
-  }
-  // cut entry out
-  if (entry->prev) entry->prev->next = entry->next;
-  if (entry->next) entry->next->prev = entry->prev;
+  assert(entry->prev && entry->next); // the use of head/tail anchors should guarantee this
+  entry->prev->next = entry->next;
+  entry->next->prev = entry->prev;
 }
 
 #include <stdio.h>
 
 // mark roots
 static void gc_mark(VMState *state) {
-  GCRootSet *set = state->shared->gcstate.tail;
+  GCRootSet *set = state->shared->gcstate.tail.prev;
   while (set) {
     for (int i = 0; i < set->num_values; ++i) {
       Value v = set->values[i];

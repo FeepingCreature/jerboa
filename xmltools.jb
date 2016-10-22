@@ -120,8 +120,7 @@ var XmlResults = {
 xml.node["find"] = method(pred) {
   if (pred instanceof string) {
     // TODO full jquery-style predicate parsing
-    var rest = pred.startsWith("#");
-    if (rest) return this.findByAttr("id", rest);
+    if (var rest = pred.startsWith("#")) return this.findByAttr("id", rest);
     else return this.findByName(pred);
   }
   var array = this.find_array(pred);
@@ -218,15 +217,11 @@ xml.node["on"] = method(key, obj) {
 };
 xml.node["off"] = method(key, obj) {
   if (obj instanceof function) obj = { fn = obj; obj = this; };
-  if ("_handlers" in this && key in this._handlers) {
-    this._handlers[key].remove(obj);
-  }
+  this?._handlers?[key].remove(obj);
   if (this.parent) this.parent.off(key, obj);
 };
 xml.node["trigger_"] = method(key, arguments) {
-  if ("_handlers" in this && key in this._handlers) {
-    if (this._handlers[key].call(this, arguments) is false) return false;
-  }
+  if (this?._handlers?[key].call(this, arguments) is false) return false;
   return true;
 };
 xml.node["trigger_propagating_"] = method(key, arguments) {

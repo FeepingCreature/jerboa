@@ -345,13 +345,14 @@ static FnWrap vm_instr_free_object(VMState *state) {
 #endif
     cf->slots_ptr[slot].type = TYPE_NULL;
     
-    while (cf->last_stack_obj && cf->last_stack_obj->flags & OBJ_STACK_FREED) {
-      Object * __restrict__ obj = cf->last_stack_obj;
-      obj_free_aux(obj); // hence not necessary
-      Object * __restrict__ prev_obj = obj->prev;
-      vm_stack_free(state, obj, obj->size);
-      cf->last_stack_obj = prev_obj;
+    Object *last_stack_obj = cf->last_stack_obj;
+    while (last_stack_obj && last_stack_obj->flags & OBJ_STACK_FREED) {
+      obj_free_aux(last_stack_obj); // hence not necessary
+      Object * __restrict__ prev_obj = last_stack_obj->prev;
+      vm_stack_free(state, last_stack_obj, last_stack_obj->size);
+      last_stack_obj = prev_obj;
     }
+    cf->last_stack_obj = last_stack_obj;
   } else abort();
   state->instr = (Instr*)(free_object_instr + 1);
   return (FnWrap) { state->instr->fn };

@@ -119,7 +119,7 @@ typedef enum {
 } TypeTag;
 
 typedef struct {
-  TypeTag type;
+  long unsigned int type;
   union {
     int i;
     float f;
@@ -256,7 +256,7 @@ struct _GCRootSet {
 };
 
 typedef struct {
-  GCRootSet *tail;
+  GCRootSet head, tail; // always empty; using values to anchor lets us avoid branches in gc functions
   
   Object *last_obj_allocated;
   int bytes_allocated, next_gc_run;

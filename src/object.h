@@ -112,14 +112,17 @@ static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) {
   } else return arg.value;
 }
 
+void value_failed_type_constraint_error(VMState *state, Object *constraint, Value value);
+
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
   if (warg.kind == ARG_REFSLOT) {
     assert(warg.refslot < state->frame->refslots_len);
     TableEntry *entry = state->frame->refslots_ptr[warg.refslot];
     Object *constraint = entry->constraint;
-    VM_ASSERT(!constraint || value_fits_constraint(state->shared, value, constraint),
-              "value failed type constraint: constraint was %s, but value was %s",
-              get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
+    if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
+      value_failed_type_constraint_error(state, constraint, value);
+      return;
+    }
     entry->value = value;
   } else if (UNLIKELY(warg.kind == ARG_POINTER)) {
     *warg.pointer = value;
@@ -136,9 +139,10 @@ static inline void set_arg_specialized(VMState *state, WriteArg warg, Value valu
     assert(warg.refslot < state->frame->refslots_len);
     TableEntry *entry = state->frame->refslots_ptr[warg.refslot];
     Object *constraint = entry->constraint;
-    VM_ASSERT(!constraint || value_fits_constraint(state->shared, value, constraint),
-              "value failed type constraint: constraint was %s, but value was %s",
-              get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, value));
+    if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
+      value_failed_type_constraint_error(state, constraint, value);
+      return;
+    }
     entry->value = value;
   } else if (kind == ARG_POINTER) {
     *warg.pointer = value;
@@ -173,6 +177,7 @@ typedef struct {
 
 typedef struct {
   Object base;
+  // whether value should be freed explicitly on cleanup
   bool static_ptr;
   char *value;
 } StringObject;

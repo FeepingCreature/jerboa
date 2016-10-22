@@ -28,6 +28,8 @@ int main(int argc, char **argv) {
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
   vmstate.shared->stack_data_len = 16*1024*1024;
   vmstate.shared->stack_data_ptr = malloc(vmstate.shared->stack_data_len);
+  vmstate.shared->gcstate.head.next = &vmstate.shared->gcstate.tail;
+  vmstate.shared->gcstate.tail.prev = &vmstate.shared->gcstate.head;
   
   vm_alloc_frame(&vmstate, 0, 0);
   Object *root = create_root(&vmstate);
