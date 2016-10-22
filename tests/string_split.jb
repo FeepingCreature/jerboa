@@ -1,0 +1,6 @@
+assert(["Hello", " World"] == ["Hello", " World"]);
+assert("Hello, World".split(",") == ["Hello", " World"]);
+assert(",Hello, World,".split(",") == ["", "Hello", " World", ""]);
+assert(",".split(",") == ["", ""]);
+assert("Hello".split(",") == ["Hello"]);
+assert("".split(",") == [""]);

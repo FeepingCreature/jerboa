@@ -402,6 +402,55 @@ static void string_find_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, INT2VAL(pos_utf8));
 }
 
+static void string_split_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  Object *string_base = state->shared->vcache.string_base;
+  
+  StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
+  VM_ASSERT(sobj, "internal error: string.split() called on wrong type of object");
+  StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
+  VM_ASSERT(sobj2, "internal error: string.split() expects string");
+  
+  char *str = sobj->value;
+  int len = strlen(str);
+  char *match = sobj2->value;
+  int matchlen = strlen(match);
+  
+  Value *entries_ptr = NULL;
+  int entries_len = 0;
+  
+  if (matchlen == 0) {
+    const char *cur = str;
+    while (cur != str + len) {
+      const char *error = NULL;
+      const char *prev = cur;
+      // TODO this is not safe if the string is invalid utf8
+      utf8_step(&cur, 1, &error);
+      VM_ASSERT(!error, error); // lol
+      
+      entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
+      entries_ptr[entries_len - 1] = make_string(state, prev, cur - prev);
+    }
+    vm_return(state, info, make_array(state, entries_ptr, entries_len, true));
+    return;
+  }
+  
+  while (true) {
+    char *pos = memmem(str, len, match, matchlen);
+    if (pos == NULL) {
+      entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
+      entries_ptr[entries_len - 1] = make_string(state, str, len);
+      vm_return(state, info, make_array(state, entries_ptr, entries_len, true));
+      return;
+    }
+    entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
+    entries_ptr[entries_len - 1] = make_string(state, str, pos - str);
+    char *newstr = pos + matchlen;
+    len -= newstr - str;
+    str = newstr;
+  }
+}
+
 static void string_replace_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
@@ -1694,6 +1743,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET_STRING(state, string_obj, "endsWith", make_fn(state, string_endswith_fn));
   OBJECT_SET_STRING(state, string_obj, "slice", make_fn(state, string_slice_fn));
   OBJECT_SET_STRING(state, string_obj, "find", make_fn(state, string_find_fn));
+  OBJECT_SET_STRING(state, string_obj, "split", make_fn(state, string_split_fn));
   OBJECT_SET_STRING(state, string_obj, "replace", make_fn(state, string_replace_fn));
   OBJECT_SET_STRING(state, string_obj, "byte_len", make_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
