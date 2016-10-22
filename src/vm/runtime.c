@@ -1057,7 +1057,7 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   info->target = (WriteArg) { .kind = ARG_POINTER, .pointer = &res };
   INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = node };
   
-  if (!setup_call(&substate, info)) {
+  if (!setup_call(&substate, info, NULL)) {
     VM_ASSERT(false, "pred check failure: %s\n", substate.error) false;
   }
   

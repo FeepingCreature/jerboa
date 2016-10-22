@@ -7,6 +7,6 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
 
 Value make_closure_fn(VMState *state, Object *context, UserFunction *fn);
 
-bool setup_call(VMState *state, CallInfo *info);
+bool setup_call(VMState *state, CallInfo *info, Instr *instr_after_call);
 
 #endif

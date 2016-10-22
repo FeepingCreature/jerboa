@@ -384,31 +384,10 @@ static FnWrap vm_instr_freeze_object(VMState *state) {
 }
 
 FnWrap call_internal(VMState *state, CallInfo *info, Instr *instr_after_call) {
-  Callframe *frame = state->frame;
-  Value fn = load_arg(frame, info->fn);
-  VM_ASSERT2(!IS_NULL(fn), "function was null");
-  VM_ASSERT2(IS_OBJ(fn), "this is not a thing I can call.");
-  Object *fn_obj_n = AS_OBJ(fn);
-  
-  
-  if (fn_obj_n->parent == state->shared->vcache.function_base) {
-    // cache beforehand, in case the function wants to set up its own stub call like apply
-    Instr *prev_instr = state->instr;
-    
-    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
-    if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
-    if (LIKELY(prev_instr == state->instr)) {
-      state->instr = instr_after_call;
-    } else {
-      frame->return_next_instr = instr_after_call;
-    }
-    return (FnWrap) { state->instr->fn };
-  } else {
-    frame->instr_ptr = state->instr;
-    frame->return_next_instr = instr_after_call;
-    if (!setup_call(state, info)) return (FnWrap) { vm_halt };
-    return (FnWrap) { state->instr->fn };
+  if (!setup_call(state, info, instr_after_call)) {
+    return (FnWrap) { vm_halt };
   }
+  return (FnWrap) { state->instr->fn };
 }
 
 static FnWrap vm_instr_access(VMState *state) FAST_FN;

@@ -48,26 +48,11 @@ Value make_closure_fn(VMState *state, Object *context, UserFunction *fn) {
   return OBJ2VAL((Object*) obj);
 }
 
-bool setup_call(VMState *state, CallInfo *info) {
-  Object *function_base = state->shared->vcache.function_base;
-  Value fn = load_arg(state->frame, info->fn);
-  VM_ASSERT(IS_OBJ(fn), "this is not a thing I can call.") false;
-  Object *fn_obj_n = AS_OBJ(fn);
-  // should have been handled outside setup_call
-  // primarily to do the whole if (instr != previous instr) tango
-  // (see vm.c whenever we call something)
-  (void) function_base; assert(fn_obj_n->parent != function_base);
-  /*
-  if (fn_obj_n->parent == function_base) {
-    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
-    return state->runstate != VM_ERRORED;
-  }
-  */
-  
+static bool setup_closure_call(VMState *state, CallInfo *info, Object *fn_obj_n) {
   Object *closure_base = state->shared->vcache.closure_base;
   ClosureObject *cl_obj = (ClosureObject*) obj_instance_of(fn_obj_n, closure_base);
   
-  VM_ASSERT(cl_obj, "object is neither function nor closure") false;
+  VM_ASSERT(cl_obj, "object is not a closure!") false;
   
   UserFunction *vmfun = cl_obj->vmfun;
   Object *context = cl_obj->context;
@@ -85,9 +70,8 @@ bool setup_call(VMState *state, CallInfo *info) {
     context = AS_OBJ(make_object(state, context, false));
     // should have been checked before
     assert(info->args_len >= vmfun->arity);
+    
     int varargs_len = info->args_len - vmfun->arity;
-    // when/how is this actually freed??
-    // TODO owned_array?
     Value *varargs_ptr = malloc(sizeof(Value) * varargs_len);
     for (int i = 0; i < varargs_len; ++i) {
       varargs_ptr[i] = load_arg(state->frame, INFO_ARGS_PTR(info)[vmfun->arity + i]);
@@ -95,12 +79,39 @@ bool setup_call(VMState *state, CallInfo *info) {
     OBJECT_SET_STRING(state, context, "arguments", make_array(state, varargs_ptr, varargs_len, true));
     context->flags |= OBJ_CLOSED;
   }
-  cl_obj->num_called ++;
-  if (UNLIKELY(cl_obj->num_called == 10)) {
+  if (UNLIKELY(++cl_obj->num_called == 10)) {
     assert(!vmfun->optimized);
     vmfun = cl_obj->vmfun = optimize_runtime(state, vmfun, context);
   }
   call_function(state, context, vmfun, info);
   // gc_enable(state);
   return state->runstate != VM_ERRORED;
+}
+
+bool setup_call(VMState *state, CallInfo *info, Instr *instr_after_call) {
+  Callframe *frame = state->frame;
+  Value fn = load_arg(frame, info->fn);
+  VM_ASSERT(!IS_NULL(fn), "function was null") false;
+  VM_ASSERT(IS_OBJ(fn), "this is not a thing I can call.") false;
+  Object *fn_obj_n = AS_OBJ(fn);
+  
+  if (fn_obj_n->parent == state->shared->vcache.function_base) {
+    // cache beforehand, in case the function wants to set up its own stub call like apply
+    Instr *prev_instr = state->instr;
+    
+    ((FunctionObject*)fn_obj_n)->fn_ptr(state, info);
+    if (UNLIKELY(state->runstate != VM_RUNNING)) return false;
+    if (LIKELY(prev_instr == state->instr)) {
+      state->instr = instr_after_call;
+    } else if (frame) {
+      frame->return_next_instr = instr_after_call;
+    }
+  } else {
+    if (frame) {
+      frame->instr_ptr = state->instr;
+      frame->return_next_instr = instr_after_call;
+    }
+    if (UNLIKELY(!setup_closure_call(state, info, fn_obj_n))) return false;
+  }
+  return true;
 }
