@@ -25,7 +25,7 @@ xml["parse"] = method(text) {
 };
 
 function genTexture() {
-  var res = malloc(gl.GLuint.sizeof); res.target_type = gl.GLuint;
+  var res = malloc(gl.uint.sizeof); res.target_type = gl.uint;
   gl.GenTextures(1, res);
   return res[0];
 }

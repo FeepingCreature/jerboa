@@ -2,7 +2,7 @@
 set -e
 mkdir -p c
 ./swigify.sh -p SDL_ /usr/include/SDL/SDL.h libSDL.so c/sdl.jb $(pkg-config sdl --cflags --libs)
-./swigify.sh -p gl -p GL_ /usr/include/GL/gl.h libGL.so c/gl.jb
+./swigify.sh -p gl -p GL_ -p GL /usr/include/GL/gl.h libGL.so c/gl.jb
 ./swigify.sh -p glu c/glu.h libGLU.so c/glu.jb -I. -I/usr/include
 ./swigify.sh -p glfw -p GLFW_ /usr/include/GLFW/glfw3.h libglfw.so c/glfw3.jb
 ./swigify.sh -p FT_ c/freetype.h libfreetype.so c/freetype.jb $(pkg-config freetype2 --cflags --libs) -I.
