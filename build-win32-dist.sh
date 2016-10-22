@@ -12,6 +12,7 @@ echo "---- creating release tree ----"
 RELEASE=jerboa-win32-$(git describe --always)
 rm "$RELEASE".zip || true
 mkdir "$RELEASE"
+# TODO share with build-dist.sh
 cp build/jerboa.exe "$RELEASE"
 cp -L *.dll "$RELEASE"
 cp -R c/ "$RELEASE"
