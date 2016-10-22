@@ -58,7 +58,7 @@ function winRound(side) {
 }
 
 var area = scene.append('<list id="play-area" width="620" height="440" left="10" top="30"></list>');
-var paddleLeft = area.append('<square id="paddle" width="10" height="40" left="50" top="50" tex="bumper.png"/>');
+var paddleLeft = area.append('<square id="paddle" width="10" height="40" left="50" top="50" tex="bumper.png[from=0,0|to=20,80]"/>');
 var paddleRight = area.append('<square id="paddle" width="10" height="40" right="50" top="50" tex="bumper.png"/>');
 area.append('<rect width="100%" height="100%"/>');
 

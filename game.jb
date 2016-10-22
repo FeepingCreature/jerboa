@@ -32,14 +32,59 @@ function genTexture() {
 
 var texfilecache = {};
 function loadTextureFile(name) {
-  if (name in texfilecache) return texfilecache[name];
-  var file = require("std/file.jb").read(name);
-  const soil = require("c/soil.jb");
-  var tex = soil.load_OGL_texture_from_memory(file.ptr, file.length,
-                                              soil.LOAD_AUTO, soil.CREATE_NEW_ID,
-                                              0);
-  texfilecache[name] = tex;
-  return tex;
+  var from = { x = 0; y = 0; texel = false; }, to = { x = 1; y = 1; texel = false; };
+  if (name.find("[") != -1) {
+    var parts = name.split("[", 2);
+    name = parts[0];
+    var attrs = parts[1];
+    attrs = attrs.endsWith("]");
+    assert(attrs);
+    attrs = attrs.split("|");
+    for (var attr in attrs) {
+      parts = attr.split("=", 2);
+      var key = parts[0]; attr = parts[1];
+      // tex.png[from=0,0|to=32,32]
+      if (key == "from") {
+        var pair = attr.split(",", 2), val1 = pair[0], val2 = pair[1];
+        assert(val1 && val2);
+        from.x = int.parse(val1);
+        from.y = int.parse(val2);
+        from.texel = true;
+      } else if (key == "to") {
+        var pair = attr.split(",", 2), val1 = pair[0], val2 = pair[1];
+        assert(val1 && val2);
+        to.x = int.parse(val1);
+        to.y = int.parse(val2);
+        to.texel = true;
+      } else assert(false, "Unknown key '"+key+"'");
+    }
+  }
+  var tex, width, height;
+  if (name in texfilecache) {
+    tex = texfilecache[name].tex;
+    width = texfilecache[name].width;
+    height = texfilecache[name].height;
+  } else {
+    var file = require("std/file.jb").read(name);
+    const soil = require("c/soil.jb");
+    tex = soil.load_OGL_texture_from_memory(file.ptr, file.length,
+                                            soil.LOAD_AUTO, soil.CREATE_NEW_ID,
+                                            0);
+    var size = malloc(ffi.int.sizeof * 2);
+    size.target_type = gl.int;
+    gl.Enable(gl.TEXTURE_2D);
+    gl.BindTexture(gl.TEXTURE_2D, tex);
+    gl.GetTexLevelParameteriv(gl.TEXTURE_2D, 0, gl.TEXTURE_WIDTH, size);
+    gl.GetTexLevelParameteriv(gl.TEXTURE_2D, 0, gl.TEXTURE_HEIGHT, size + 1);
+    width = size[0]; height = size[1];
+    // print("width ", width, ", height ", height);
+    // TODO
+    // print("width {w}, height {h}".format({w: width, h: height}));
+    texfilecache[name] = { tex = tex; width = width; height = height; };
+  }
+  if (from.texel) { from.x /= 1.0 * width; from.y /= 1.0 * height; }
+  if (to.texel) { to.x /= 1.0 * width; to.y /= 1.0 * height; }
+  return { id = tex; from = from; to = to; };
 }
 
 var textcache = {};
@@ -302,13 +347,14 @@ handlers["list"] = {
 function renderRect(rect, tex) {
   if (tex) {
     gl.Enable(gl.TEXTURE_2D);
-    gl.BindTexture(gl.TEXTURE_2D, tex);
+    gl.BindTexture(gl.TEXTURE_2D, tex.id);
     gl.Color3f(1, 1, 1);
+    // print("texcoord ", tex.from, " .. ", tex.to);
     gl.Begin(gl.QUADS);
-    gl.TexCoord2f(0, 0); gl.Vertex2f(rect.x, rect.y);
-    gl.TexCoord2f(1, 0); gl.Vertex2f(rect.x + rect.width, rect.y);
-    gl.TexCoord2f(1, 1); gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
-    gl.TexCoord2f(0, 1); gl.Vertex2f(rect.x, rect.y + rect.height);
+    gl.TexCoord2f(tex.from.x, tex.from.y); gl.Vertex2f(rect.x, rect.y);
+    gl.TexCoord2f(tex.to.x, tex.from.y); gl.Vertex2f(rect.x + rect.width, rect.y);
+    gl.TexCoord2f(tex.to.x, tex.to.y); gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
+    gl.TexCoord2f(tex.from.x, tex.to.y); gl.Vertex2f(rect.x, rect.y + rect.height);
     gl.End();
   } else {
     gl.Disable(gl.TEXTURE_2D);
