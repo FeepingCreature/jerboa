@@ -4,3 +4,5 @@ assert(",Hello, World,".split(",") == ["", "Hello", " World", ""]);
 assert(",".split(",") == ["", ""]);
 assert("Hello".split(",") == ["Hello"]);
 assert("".split(",") == [""]);
+assert("Hello, World".split(",", 1) == ["Hello, World"]);
+assert(",a,b,c".split(",", 3) == ["", "a", "b, c"]);

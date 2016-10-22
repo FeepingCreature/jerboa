@@ -403,13 +403,21 @@ static void string_find_fn(VMState *state, CallInfo *info) {
 }
 
 static void string_split_fn(VMState *state, CallInfo *info) {
-  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
   
   StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
   VM_ASSERT(sobj, "internal error: string.split() called on wrong type of object");
   StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
-  VM_ASSERT(sobj2, "internal error: string.split() expects string");
+  VM_ASSERT(sobj2, "string.split() expects string as first parameter");
+  
+  int max_splits = INT_MAX;
+  if (info->args_len == 2) {
+    Value par2 = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
+    VM_ASSERT(IS_INT(par2), "string.split() expects int as second parameter");
+    max_splits = AS_INT(par2);
+    VM_ASSERT(max_splits >= 1, "string.split() must be allowed to return at least one entry");
+  }
   
   char *str = sobj->value;
   int len = strlen(str);
@@ -421,7 +429,7 @@ static void string_split_fn(VMState *state, CallInfo *info) {
   
   if (matchlen == 0) {
     const char *cur = str;
-    while (cur != str + len) {
+    while (cur != str + len && entries_len < max_splits - 1) {
       const char *error = NULL;
       const char *prev = cur;
       // TODO this is not safe if the string is invalid utf8
@@ -431,11 +439,15 @@ static void string_split_fn(VMState *state, CallInfo *info) {
       entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
       entries_ptr[entries_len - 1] = make_string(state, prev, cur - prev);
     }
+    if (cur != str + len) {
+      entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
+      entries_ptr[entries_len - 1] = make_string(state, cur, str + len - cur);
+    }
     vm_return(state, info, make_array(state, entries_ptr, entries_len, true));
     return;
   }
   
-  while (true) {
+  while (entries_len < max_splits - 1) {
     char *pos = memmem(str, len, match, matchlen);
     if (pos == NULL) {
       entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
@@ -449,6 +461,11 @@ static void string_split_fn(VMState *state, CallInfo *info) {
     len -= newstr - str;
     str = newstr;
   }
+  if (len) {
+    entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
+    entries_ptr[entries_len - 1] = make_string(state, str, len);
+  }
+  vm_return(state, info, make_array(state, entries_ptr, entries_len, true));
 }
 
 static void string_replace_fn(VMState *state, CallInfo *info) {
