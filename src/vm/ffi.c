@@ -230,6 +230,9 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
   if (type == ffi->float_obj) {
     float f = *(float*) ptr;
     return FLOAT2VAL(f);
+  } else if (type == ffi->int_obj) {
+    int i = *(int*) ptr;
+    return INT2VAL(i);
   } else if (type == ffi->uint_obj) {
     unsigned int i = *(unsigned int*) ptr;
     return INT2VAL(i);
@@ -257,12 +260,12 @@ static void ffi_ptr_index_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "invalid pointer index on non-pointer object");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
   
-  Object *ffi_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL));
-  VM_ASSERT(ffi_type_obj, "cannot index read on untyped pointer!");
-  
   Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
+  
+  Object *ffi_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL));
+  VM_ASSERT(ffi_type_obj, "cannot index read on untyped pointer!");
   
   Value sizeof_val = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
   VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
@@ -308,11 +311,21 @@ static void ffi_ptr_add(VMState *state, CallInfo *info) {
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
   void *ptr = (void*) thisptr_obj->ptr;
   
+  int elemsize = 1;
+  Value target_type = OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL);
+  if (!IS_NULL(target_type)) {
+    VM_ASSERT(IS_OBJ(target_type), "target type must be ffi type");
+    
+    Value sizeof_val = OBJECT_LOOKUP_STRING(AS_OBJ(target_type), "sizeof", NULL);
+    VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
+    elemsize = AS_INT(sizeof_val);
+  }
+  
   Value offset_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(offset_val), "offset must be integer");
   int offset = AS_INT(offset_val);
   
-  vm_return(state, info, make_ffi_pointer(state, (void*) ((char*)ptr + offset)));
+  vm_return(state, info, make_ffi_pointer(state, (void*) ((char*)ptr + offset * elemsize)));
 }
 
 static Value make_ffi_pointer(VMState *state, void *ptr) {
