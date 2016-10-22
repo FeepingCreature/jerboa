@@ -775,7 +775,26 @@ static void array_compare_fn(VMState *state, CallInfo *info) {
       if (val1.type != val2.type) res = false;
       else if (val1.type == TYPE_NULL) res = true;
       else if (val1.type == TYPE_OBJECT) {
-        res = val1.obj == val2.obj;
+        VMState substate;
+        vm_setup_substate_of(&substate, state);
+        
+        Object *cmp_fn = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(AS_OBJ(val1), "==", NULL));
+        if (!cmp_fn) {
+          res = val1.obj == val2.obj;
+        } else {
+          Value equal;
+          CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 1);
+          info->fn = (Arg) { .kind = ARG_VALUE, .value = OBJ2VAL(cmp_fn) };
+          info->target = (WriteArg) { .kind = ARG_POINTER, .pointer = &equal };
+          info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val1 };
+          INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = val2 };
+          
+          if (!setup_call(&substate, info, NULL)) return; // errored
+          vm_update_frame(&substate);
+          vm_run(&substate);
+          VM_ASSERT(substate.runstate != VM_ERRORED, "'==' overload failed: %s\n", substate.error);
+          res = value_is_truthy(equal);
+        }
       } else if (val1.type == TYPE_BOOL) {
         res = val1.b == val2.b;
       } else if (val1.type == TYPE_INT) {

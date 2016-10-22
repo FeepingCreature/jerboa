@@ -1,0 +1,3 @@
+assert("foo" == "foo");
+assert(["foo"] == ["foo"]);
+assert(["foo", ["bar"]] == ["foo", ["bar"]]);
