@@ -1066,3 +1066,11 @@ void vm_run(VMState *state) {
     }
   }
 }
+
+void vm_setup_substate_of(VMState *substate, VMState *state) {
+  *substate = (VMState) {0};
+  substate->runstate = VM_TERMINATED;
+  substate->parent = state;
+  substate->root = state->root;
+  substate->shared = state->shared;
+}

@@ -48,6 +48,8 @@ void vm_update_frame(VMState *state);
 
 void vm_run(VMState *state);
 
+void vm_setup_substate_of(VMState *state, VMState *substate);
+
 void init_instr_fn_table();
 
 #endif

@@ -63,11 +63,8 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
   }
   Value toString_fn = OBJECT_LOOKUP_STRING(obj, "toString", NULL);
   if (allow_tostring && NOT_NULL(toString_fn)) {
-    VMState substate = {0};
-    substate.runstate = VM_TERMINATED;
-    substate.parent = state;
-    substate.root = state->root;
-    substate.shared = state->shared;
+    VMState substate;
+    vm_setup_substate_of(&substate, state);
     
     Value str;
     
@@ -76,7 +73,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     info.fn = (Arg) { .kind = ARG_VALUE, .value = toString_fn };
     info.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &str };
     
-    if (!setup_call(&substate, &info)) return;
+    if (!setup_call(&substate, &info, NULL)) return;
     
     vm_update_frame(&substate);
     vm_run(&substate);
