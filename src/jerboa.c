@@ -32,6 +32,8 @@ int main(int argc, char **argv) {
   for (int i = 0; i < argc; ++i) {
     if (i > 0 && strcmp(argv[i], "-v") == 0) {
       vmstate.shared->verbose = true;
+    } else if (i > 0 && strcmp(argv[i], "-pg") == 0) {
+      vmstate.shared->profstate.profiling_enabled = true;
     } else {
       argv2 = realloc(argv2, sizeof(char*) * ++argc2);
       argv2[argc2 - 1] = argv[i];
@@ -82,7 +84,9 @@ int main(int argc, char **argv) {
   vm_update_frame(&vmstate);
   vm_run(&vmstate);
   
-  save_profile_output("profile.html", &vmstate.shared->profstate);
+  if (vmstate.shared->profstate.profiling_enabled) {
+    save_profile_output("profile.html", &vmstate.shared->profstate);
+  }
   
   int resvalue = 0;
   if (vmstate.runstate == VM_ERRORED) {

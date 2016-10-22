@@ -235,6 +235,7 @@ typedef enum {
 
 typedef struct {
   struct timespec last_prof_time;
+  bool profiling_enabled;
   
   HashTable direct_table;
   HashTable indirect_table;
