@@ -318,6 +318,7 @@ static void copy_fn_stats(UserFunction *from, UserFunction *to) {
   to->name = from->name;
   to->is_method = from->is_method;
   to->variadic_tail = from->variadic_tail;
+  to->body.function_range = from->body.function_range;
 }
 
 UserFunction *redirect_predictable_lookup_misses(UserFunction *uf) {

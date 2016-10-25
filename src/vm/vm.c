@@ -123,13 +123,13 @@ void vm_print_backtrace(VMState *state) {
       FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
       assert(belongs_to);
       
-      const char *file;
+      const char *file, *fn;
       TextRange line1, line2;
       int row1, row2, col1, col2;
-      bool found = find_text_pos(belongs_to->text_from, &file, &line1, &row1, &col1);
+      bool found = find_text_pos(belongs_to->text_from, &file, &fn, &line1, &row1, &col1);
       (void) found;
       assert(found);
-      found = find_text_pos(belongs_to->text_from + belongs_to->text_len, &file, &line2, &row2, &col2);
+      found = find_text_pos(belongs_to->text_from + belongs_to->text_len, &file, &fn, &line2, &row2, &col2);
       assert(found);
       int len1 = (int) (line1.end - line1.start - 1);
       if (col1 > len1) col1 = len1;
@@ -160,10 +160,10 @@ char *vm_record_backtrace(VMState *state, int *depth) {
     Instr *instr = curf->instr_ptr;
     FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
     
-    const char *file;
+    const char *file, *fn;
     TextRange line;
     int row, col;
-    bool found = find_text_pos(belongs_to->text_from, &file, &line, &row, &col);
+    bool found = find_text_pos(belongs_to->text_from, &file, &fn, &line, &row, &col);
     (void) found; assert(found);
     int size = snprintf(NULL, 0, "#%i\t%s:%i\t%.*s\n", k+1, file, row+1, (int) (line.end - line.start - 1), line.start);
     res_ptr = realloc(res_ptr, res_len + size + 1);

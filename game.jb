@@ -30,8 +30,11 @@ function genTexture() {
   return res[0];
 }
 
-var texfilecache = {};
+var texfilecache = {}, texcache = {};
 function loadTextureFile(name) {
+  var texstr = name;
+  if (texstr in texcache) return texcache[texstr];
+  
   var from = { x = 0; y = 0; texel = false; }, to = { x = 1; y = 1; texel = false; };
   if (name.find("[") != -1) {
     var parts = name.split("[", 2);
@@ -84,7 +87,10 @@ function loadTextureFile(name) {
   }
   if (from.texel) { from.x /= 1.0 * width; from.y /= 1.0 * height; }
   if (to.texel) { to.x /= 1.0 * width; to.y /= 1.0 * height; }
-  return { id = tex; from = from; to = to; };
+  // print("from ", from, "; to ", to);
+  var obj = { id = tex; from = from; to = to; };
+  texcache[texstr] = obj;
+  return obj;
 }
 
 var textcache = {};
@@ -160,7 +166,7 @@ function renderTextToTexture(text) {
   return obj;
 }
 
-xml.node["attrToInt"] = method(attr, base) {
+xml.node["attrToInt"] = method attrToInt(attr, base) {
   var value = this.attr[attr];
   if (value instanceof int) return value;
   if (value instanceof float) return value.toInt();
@@ -202,10 +208,10 @@ function place(rect: geom.Rect, node) {
   else handlers[node.nodeName]?.place(rect, node);
 }
 
-function present(node, array) {
+function draw(node, mask: geom.Rect) {
   if ((node?.attr?.visibility || "visible") == "hidden") return;
-  if (node.nodeType == 3) handlers["text"].present(node, array);
-  else handlers[node.nodeName]?.present(node, array);
+  if (node.nodeType == 3) handlers["text"].draw(node, mask);
+  else handlers[node.nodeName]?.draw(node, mask);
 }
 
 handlers["center"] = {
@@ -223,8 +229,8 @@ handlers["center"] = {
       height = child.presentation.rect.height;
     };
   };
-  present = function(node, array) {
-    present(node.children[0], array);
+  draw = function(node, mask) {
+    draw(node.children[0], mask);
   };
 };
 
@@ -254,13 +260,13 @@ handlers["margin"] = {
       };
     }
   };
-  present = function(node, array) {
+  draw = function(node, mask) {
     var offset = node.presentation.rect - node.presentation.proposed_rect;
     var len: int = node.children.length;
     for (var i: int = 0; i < len; i++) {
       var child = node.children[i];
       child.presentation.rect += offset;
-      present(child, array);
+      draw(child, mask);
     }
   };
 };
@@ -301,8 +307,8 @@ handlers["text"] = {
     rect2.height = Math.min(rect2.height, texobj.height);
     node["presentation"] = { texture = texobj; rect = rect2; };
   };
-  present = function(node, array) {
-    array.push(new BlitPrimitive { obj = node.presentation.texture; screenrect = node.presentation.rect; });
+  draw = function(node, mask) {
+    (new BlitPrimitive { obj = node.presentation.texture; screenrect = node.presentation.rect; }).render(mask);
   };
 };
 
@@ -325,20 +331,16 @@ handlers["list"] = {
   place = function(rect, node) {
     const rect2 = computeAttrs(rect, node);
     node["presentation"] = { rect = rect2; };
-    var len: int = node.children.length;
-    for (var i: int = 0; i < len; i++) {
-      var child = node.children[i];
+    for (var child in node.children) {
       if (child.nodeType == 1) {
         place(rect2, child);
       }
     }
   };
-  present = function(node, array) {
-    var len: int = node.children.length;
-    for (var i: int = 0; i < len; i++) {
-      var child = node.children[i];
+  draw = function(node, rect) {
+    for (var child in node.children) {
       if (child.nodeType == 1) {
-        present(child, array);
+        draw(child, rect);
       }
     }
   };
@@ -350,11 +352,12 @@ function renderRect(rect, tex) {
     gl.BindTexture(gl.TEXTURE_2D, tex.id);
     gl.Color3f(1, 1, 1);
     // print("texcoord ", tex.from, " .. ", tex.to);
+    // print("rect: ", rect);
     gl.Begin(gl.QUADS);
-    gl.TexCoord2f(tex.from.x, tex.from.y); gl.Vertex2f(rect.x, rect.y);
-    gl.TexCoord2f(tex.to.x, tex.from.y); gl.Vertex2f(rect.x + rect.width, rect.y);
-    gl.TexCoord2f(tex.to.x, tex.to.y); gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
-    gl.TexCoord2f(tex.from.x, tex.to.y); gl.Vertex2f(rect.x, rect.y + rect.height);
+    gl.TexCoord2f(tex.from.x, tex.from.y); gl.Vertex2f(rect.x             , rect.y);
+    gl.TexCoord2f(tex.to.x  , tex.from.y); gl.Vertex2f(rect.x + rect.width, rect.y);
+    gl.TexCoord2f(tex.to.x  , tex.to.y  ); gl.Vertex2f(rect.x + rect.width, rect.y + rect.height);
+    gl.TexCoord2f(tex.from.x, tex.to.y  ); gl.Vertex2f(rect.x             , rect.y + rect.height);
     gl.End();
   } else {
     gl.Disable(gl.TEXTURE_2D);
@@ -381,17 +384,28 @@ handlers["rect"] = {
   place = function(rect: geom.Rect, node) {
     const rect2 = computeAttrs(rect, node);
     node["presentation"] = { rect = rect2; };
+    for (var child in node.children) {
+      if (child.nodeType == 1) {
+        place(rect2, child);
+      }
+    }
   };
-  present = function(node, array) {
+  draw = function(node, mask) {
     var rect = node.presentation.rect;
+    mask = mask.intersect(rect);
     const topline = new geom.Rect { x=rect.x; y=rect.y; width=rect.width; height=1; };
     const botline = new geom.Rect { x=rect.x; y=rect.y+rect.height; width=rect.width; height=1; };
     const leftline = new geom.Rect { x=rect.x; y=rect.y; width=1; height=rect.height; };
     const rightline = new geom.Rect { x=rect.x+rect.width; y=rect.y; width=1; height=rect.height; };
-    array.push(new RectPrimitive { screenrect = topline; });
-    array.push(new RectPrimitive { screenrect = botline; });
-    array.push(new RectPrimitive { screenrect = leftline; });
-    array.push(new RectPrimitive { screenrect = rightline; });
+    (new RectPrimitive { screenrect = topline; }).render(rect);
+    (new RectPrimitive { screenrect = botline; }).render(rect);
+    (new RectPrimitive { screenrect = leftline; }).render(rect);
+    (new RectPrimitive { screenrect = rightline; }).render(rect);
+    for (var child in node.children) {
+      if (child.nodeType == 1) {
+        draw(child, mask);
+      }
+    }
   };
 };
 
@@ -400,12 +414,12 @@ handlers["square"] = {
     const rect2 = computeAttrs(rect, node);
     node["presentation"] = { rect = rect2; };
   };
-  present = function(node, array) {
+  draw = function(node, rect) {
     var rectprim = new RectPrimitive { screenrect = node.presentation.rect; };
     if ("tex" in node.attr) {
       rectprim["tex"] = loadTextureFile(node.attr.tex);
     }
-    array.push(rectprim);
+    rectprim.render(rect);
   };
 };
 
@@ -413,10 +427,7 @@ function render(node, width, height) {
   var array = [];
   var window = new geom.Rect { x = 0; y = 0; width = width; height = height; };
   place(window, node);
-  present(node, array);
-  for (var i: int = 0; i < array.length; i++) {
-    array[i].render(window);
-  }
+  draw(node, window);
 }
 
 // factored out so the interpreter can actually optimize something

@@ -48,8 +48,18 @@ struct _FileRecord {
   int row_start, col_start;
 };
 
+struct _FunctionRecord;
+typedef struct _FunctionRecord FunctionRecord;
+
+struct _FunctionRecord {
+  FunctionRecord *prev;
+  TextRange range;
+  const char *name;
+};
+
 // TODO mutex the shit out of this
 FileRecord *record = NULL;
+FunctionRecord *fn_record = NULL;
 
 void register_file(TextRange text, const char *name, int row_start, int col_start) {
   FileRecord *newrecord = malloc(sizeof(FileRecord));
@@ -59,6 +69,14 @@ void register_file(TextRange text, const char *name, int row_start, int col_star
   newrecord->row_start = row_start;
   newrecord->col_start = col_start;
   record = newrecord;
+}
+
+void register_function(TextRange range, const char *name) {
+  FunctionRecord *newrecord = malloc(sizeof(FunctionRecord));
+  newrecord->prev = fn_record;
+  newrecord->range = range;
+  newrecord->name = name;
+  fn_record = newrecord;
 }
 
 FileEntry *get_files(int *length_p) {
@@ -82,6 +100,7 @@ FileEntry *get_files(int *length_p) {
 // most find_text_pos calls are in the same line as last time
 static __thread TextRange last_line = {0};
 static __thread FileRecord *last_record = NULL;
+static __thread FunctionRecord *last_fn_record = NULL;
 static __thread int last_row_nr;
 
 size_t utf8_strnlen(const char *ptr, size_t length) {
@@ -139,7 +158,22 @@ static bool find_text_pos_from_to(char *text, FileRecord *record, char *text_to,
   return false;
 }
 
-bool find_text_pos(char *text, const char **name_p, TextRange *line_p, int *row_p, int *col_p) {
+bool find_text_pos(char *text, const char **name_p, const char **function_p, TextRange *line_p, int *row_p, int *col_p) {
+  if (!last_fn_record || text < last_fn_record->range.start || text >= last_fn_record->range.end) {
+    FunctionRecord *cur = fn_record;
+    while (cur) {
+      if (text >= cur->range.start && text < cur->range.end) {
+        last_fn_record = cur;
+        break;
+      }
+      cur = cur->prev;
+    }
+    if (!cur) last_fn_record = NULL; // no hit
+  }
+  
+  if (last_fn_record) *function_p = last_fn_record->name;
+  else *function_p = NULL;
+  
   // cache lookup
   if (text >= last_line.start && text < last_line.end) {
     int col_nr = text - last_line.start;

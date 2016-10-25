@@ -176,6 +176,7 @@ typedef struct {
 
 struct _TableEntry {
   const char *key_ptr;
+  size_t hash;
   Object *constraint;
   Value value;
 };
@@ -287,7 +288,6 @@ typedef struct {
 typedef struct {
   char *text_from;
   int text_len;
-  int last_cycle_seen;
 } FileRange;
 
 struct _FnWrap;
@@ -328,6 +328,7 @@ typedef struct {
 typedef struct {
   InstrBlock* blocks_ptr; int blocks_len;
   FileRange **ranges_ptr; // indexed by "(char*)current instr - (char*) first instr", on the premise that Instr is at least void*
+  FileRange *function_range; // of the function itself
   // first instruction of first block to last instruction of last block
   // (linear because cache)
   Instr *instrs_ptr, *instrs_ptr_end;

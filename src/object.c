@@ -421,7 +421,6 @@ void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_le
 Value make_ptr(VMState *state, void *ptr) {
   PointerObject *obj = alloc_object_internal(state, sizeof(PointerObject), false);
   obj->base.parent = state->shared->vcache.pointer_base;
-  // see alloc_int
   obj->base.flags = OBJ_NOINHERIT;
   obj->ptr = ptr;
   return OBJ2VAL((Object*) obj);

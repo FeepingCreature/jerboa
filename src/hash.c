@@ -15,7 +15,7 @@ static inline TableEntry *table_lookup_prepared_internal(HashTable *tbl, FastKey
   // implied by the bloom test, since key->hash is never 0
   // if (tbl->entries_stored == 0) return NULL;
   if (LIKELY((tbl->bloom & key->hash) != key->hash)) return NULL;
-  // printf(":: %.*s\n", (int) key_len, key_ptr);
+  // printf(":: %.*s\n", (int) key->len, key->ptr);
   int entries_num = tbl->entries_num;
   // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
   size_t entries_mask = entries_num - 1;
@@ -51,9 +51,16 @@ void create_table_with_single_entry_prepared(HashTable *tbl, FastKey key, Value 
   tbl->bloom = key.hash;
   tbl->entries_ptr[0] = (TableEntry) {
     .key_ptr = key.ptr,
+    .hash = key.hash,
     .value = value,
     .constraint = NULL
   };
+}
+
+void table_free(HashTable *tbl) {
+  if (tbl->entries_ptr) {
+    cache_free(sizeof(TableEntry) * tbl->entries_num, tbl->entries_ptr);
+  }
 }
 
 static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey *key, TableEntry** first_free_ptr) {
@@ -87,6 +94,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
       // printf("--%p:   fillrate is okay with %i, set %li to %s\n", (void*) tbl, fillrate, free_ptr - tbl->entries_ptr, key);
       assert(free_ptr); // should have been found above
       free_ptr->key_ptr = key->ptr;
+      free_ptr->hash = key->hash;
       tbl->entries_stored ++;
       tbl->bloom |= key->hash;
       *first_free_ptr = free_ptr;
@@ -105,7 +113,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
       TableEntry *entry = &tbl->entries_ptr[i];
       if (entry->key_ptr) {
         TableEntry *freeptr;
-        FastKey cur_key = prepare_key(entry->key_ptr, strlen(entry->key_ptr));
+        FastKey cur_key = (FastKey) { .ptr = entry->key_ptr, .hash = entry->hash };
         TableEntry *nope = table_lookup_alloc_prepared_internal(&newtable, &cur_key, &freeptr);
         if (UNLIKELY(nope)) {
           fprintf(stderr, "problem: '%s' %p already in table when reallocating\n", entry->key_ptr, entry->key_ptr);
@@ -115,7 +123,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
       }
     }
   }
-  if (tbl->entries_ptr) cache_free(sizeof(TableEntry) * tbl->entries_num, tbl->entries_ptr);
+  table_free(tbl);
   *tbl = newtable;
   // and redo with new size!
   return table_lookup_alloc_prepared(tbl, key, first_free_ptr);

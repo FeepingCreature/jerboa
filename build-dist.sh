@@ -7,7 +7,7 @@ echo "---- building executable ----"
 
 echo "---- creating release tree ----"
 RELEASE=jerboa-$(git describe --always)
-rm "$RELEASE".zip || true
+rm "$RELEASE".tar.xz || true
 mkdir "$RELEASE"
 # TODO share with build-win32-dist.sh
 cp build/jerboa "$RELEASE"

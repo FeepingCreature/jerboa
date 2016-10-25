@@ -208,9 +208,9 @@ bool eat_keyword(char **textp, char *keyword) {
 
 void log_parser_error(char *location, char *format, ...) {
   TextRange line;
-  const char *file;
+  const char *file, *fn;
   int row, col;
-  if (find_text_pos(location, &file, &line, &row, &col)) {
+  if (find_text_pos(location, &file, &fn, &line, &row, &col)) {
     fprintf(stderr, "\x1b[1m%s:%i:%i: \x1b[31merror:\x1b[0m ", file, row + 1, col + 1);
     
     va_list ap;

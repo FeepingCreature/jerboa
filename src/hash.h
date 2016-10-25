@@ -19,6 +19,8 @@ TableEntry *table_lookup_alloc_prepared(HashTable *tbl, FastKey *key, TableEntry
 // fastpath: for creation of {"this"} object
 void create_table_with_single_entry_prepared(HashTable *tbl, FastKey key, Value value);
 
+void table_free(HashTable *tbl);
+
 // thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
 // note: NEVER returns 0!
 static inline size_t hash(const char *ptr, int len) {

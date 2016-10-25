@@ -1902,6 +1902,8 @@ static ParseResult parse_block(char **textp, FunctionBuilder *builder, bool forc
   return PARSE_OK;
 }
 
+__thread int lambda_count = 0;
+
 static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   char *text = *textp;
   char *fun_name = parse_identifier(&text);
@@ -1921,6 +1923,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
               │  )  │
               └─────┘
   */
+  FileRange *fn_range = alloc_and_record_start(text);
   FileRange *fnframe_range = alloc_and_record_start(text);
   if (!eat_string(&text, "(")) {
     // log_parser_error(text, "opening paren for parameter list expected");
@@ -1983,6 +1986,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   builder->slot_base = 2 + arg_list_len;
   builder->name = fun_name;
   builder->block_terminated = true;
+  builder->body.function_range = fnframe_range; // TODO use a better one
   
   // generate lexical scope, initialize with parameters
   new_block(builder);
@@ -2029,6 +2033,11 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
     return PARSE_ERROR;
   }
   assert(res == PARSE_OK);
+  
+  record_end(*textp, fn_range);
+  // TODO remove global use
+  if (!fun_name) fun_name = my_asprintf("Lambda #%i", lambda_count++);
+  register_function((TextRange) { fn_range->text_from, fn_range->text_from + fn_range->text_len }, fun_name);
   
   use_range_start(builder, fnframe_range);
   terminate(builder);
