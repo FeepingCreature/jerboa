@@ -14,6 +14,12 @@ struct _LoopRecord {
 };
 
 typedef struct {
+  // used to enable foo["bar"] = function() { } name hinting
+  int string_literal_hint_slot; char *string_literal_hint;
+  char *fun_name_hint_pos, *fun_name_hint;
+} ContextHints;
+
+typedef struct {
   char *name;
   
   char **arglist_ptr;
@@ -28,6 +34,7 @@ typedef struct {
   LoopRecord *loops;
   
   FileRange *current_range;
+  ContextHints hints; // used for internal pattern-based hacks, like ["foo"]=function being tagged as foo
   
   FunctionBody body;
 } FunctionBuilder;

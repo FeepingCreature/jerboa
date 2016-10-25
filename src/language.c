@@ -24,7 +24,7 @@ typedef struct {
   bool safe_to_discard;
 } RefValue;
 
-static ParseResult parse_function_expr(char **textp, UserFunction **uf);
+static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, UserFunction **uf);
 
 static RefValue ref_simple(int slot) {
   return (RefValue) { slot, -1, REFMODE_NONE, NULL };
@@ -287,6 +287,8 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
         use_range_start(builder, range);
         slot = addinstr_alloc_string_object(builder, t_value);
         use_range_end(builder, range);
+        builder->hints.string_literal_hint_slot = slot;
+        builder->hints.string_literal_hint = t_value;
       }
     }
     *rv = ref_simple(slot);
@@ -325,8 +327,12 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   if (eat_keyword(&text, "function") || (eat_keyword(&text, "method") && (is_method = true))) {
     record_end(text, range);
     
+    if (builder && *textp == builder->hints.fun_name_hint_pos) {
+      builder->hints.fun_name_hint_pos = text; // advance
+    }
+    
     UserFunction *fn;
-    ParseResult res = parse_function_expr(&text, &fn);
+    ParseResult res = parse_function_expr(&text, builder, &fn);
     if (res == PARSE_ERROR) return res;
     if (res == PARSE_NONE) { text = *textp; record_start(text, range); }
     else {
@@ -508,6 +514,11 @@ static ParseResult parse_array_access(char **textp, FunctionBuilder *builder, Re
   
   int key_slot = ref_access(builder, key);
   int expr_slot = ref_access(builder, *expr);
+  
+  if (builder && key_slot == builder->hints.string_literal_hint_slot) {
+    builder->hints.fun_name_hint_pos = text;
+    builder->hints.fun_name_hint = builder->hints.string_literal_hint;
+  }
   
   *expr = (RefValue) {expr_slot, key_slot, REFMODE_INDEX, access_range};
   
@@ -1462,9 +1473,14 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
   res = parse_expr_base(&text, builder, &rv);
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
+  char *text_before_assign = text;
   FileRange *assign_range = alloc_and_record_start(text);
   if (!eat_string(&text, assign_text)) abort(); // Internal inconsistency
   record_end(text, assign_range);
+  
+  if (builder && text_before_assign == builder->hints.fun_name_hint_pos) {
+    builder->hints.fun_name_hint_pos = text; // advance
+  }
   
   RefValue value_expr;
   res = parse_expr(&text, builder, &value_expr);
@@ -1746,7 +1762,7 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   use_range_end(builder, range);
   
   UserFunction *fn;
-  ParseResult res = parse_function_expr(textp, &fn);
+  ParseResult res = parse_function_expr(textp, builder, &fn);
   if (res == PARSE_ERROR) return res;
   if (res == PARSE_NONE) {
     log_parser_error(*textp, "opening paren for parameter list expected");
@@ -1904,9 +1920,15 @@ static ParseResult parse_block(char **textp, FunctionBuilder *builder, bool forc
 
 __thread int lambda_count = 0;
 
-static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
+static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, UserFunction **uf_p) {
   char *text = *textp;
   char *fun_name = parse_identifier(&text);
+  char *fun_hint = fun_name;
+  if (!fun_hint && pbuilder && pbuilder->hints.fun_name_hint_pos == text) {
+    fun_hint = pbuilder->hints.fun_name_hint;
+  }
+  // TODO remove global use
+  if (!fun_hint) fun_hint = my_asprintf("Lambda #%i", lambda_count++);
   /*
   ┌────────┐  ┌─────┐
   │function│═▷│  (  │
@@ -2035,9 +2057,7 @@ static ParseResult parse_function_expr(char **textp, UserFunction **uf_p) {
   assert(res == PARSE_OK);
   
   record_end(*textp, fn_range);
-  // TODO remove global use
-  if (!fun_name) fun_name = my_asprintf("Lambda #%i", lambda_count++);
-  register_function((TextRange) { fn_range->text_from, fn_range->text_from + fn_range->text_len }, fun_name);
+  register_function((TextRange) { fn_range->text_from, fn_range->text_from + fn_range->text_len }, fun_hint);
   
   use_range_start(builder, fnframe_range);
   terminate(builder);

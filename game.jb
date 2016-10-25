@@ -166,7 +166,7 @@ function renderTextToTexture(text) {
   return obj;
 }
 
-xml.node["attrToInt"] = method attrToInt(attr, base) {
+xml.node["attrToInt"] = method(attr, base) {
   var value = this.attr[attr];
   if (value instanceof int) return value;
   if (value instanceof float) return value.toInt();
