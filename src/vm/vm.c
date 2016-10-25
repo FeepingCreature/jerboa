@@ -176,15 +176,16 @@ char *vm_record_backtrace(VMState *state, int *depth) {
 }
 
 void vm_record_profile(VMState *state) {
-  int cyclecount = state->shared->cyclecount;
-  HashTable *direct_tbl = &state->shared->profstate.direct_table;
-  HashTable *indirect_tbl = &state->shared->profstate.indirect_table;
+  // TODO record actual cycles instead of samples
+  HashTable *excl_table = &state->shared->profstate.excl_table;
+  HashTable *incl_table = &state->shared->profstate.incl_table;
   
   VMState *curstate = state;
   // fprintf(stderr, "generate backtrace\n");
   // fprintf(stderr, "------\n");
   // vm_print_backtrace(state);
   int k = 0;
+  Callframe *prev_frame = NULL;
   while (curstate) {
     if (curstate->frame) curstate->frame->instr_ptr = curstate->instr;
     for (Callframe *curf = curstate->frame; curf; k++, curf = curf->above) {
@@ -198,23 +199,26 @@ void vm_record_profile(VMState *state) {
       // so we can just use the pointer stored in the instr as the key
       FastKey key = fixed_pointer_key(belongs_to);
       
-      if (k == 0) {
+      if (!prev_frame) { // top frame
         TableEntry *freeptr;
-        TableEntry *entry_p = table_lookup_alloc_prepared(direct_tbl, &key, &freeptr);
+        TableEntry *entry_p = table_lookup_alloc_prepared(excl_table, &key, &freeptr);
         if (entry_p) entry_p->value.i ++;
         else freeptr->value = INT2VAL(1);
       } else {
-        // don't double-count ranges in case of recursion
-        bool range_already_counted = belongs_to->last_cycle_seen == cyclecount;
-        
-        if (!range_already_counted) {
-          TableEntry *freeptr;
-          TableEntry *entry_p = table_lookup_alloc_prepared(indirect_tbl, &key, &freeptr);
-          if (entry_p) entry_p->value.i ++;
-          else freeptr->value = INT2VAL(1);
+        TableEntry *freeptr;
+        TableEntry *entry_p = table_lookup_alloc_prepared(incl_table, &key, &freeptr);
+        if (freeptr) {
+          freeptr->value.obj = calloc(sizeof(HashTable), 1);
+          entry_p = freeptr;
         }
+        HashTable *sub_table = (HashTable*) entry_p->value.obj;
+        // assert(prev_frame->uf->body.function_range);
+        FastKey next_fn_key = fixed_pointer_key(prev_frame->uf->body.function_range);
+        TableEntry *subentry_p = table_lookup_alloc_prepared(sub_table, &next_fn_key, &freeptr);
+        if (subentry_p) subentry_p->value.i ++;
+        else freeptr->value = INT2VAL(1);
       }
-      belongs_to->last_cycle_seen = cyclecount;
+      prev_frame = curf;
     }
     curstate = curstate->parent;
   }

@@ -472,8 +472,8 @@ void free_function(UserFunction *uf) {
 
 typedef struct {
   FileRange *range;
-  int num_samples;
-  bool direct;
+  HashTable *table; // indirect
+  int num_samples; // direct
 } ProfilerRecord;
 
 int prec_sort_outside_in_fn(const void *a, const void *b) {
@@ -481,32 +481,11 @@ int prec_sort_outside_in_fn(const void *a, const void *b) {
   // ranges that start earlier
   if (rec_a->range->text_from < rec_b->range->text_from) return -1;
   if (rec_a->range->text_from > rec_b->range->text_from) return 1;
-  // then ranges that end later (outermost)
+  // then ranges that end later
   if (rec_a->range->text_len > rec_b->range->text_len) return -1;
   if (rec_a->range->text_len < rec_b->range->text_len) return 1;
-  // otherwise they're identical (direct/indirect collision)
+  // otherwise they're identical??
   return 0;
-}
-
-struct _OpenRange;
-typedef struct _OpenRange OpenRange;
-
-struct _OpenRange {
-  ProfilerRecord *record;
-  OpenRange *prev;
-};
-
-static void push_record(OpenRange **range_p, ProfilerRecord *rec) {
-  OpenRange *new_range = malloc(sizeof(OpenRange));
-  new_range->record = rec;
-  new_range->prev = *range_p;
-  *range_p = new_range;
-}
-
-static void drop_record(OpenRange **range_p) {
-  OpenRange *prev_range = (*range_p)->prev;
-  free(*range_p);
-  *range_p = prev_range;
 }
 
 // TODO move into separate file
@@ -517,38 +496,31 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
     abort();
   }
   
-  HashTable *direct_table = &profile_state->direct_table;
-  HashTable *indirect_table = &profile_state->indirect_table;
-  int num_direct_records = direct_table->entries_stored;
-  int num_indirect_records = indirect_table->entries_stored;
-  int num_records = num_direct_records + num_indirect_records;
+  HashTable *excl_table = &profile_state->excl_table;
+  HashTable *incl_table = &profile_state->incl_table;
+  int num_excl_records = excl_table->entries_stored;
+  int num_incl_records = incl_table->entries_stored;
+  int num_records = num_excl_records + num_incl_records;
   
   ProfilerRecord *record_entries = calloc(sizeof(ProfilerRecord), num_records);
   
-  // 1 so we can divide by it
-  int max_samples_direct = 1, max_samples_indirect = 1;
-  int sum_samples_direct = 1, sum_samples_indirect = 1;
   int k = 0;
-  for (int i = 0; i < direct_table->entries_num; ++i) {
-    TableEntry *entry = &direct_table->entries_ptr[i];
-    if (entry->key_ptr) {
-      FileRange *range = (FileRange*) entry->key_ptr; // This hurts my soul.
-      int samples = entry->value.i;
-      // printf("dir entry %i of %i: %i %.*s (%i)\n", i, direct_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
-      if (samples > max_samples_direct) max_samples_direct = samples;
-      sum_samples_direct += samples;
-      record_entries[k++] = (ProfilerRecord) { range, samples, true };
-    }
-  }
-  for (int i = 0; i < indirect_table->entries_num; ++i) {
-    TableEntry *entry = &indirect_table->entries_ptr[i];
+  for (int i = 0; i < excl_table->entries_num; ++i) {
+    TableEntry *entry = &excl_table->entries_ptr[i];
     if (entry->key_ptr) {
       FileRange *range = (FileRange*) entry->key_ptr;
       int samples = entry->value.i;
-      // printf("indir entry %i of %i: %i %.*s (%i)\n", i, indirect_table->entries_num, (int) (range->text_to - range->text_from), (int) (range->text_to - range->text_from), range->text_from, samples);
-      if (samples > max_samples_indirect) max_samples_indirect = samples;
-      sum_samples_indirect += samples;
-      record_entries[k++] = (ProfilerRecord) { range, samples, false };
+      // printf("dir entry %i of %i: %p; %i %.*s (%i)\n", i, excl_table->entries_num, (void*) range, (int) range->text_len, (int) range->text_len, range->text_from, samples);
+      record_entries[k++] = (ProfilerRecord) { .range = range, .table = NULL, .num_samples = samples };
+    }
+  }
+  for (int i = 0; i < incl_table->entries_num; ++i) {
+    TableEntry *entry = &incl_table->entries_ptr[i];
+    if (entry->key_ptr) {
+      FileRange *range = (FileRange*) entry->key_ptr;
+      HashTable *table = (HashTable*) entry->value.obj;
+      // printf("indir entry %i of %i: %i %.*s (%i)\n", i, incl_table->entries_num, (int) range->text_len, (int) range->text_len, range->text_from, table->entries_num);
+      record_entries[k++] = (ProfilerRecord) { .range = range, .table = table, .num_samples = 0 };
     }
   }
   assert(k == num_records);
@@ -557,104 +529,81 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   
 #define CUR_ENTRY (&record_entries[cur_entry_id])
   
-  fprintf(file, "<!DOCTYPE html>\n");
-  fprintf(file, "<html lang=\"\"><head><title>Profiler</title>\n");
-  // fprintf(file, "<style>span { border-left: 1px solid #eee; border-right: 1px solid #ddd; border-bottom: 1px solid #fff; }</style>\n");
-  fprintf(file, "<style>span { position: relative; }</style>\n");
-  fprintf(file, "<script src=\"https://code.jquery.com/jquery-3.1.0.min.js\"></script>\n");
-  fprintf(file, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css\" crossorigin=\"anonymous\">\n");
-  fprintf(file, "<link rel=\"stylesheet\" href=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css\" crossorigin=\"anonymous\">\n");
-  fprintf(file, "<script src=\"https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js\" crossorigin=\"anonymous\"></script>\n");
-  fprintf(file, "</head><body style=\"margin: 20px;\">\n");
-  
-  fprintf(file, "<div class=\"accordion\" id=\"file_accordion\">\n");
+  fprintf(file, "events: Samples\n\n");
   
   int num_files = 0;
   FileEntry *files = get_files(&num_files);
   for (int i = 0; i < num_files; i++) {
+    fprintf(file, "fl=%s\n", files[i].file);
     TextRange source = files[i].range;
-    OpenRange *open_range_head = NULL;
     
-    fprintf(file, "<div class=\"accordion-group\">\n");
-    fprintf(file, "<div class=\"accordion-heading\"><a class=\"accordion-toggle\" data-toggle=\"collapse\" data-parent=\"#file_accordion\" href=\"#filecollapse%i\">\n", i);
-    fprintf(file, "%s\n", files[i].file);
-    fprintf(file, "</a></div>\n");
-    fprintf(file, "<div id=\"filecollapse%i\" class=\"accordion-body collapse\"><div class=\"accordion-inner\">\n", i);
-    fprintf(file, "<pre>");
-    char *cur_char = source.start;
     int cur_entry_id = 0;
-    int zindex = 100000; // if there's more spans than this we are anyways fucked
-    while (cur_char != source.end) {
-      // close all extant
-      while (open_range_head && open_range_head->record->range->text_from + open_range_head->record->range->text_len == cur_char) {
-        // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
-        drop_record(&open_range_head);
-        fprintf(file, "</span>");
-      }
-      // skip any preceding
-      while (cur_entry_id < num_records && CUR_ENTRY->range->text_from < cur_char) {
-        cur_entry_id ++;
-      }
-      // open any new
-      while (cur_entry_id < num_records && CUR_ENTRY->range->text_from == cur_char) {
-        // fprintf(stderr, "%li with %li: open tag\n", CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from);
-        push_record(&open_range_head, CUR_ENTRY);
-        int *samples_dir_p = NULL, *samples_indir_p = NULL;
-        OpenRange *cur = open_range_head;
-        // find the last (innermost) set dir/indir values
-        while (cur && (!samples_dir_p || !samples_indir_p)) {
-          if (!samples_dir_p && cur->record->direct) samples_dir_p = &cur->record->num_samples;
-          if (!samples_indir_p && !cur->record->direct) samples_indir_p = &cur->record->num_samples;
-          cur = cur->prev;
-        }
-        int samples_dir = samples_dir_p ? *samples_dir_p : 0;
-        int samples_indir = samples_indir_p ? *samples_indir_p : 0;
-        double percent_dir = (samples_dir * 100.0) / sum_samples_direct;
-        int hex_dir = 255 - (samples_dir * 255LL) / max_samples_direct;
-        // sum direct == max indirect
-        double percent_indir = (samples_indir * 100.0) / sum_samples_direct;
-        // int hex_indir = 255 - (samples_indir * 255LL) / sum_samples_direct;
-        int weight_indir = 100 + 100 * ((samples_indir * 8LL) / sum_samples_direct);
-        float border_indir = samples_indir * 3.0 / sum_samples_direct;
-        int fontsize_indir = 100 + (samples_indir * 10LL) / sum_samples_direct;
-        int bordercol_indir = 15 - (int)(15*((border_indir < 1)?border_indir:1));
-        /*printf("%li with %li: open tag %i and %i over (%i, %i) and (%i, %i): %02x and %i / %f\n",
-              CUR_ENTRY.text_from - source.start, CUR_ENTRY.text_to - CUR_ENTRY.text_from,
-              samples_dir, samples_indir,
-              max_samples_direct, sum_samples_direct,
-              max_samples_indirect, sum_samples_indirect,
-              hex_dir, weight_indir, border_indir);*/
-        fprintf(file, "<span title=\"%.2f%% active, %.2f%% in backtrace\""
-          " style=\"",
-          percent_dir, percent_indir);
-        if (hex_dir <= 250/* || hex_dir <= 250*/) {
-          fprintf(file, "background-color:#ff%02x%02x;",
-            hex_dir, hex_dir);
-        }
-        fprintf(file, "font-weight:%i;border-bottom:%fpx solid #%1x%1x%1x;font-size: %i%%;",
-                weight_indir, border_indir, bordercol_indir, bordercol_indir, bordercol_indir, fontsize_indir);
-        fprintf(file, "z-index: %i;", --zindex);
-        fprintf(file, "\">");
-        cur_entry_id ++;
-      }
-      // close all 0-size new
-      while (open_range_head && open_range_head->record->range->text_from + open_range_head->record->range->text_len == cur_char) {
-        // fprintf(stderr, "%li: close tag\n", open_range_head->record->text_to - source.start);
-        drop_record(&open_range_head);
-        fprintf(file, "</span>");
-      }
-      if (*cur_char == '<') fprintf(file, "&lt;");
-      else if (*cur_char == '>') fprintf(file, "&gt;");
-      // else if (*cur_char == '\n') fprintf(file, "</pre>\n<pre>");
-      else fprintf(file, "%c", *cur_char);
-      cur_char ++;
+    // skip any preceding
+    while (cur_entry_id < num_records && CUR_ENTRY->range->text_from < source.start) {
+      cur_entry_id ++;
     }
-    fprintf(file, "</pre>\n");
-    fprintf(file, "</div></div></div>\n");
+    
+    int last_row = -1;
+    int row_samples;
+    
+    const char *last_fn = "placeholder";
+    
+    HashTable row_calls = {0};
+    
+    for (; cur_entry_id < num_records && CUR_ENTRY->range->text_from < source.end; cur_entry_id ++) {
+      int num_samples = CUR_ENTRY->num_samples;
+      const char *name, *fn; TextRange line; int row, col;
+      if (!find_text_pos(CUR_ENTRY->range->text_from, &name, &fn, &line, &row, &col)) continue;
+      // fprintf(stderr, "for %p '%.*s': %s, %s, %i, %i: %i\n", (void*) CUR_ENTRY->range, CUR_ENTRY->range->text_len, CUR_ENTRY->range->text_from, name, fn, row, col, num_samples);
+      // if we need to flush / we're in the last loop
+      if (row != last_row || cur_entry_id >= num_records - 1 || record_entries[cur_entry_id+1].range->text_from >= source.end) {
+        if (last_row != -1) {
+          fprintf(file, "%i %i\n", last_row+1, row_samples);
+          // fprintf(stderr, ": %i %i\n", last_row+1, row_samples);
+          // fprintf(stderr, ": %i calls\n", row_calls.entries_num);
+          for (int l = 0; l < row_calls.entries_num; l++) {
+            TableEntry *entry = &row_calls.entries_ptr[l];
+            if (entry->key_ptr) {
+              FileRange *fun_range = (FileRange*) entry->key_ptr;
+              int samples = entry->value.i;
+              const char *name2, *fn2; TextRange line2; int row2, col2;
+              // find call target site
+              if (!find_text_pos(fun_range->text_from, &name2, &fn2, &line2, &row2, &col2)) continue;
+              if (name != name2) fprintf(file, "cfi=%s\n", name2);
+              fprintf(file, "cfn=%s\n", fn2);
+              fprintf(file, "calls=1 %i\n", row2+1);
+              fprintf(file, "%i %i\n", last_row+1, samples);
+            }
+          }
+        }
+        if (fn != last_fn) {
+          last_fn = fn;
+          if (fn) fprintf(file, "fn=%s\n", fn);
+          else fprintf(file, "fn=Unknown\n");
+        }
+        last_row = row;
+        row_samples = 0;
+        table_free(&row_calls);
+        row_calls = (HashTable) {0};
+      }
+      row_samples += num_samples;
+      if (CUR_ENTRY->table) {
+        HashTable *sub_table = CUR_ENTRY->table;
+        for (int l = 0; l < sub_table->entries_num; l++) {
+          TableEntry *entry = &sub_table->entries_ptr[l];
+          if (entry->key_ptr) {
+            // function range
+            FastKey key = fixed_pointer_key((void*) entry->key_ptr);
+            TableEntry *freeptr;
+            TableEntry *call_p = table_lookup_alloc_prepared(&row_calls, &key, &freeptr);
+            if (freeptr) freeptr->value.i = entry->value.i;
+            else call_p->value.i += entry->value.i;
+          }
+        }
+      }
+    }
   }
 #undef CUR_ENTRY
   
-  fprintf(file, "</div>\n");
-  fprintf(file, "</body></html>");
   fclose(file);
 }

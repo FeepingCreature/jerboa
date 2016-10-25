@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
   vm_run(&vmstate);
   
   if (vmstate.shared->profstate.profiling_enabled) {
-    save_profile_output("profile.html", &vmstate.shared->profstate);
+    save_profile_output("profile.cg", &vmstate.shared->profstate);
   }
   
   int resvalue = 0;

@@ -238,8 +238,10 @@ typedef struct {
   struct timespec last_prof_time;
   bool profiling_enabled;
   
-  HashTable direct_table;
-  HashTable indirect_table;
+  // table position -> count
+  HashTable excl_table;
+  // table position -> table position -> count
+  HashTable incl_table;
 } VMProfileState;
 
 typedef struct {
