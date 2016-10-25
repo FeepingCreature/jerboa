@@ -199,7 +199,7 @@ function findOverlaps(node, rect, fn) {
 
 const RenderPrimitive = {
   screenrect: geom.Rect = new geom.Rect;
-  render = method(mask: geom.Rect) { assert(false); };
+  method render(mask: geom.Rect) { assert(false); }
 };
 
 function place(rect: geom.Rect, node) {
@@ -215,7 +215,7 @@ function draw(node, mask: geom.Rect) {
 }
 
 handlers["center"] = {
-  place = function(rect, node) {
+  function place(rect, node) {
     var len: int = node.children.length;
     assert(len == 1, "Please only center one element for now! "+len);
     var child = node.children[0];
@@ -228,14 +228,14 @@ handlers["center"] = {
       width = child.presentation.rect.width;
       height = child.presentation.rect.height;
     };
-  };
-  draw = function(node, mask) {
+  }
+  function draw(node, mask) {
     draw(node.children[0], mask);
-  };
+  }
 };
 
 handlers["margin"] = {
-  place = function(rect, node) {
+  function place(rect, node) {
     var sz_x = node.attrToInt("size", "width");
     var sz_y = node.attrToInt("size", "height");
     var subrect = new rect;
@@ -259,8 +259,8 @@ handlers["margin"] = {
         rect = myrect;
       };
     }
-  };
-  draw = function(node, mask) {
+  }
+  function draw(node, mask) {
     var offset = node.presentation.rect - node.presentation.proposed_rect;
     var len: int = node.children.length;
     for (var i: int = 0; i < len; i++) {
@@ -268,12 +268,12 @@ handlers["margin"] = {
       child.presentation.rect += offset;
       draw(child, mask);
     }
-  };
+  }
 };
 
 const BlitPrimitive = new RenderPrimitive {
   obj = null;
-  render = method(mask: geom.Rect) {
+  method render(mask: geom.Rect) {
     var drawrect = this.screenrect.intersect(mask);
     if (drawrect.width <= 0 || drawrect.height <= 0) return null;
     this.obj.bind();
@@ -296,20 +296,20 @@ const BlitPrimitive = new RenderPrimitive {
     gl.TexCoord2f(tex_from.x, tex_to.y);
     gl.Vertex2f(drawrect.x, drawrect.y + drawrect.height);
     gl.End();
-  };
+  }
 };
 
 handlers["text"] = {
-  place = function(rect: geom.Rect, node) {
+  function place(rect: geom.Rect, node) {
     var texobj = renderTextToTexture(node.value);
     var rect2 = new rect;
     rect2.width = Math.min(rect2.width, texobj.width);
     rect2.height = Math.min(rect2.height, texobj.height);
     node["presentation"] = { texture = texobj; rect = rect2; };
-  };
-  draw = function(node, mask) {
+  }
+  function draw(node, mask) {
     (new BlitPrimitive { obj = node.presentation.texture; screenrect = node.presentation.rect; }).render(mask);
-  };
+  }
 };
 
 function computeAttrs(rect, node) {
@@ -328,7 +328,7 @@ function computeAttrs(rect, node) {
 }
 
 handlers["list"] = {
-  place = function(rect, node) {
+  function place(rect, node) {
     const rect2 = computeAttrs(rect, node);
     node["presentation"] = { rect = rect2; };
     for (var child in node.children) {
@@ -336,14 +336,14 @@ handlers["list"] = {
         place(rect2, child);
       }
     }
-  };
-  draw = function(node, rect) {
+  }
+  function draw(node, rect) {
     for (var child in node.children) {
       if (child.nodeType == 1) {
         draw(child, rect);
       }
     }
-  };
+  }
 };
 
 function renderRect(rect, tex) {
@@ -372,16 +372,16 @@ function renderRect(rect, tex) {
 }
 
 const RectPrimitive = new RenderPrimitive {
-  render = method(mask: geom.Rect) {
+  method render(mask: geom.Rect) {
     var actualRect = this.screenrect.intersect(mask);
     if (actualRect.width >= 0 && actualRect.height >= 0) {
       renderRect(actualRect, this?.tex);
     }
-  };
+  }
 };
 
 handlers["rect"] = {
-  place = function(rect: geom.Rect, node) {
+  function place(rect: geom.Rect, node) {
     const rect2 = computeAttrs(rect, node);
     node["presentation"] = { rect = rect2; };
     for (var child in node.children) {
@@ -389,8 +389,8 @@ handlers["rect"] = {
         place(rect2, child);
       }
     }
-  };
-  draw = function(node, mask) {
+  }
+  function draw(node, mask) {
     var rect = node.presentation.rect;
     mask = mask.intersect(rect);
     const topline = new geom.Rect { x=rect.x; y=rect.y; width=rect.width; height=1; };
@@ -406,21 +406,21 @@ handlers["rect"] = {
         draw(child, mask);
       }
     }
-  };
+  }
 };
 
 handlers["square"] = {
-  place = function(rect, node) {
+  function place(rect, node) {
     const rect2 = computeAttrs(rect, node);
     node["presentation"] = { rect = rect2; };
-  };
-  draw = function(node, rect) {
+  }
+  function draw(node, rect) {
     var rectprim = new RectPrimitive { screenrect = node.presentation.rect; };
     if ("tex" in node.attr) {
       rectprim["tex"] = loadTextureFile(node.attr.tex);
     }
     rectprim.render(rect);
-  };
+  }
 };
 
 function render(node, width, height) {

@@ -102,6 +102,39 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
   while (!eat_string(&text, "}")) {
     
     FileRange *add_entry_range = alloc_and_record_start(text);
+    
+    bool is_method = false;
+    if (eat_keyword(&text, "function") || (eat_keyword(&text, "method") && (is_method = true))) {
+      char *ident_name = parse_identifier(&text);
+      if (!ident_name) {
+        log_parser_error(text, "object function must have name!");
+        free(add_entry_range);
+        return PARSE_ERROR;
+      }
+      record_end(text, add_entry_range);
+      
+      builder->hints.fun_name_hint_pos = text;
+      builder->hints.fun_name_hint = ident_name;
+      
+      UserFunction *fn;
+      ParseResult res = parse_function_expr(&text, builder, &fn);
+      fn->is_method = is_method;
+      if (res == PARSE_ERROR) return res;
+      if (res == PARSE_NONE) {
+        log_parser_error(text, "function expected");
+        return PARSE_ERROR;
+      }
+      assert(res == PARSE_OK);
+      if (builder) {
+        use_range_start(builder, add_entry_range);
+        int fn_slot = addinstr_alloc_closure_object(builder, fn);
+        int key_slot = addinstr_alloc_string_object(builder, ident_name);
+        addinstr_assign(builder, obj_slot, key_slot, fn_slot, ASSIGN_PLAIN);
+        use_range_end(builder, add_entry_range);
+      }
+      continue;
+    }
+    
     char *key_name = parse_identifier(&text);
     if (!key_name) {
       ParseResult res = parse_string(&text, &key_name);

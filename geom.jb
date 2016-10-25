@@ -19,21 +19,21 @@ const Rect = {
   y: int = 0;
   width: int = 0;
   height: int = 0;
-  intersect = method(rect) {
+  method intersect(rect) {
     const res = new Rect;
     res.x = Math.max(this.x, rect.x);
     res.y = Math.max(this.y, rect.y);
     res.width = Math.min(this.x + this.width, rect.x + rect.width) - res.x;
     res.height = Math.min(this.y + this.height, rect.y + rect.height) - res.y;
     return res;
-  };
-  overlaps = method(rect2: Rect) {
+  }
+  method overlaps(rect2: Rect) {
     if (this.x > rect2.x + rect2.width) return false;
     if (rect2.x > this.x + this.width) return false;
     if (this.y > rect2.y + rect2.height) return false;
     if (rect2.y > this.y + this.height) return false;
     return true;
-  };
+  }
   "-" = method(rect2: Rect) {
     return new DeltaRect {
       δx = this.x - rect2.x;
