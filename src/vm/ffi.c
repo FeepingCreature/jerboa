@@ -379,8 +379,10 @@ static int ffi_par_len(VMState *state, Object *ret_type, ArrayObject *par_types_
       Value struct_sz_val = OBJECT_LOOKUP_STRING(type, "sizeof", NULL);
       VM_ASSERT(IS_INT(struct_sz_val), "sizeof should really have been int") -1;
       int struct_sz = AS_INT(struct_sz_val);
-      if (struct_sz < sizeof(long)) struct_sz = sizeof(long);
-      par_len_sum += struct_sz;
+      VM_ASSERT(struct_sz >= 0 && struct_sz < 16384, "wat r u even doing") -1;
+      unsigned int struct_sz_u = (unsigned int) struct_sz;
+      if (struct_sz_u < sizeof(long)) struct_sz_u = sizeof(long);
+      par_len_sum += struct_sz_u;
     }
     else abort();
 #undef TYPESZ
@@ -439,8 +441,9 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     int struct_sz = AS_INT(struct_sz_val);
     // NOTE: point of danger??
     VM_ASSERT(struct_sz >= 0 && struct_sz < 16384, "wat r u even doing");
-    if (struct_sz < sizeof(long)) struct_sz = sizeof(long);
-    data = (char*) data + struct_sz;
+    unsigned int struct_sz_u = struct_sz;
+    if (struct_sz_u < sizeof(long)) struct_sz_u = sizeof(long);
+    data = (char*) data + struct_sz_u;
   } else VM_ASSERT(false, "unhandled return type");
   // fprintf(stderr, "::");
   for (int i = 0; i < info->args_len; ++i) {
@@ -534,7 +537,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
       PointerObject *ptr_obj = (PointerObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(str_obj, "pointer", NULL)), pointer_base);
       VM_ASSERT(ptr_obj, "struct's \"pointer\" not set, null or not a pointer");
       
-      int step_size = struct_size;
+      unsigned int step_size = struct_size;
       if (sizeof(long) > step_size) step_size = sizeof(long);
       
       memcpy(data, ptr_obj->ptr, struct_size);
@@ -592,7 +595,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     vm_return(state, info, FLOAT2VAL((float) *(double*) ret_ptr));
   } else if (obj_instance_of(ret_type, ffi->struct_obj)) {
     // validated above
-    int struct_sz = AS_INT(OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL));
+    unsigned int struct_sz = AS_INT(OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL));
     void *struct_data = malloc(struct_sz);
     memcpy(struct_data, ret_ptr, struct_sz);
     Object *struct_val_obj = AS_OBJ(make_object(state, ret_type, false));

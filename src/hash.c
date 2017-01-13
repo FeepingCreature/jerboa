@@ -116,7 +116,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
         FastKey cur_key = (FastKey) { .ptr = entry->key_ptr, .hash = entry->hash };
         TableEntry *nope = table_lookup_alloc_prepared_internal(&newtable, &cur_key, &freeptr);
         if (UNLIKELY(nope)) {
-          fprintf(stderr, "problem: '%s' %p already in table when reallocating\n", entry->key_ptr, entry->key_ptr);
+          fprintf(stderr, "problem: '%s' %p already in table when reallocating\n", entry->key_ptr, (void*) entry->key_ptr);
         }
         (void) nope; assert(nope == NULL); // double entry??
         *freeptr = tbl->entries_ptr[i];

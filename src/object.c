@@ -544,7 +544,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
     }
     
     int last_row = -1;
-    int row_samples;
+    int row_samples = 0;
     
     const char *last_fn = "placeholder";
     
