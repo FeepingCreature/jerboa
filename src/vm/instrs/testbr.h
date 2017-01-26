@@ -25,7 +25,7 @@ static FnWrap FN_NAME(VMState * __restrict__ state) {
   state->instr = (Instr*) ((char*) frame->uf->body.instrs_ptr + frame->uf->body.blocks_ptr[target_blk].offset);
   frame->prev_block = frame->block;
   frame->block = target_blk;
-  return (FnWrap) { state->instr->fn };
+  STEP_VM;
 }
 
 #ifdef TEST_KIND_DEFINED

@@ -24,7 +24,7 @@ static FnWrap FN_NAME(VMState * __restrict__ state) {
   bool res = value_is_truthy(val);
   set_arg_specialized(state, instr->target, BOOL2VAL(res), TARGET_KIND);
   state->instr = (Instr*) (instr + 1);
-  return (FnWrap) { state->instr->fn };
+  STEP_VM;
 }
 
 #ifdef VALUE_KIND_DEFINED

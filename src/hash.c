@@ -34,7 +34,7 @@ static inline TableEntry *table_lookup_prepared_internal(HashTable *tbl, FastKey
       return entry;
     }
     k = (k + 1) & entries_mask;
-    if (k == key->hash) break;
+    if (k == (key->hash & entries_mask)) break;
   }
   return NULL;
 }

@@ -35,7 +35,7 @@ static FnWrap FN_NAME(VMState * __restrict__ state) {
   state->instr = state->frame->return_next_instr;
 #endif
   
-  return (FnWrap) { state->instr->fn };
+  STEP_VM;
 }
 
 #ifdef VALUE_KIND_DEFINED

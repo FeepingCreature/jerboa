@@ -21,7 +21,7 @@ static FnWrap FAST_FN_NAME(VMState * __restrict__ state) {
   FN_NAME(state, info, CMP_EQ);
   if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
   state->instr = next_instr;
-  return (FnWrap) { state->instr->fn };
+  STEP_VM;
 }
 
 #ifdef FN_NAME_DEFINED

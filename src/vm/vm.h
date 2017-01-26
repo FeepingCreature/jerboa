@@ -18,6 +18,13 @@ struct _VMState {
   VMState *parent;
 };
 
+#if defined(NDEBUG) && defined(__llvm__)
+// rely on llvm function tailcall optimization being on
+#define STEP_VM return state->instr->fn(state)
+#else
+#define STEP_VM return (FnWrap) { state->instr->fn }
+#endif
+
 void vm_error(VMState *state, const char *fmt, ...);
 
 #define VM_ASSERT(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return
@@ -26,6 +33,16 @@ void vm_error(VMState *state, const char *fmt, ...);
 #define VM_ASSERT_DEBUG(cond, ...) VM_ASSERT(cond, __VA_ARGS__)
 #else
 #define VM_ASSERT_DEBUG(cond, ...) (void) 0
+#endif
+
+#define VM_ASSERT2(cond, ...) if (UNLIKELY(!(cond)) && (vm_error(state, __VA_ARGS__), true)) return (FnWrap) { vm_halt }
+
+#ifndef NDEBUG
+#define VM_ASSERT2_DEBUG(cond, ...) VM_ASSERT2(cond, __VA_ARGS__)
+#define VM_ASSERT2_SLOT(cond, ...) VM_ASSERT2(cond, __VA_ARGS__)
+#else
+#define VM_ASSERT2_DEBUG(cond, ...) (void) 0
+#define VM_ASSERT2_SLOT(cond, ...) (void) 0
 #endif
 
 void *vm_stack_alloc(VMState *state, int size);
