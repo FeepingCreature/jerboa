@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdint.h>
 #include <stdbool.h>
 
 #include "win32_compat.h"
@@ -110,7 +111,7 @@ struct _Object {
 };
 
 typedef enum {
-  // DO NOT CHANGE ORDER (see object.c: closest_obj)
+  // DO NOT CHANGE ORDER (see object.c: closest_obj, core.h: ValueCache)
   TYPE_NULL = 0, // all object references must be non-null
   TYPE_INT = 1,
   TYPE_FLOAT = 2,
@@ -243,12 +244,15 @@ typedef struct {
 } VMProfileState;
 
 typedef struct {
-  Object *int_base, *bool_base, *float_base;
+  // the non-object proto objects in Value.type order;
+  Object *null_base, *int_base, *float_base, *bool_base, *obj_null_filler;
   Object *closure_base, *function_base;
   Object *array_base, *string_base, *pointer_base;
   Object *ffi_obj; // cached here so ffi_call_fn can be fast
   FastKey thiskey;
 } ValueCache;
+
+#define VCACHE_BY_TYPE(VCACHE, TYPE) (&(VCACHE).null_base)[TYPE]
 
 struct _GCRootSet {
   Value *values;

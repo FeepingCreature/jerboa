@@ -97,25 +97,13 @@ Value object_lookup(Object *obj, FastKey *key) {
 
 Object *closest_obj(VMState *state, Value val) {
   assert(IS_NULL(val) || IS_INT(val) || IS_BOOL(val) || IS_FLOAT(val) || IS_OBJ(val));
-  Object *options[] = {
-    NULL,
-    state->shared->vcache.int_base,
-    state->shared->vcache.float_base,
-    state->shared->vcache.bool_base,
-    val.obj
-  };
-  return options[val.type];
+  if (IS_OBJ(val)) return AS_OBJ(val);
+  return VCACHE_BY_TYPE(state->shared->vcache, val.type);
 }
 
 Object *proto_obj(VMState *state, Value val) {
-  if (LIKELY(IS_OBJ(val))) return AS_OBJ(val)->parent;
-  Object *options[] = {
-    NULL,
-    state->shared->vcache.int_base,
-    state->shared->vcache.float_base,
-    state->shared->vcache.bool_base
-  };
-  return options[val.type];
+  if (IS_OBJ(val)) return AS_OBJ(val)->parent;
+  return VCACHE_BY_TYPE(state->shared->vcache, val.type);
 }
 
 void obj_mark(VMState *state, Object *obj) {
