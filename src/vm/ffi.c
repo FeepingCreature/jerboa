@@ -20,18 +20,18 @@ static void ffi_open_fn(VMState *state, CallInfo *info) {
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
   Object *array_base = state->shared->vcache.array_base;
-  Object *ffi = AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
-  Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle", NULL));
+  Object *ffi = AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi"));
+  Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle"));
   
   StringObject *sarg = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sarg, "argument to ffi.open must be string!");
   
-  Object *libmap = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "library_map", NULL));
+  Object *libmap = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "library_map"));
   
   char *file = sarg->value;
   
   bool file_found = false;
-  Value mapping = OBJECT_LOOKUP_STRING(libmap, file, &file_found);
+  Value mapping = OBJECT_LOOKUP_STRING_P(libmap, file, &file_found);
   const char **file_list_ptr = NULL;
   int file_list_len = 0;
   if (file_found) {
@@ -91,9 +91,9 @@ static ffi_type *type_to_ffi_ptr(VMState *state, Object *ffi_obj, Object *obj) {
   if (obj == ffi->char_pointer_obj) return &ffi_type_pointer;
   if (obj == ffi->pointer_obj) return &ffi_type_pointer;
   if (obj_instance_of(obj, ffi->struct_obj)) {
-    Value complete = OBJECT_LOOKUP_STRING(obj, "complete", NULL);
+    Value complete = OBJECT_LOOKUP_STRING(obj, "complete");
     VM_ASSERT(value_is_truthy(complete), "cannot use incomplete struct in ffi call") NULL;
-    ArrayObject *members = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(obj, "members", NULL)), state->shared->vcache.array_base);
+    ArrayObject *members = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(obj, "members")), state->shared->vcache.array_base);
     VM_ASSERT(members, "ffi struct members undefined!") NULL;
     ffi_type *str_type = malloc(sizeof(ffi_type));
     *str_type = (ffi_type) {
@@ -121,8 +121,8 @@ static void ffi_ptr_dereference(VMState *state, CallInfo *info) {
   Object *root = state->root;
   Object *pointer_base = state->shared->vcache.pointer_base;
   
-  FFIObject *ffi = (FFIObject*) AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
-  Object *ffi_type = AS_OBJ(OBJECT_LOOKUP_STRING((Object*) ffi, "type", NULL));
+  FFIObject *ffi = (FFIObject*) AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi"));
+  Object *ffi_type = AS_OBJ(OBJECT_LOOKUP_STRING((Object*) ffi, "type"));
   
   Object *thisptr = AS_OBJ(load_arg(state->frame, info->this_arg));
   VM_ASSERT(thisptr->parent == pointer_base, "internal error");
@@ -178,8 +178,8 @@ static void ffi_ptr_dereference_assign(VMState *state, CallInfo *info) {
   Object *root = state->root;
   Object *pointer_base = state->shared->vcache.pointer_base;
   
-  FFIObject *ffi = (FFIObject*) AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi", NULL));
-  Object *ffi_type = AS_OBJ(OBJECT_LOOKUP_STRING((Object*) ffi, "type", NULL));
+  FFIObject *ffi = (FFIObject*) AS_OBJ(OBJECT_LOOKUP_STRING(root, "ffi"));
+  Object *ffi_type = AS_OBJ(OBJECT_LOOKUP_STRING((Object*) ffi, "type"));
   
   Object *thisptr = AS_OBJ(load_arg(state->frame, info->this_arg));
   VM_ASSERT(thisptr->parent == pointer_base, "internal error");
@@ -216,7 +216,7 @@ bool ffi_pointer_write(VMState *state, Object *type, void *ptr, Value val) {
     }
     return true;
   } else {
-    Object *c_type_obj = AS_OBJ(OBJECT_LOOKUP_STRING(type, "c_type", NULL));
+    Object *c_type_obj = AS_OBJ(OBJECT_LOOKUP_STRING(type, "c_type"));
     StringObject *c_type = (StringObject*) obj_instance_of(c_type_obj, string_base);
     assert(c_type);
     VM_ASSERT(false, "unhandled pointer write type: %s", c_type->value) false;
@@ -238,9 +238,9 @@ Value ffi_pointer_read(VMState *state, Object *type, void *ptr) {
     return INT2VAL(i);
   } else {
     bool has_pointer = false;
-    OBJECT_LOOKUP_STRING(type, "pointer", &has_pointer);
+    OBJECT_LOOKUP_STRING_P(type, "pointer", &has_pointer);
     if (!has_pointer) {
-      Object *c_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(type, "c_type", NULL));
+      Object *c_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(type, "c_type"));
       StringObject *c_type = (StringObject*) obj_instance_of(c_type_obj, string_base);
       VM_ASSERT(c_type, "internal type error") VNULL;
       VM_ASSERT(false, "unhandled pointer read type: %s", c_type->value) VNULL;
@@ -264,10 +264,10 @@ static void ffi_ptr_index_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
   
-  Object *ffi_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL));
+  Object *ffi_type_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(thisptr, "target_type"));
   VM_ASSERT(ffi_type_obj, "cannot index read on untyped pointer!");
   
-  Value sizeof_val = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
+  Value sizeof_val = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof");
   VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
   int elemsize = AS_INT(sizeof_val);
   
@@ -285,14 +285,14 @@ static void ffi_ptr_index_assign_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(thisptr && thisptr->parent == pointer_base, "invalid pointer index write on non-pointer object");
   PointerObject *thisptr_obj = (PointerObject*) thisptr;
   
-  Object *ffi_type_obj = AS_OBJ(OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL));
+  Object *ffi_type_obj = AS_OBJ(OBJECT_LOOKUP_STRING(thisptr, "target_type"));
   VM_ASSERT(ffi_type_obj, "cannot assign index on untyped pointer!");
   
   Value offs_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(offs_val), "offset must be integer");
   int offs = AS_INT(offs_val);
   
-  Value sizeof_val = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof", NULL);
+  Value sizeof_val = OBJECT_LOOKUP_STRING(ffi_type_obj, "sizeof");
   VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
   int elemsize = AS_INT(sizeof_val);
   
@@ -312,11 +312,11 @@ static void ffi_ptr_add(VMState *state, CallInfo *info) {
   void *ptr = (void*) thisptr_obj->ptr;
   
   int elemsize = 1;
-  Value target_type = OBJECT_LOOKUP_STRING(thisptr, "target_type", NULL);
+  Value target_type = OBJECT_LOOKUP_STRING(thisptr, "target_type");
   if (!IS_NULL(target_type)) {
     VM_ASSERT(IS_OBJ(target_type), "target type must be ffi type");
     
-    Value sizeof_val = OBJECT_LOOKUP_STRING(AS_OBJ(target_type), "sizeof", NULL);
+    Value sizeof_val = OBJECT_LOOKUP_STRING(AS_OBJ(target_type), "sizeof");
     VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
     elemsize = AS_INT(sizeof_val);
   }
@@ -376,7 +376,7 @@ static int ffi_par_len(VMState *state, Object *ret_type, ArrayObject *par_types_
     else if (type == ffi->pointer_obj) par_len_sum += TYPESZ(void*);
     else if (type == ffi->size_t_obj) par_len_sum += TYPESZ(size_t);
     else if (obj_instance_of(type, ffi->struct_obj)) {
-      Value struct_sz_val = OBJECT_LOOKUP_STRING(type, "sizeof", NULL);
+      Value struct_sz_val = OBJECT_LOOKUP_STRING(type, "sizeof");
       VM_ASSERT(IS_INT(struct_sz_val), "sizeof should really have been int") -1;
       int struct_sz = AS_INT(struct_sz_val);
       VM_ASSERT(struct_sz >= 0 && struct_sz < 16384, "wat r u even doing") -1;
@@ -436,7 +436,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
   } else if (ret_type == ffi->char_pointer_obj || ret_type == ffi->pointer_obj) {
     data = (char*) data + sizeof(void*);
   } else if (obj_instance_of(ret_type, ffi->struct_obj)) {
-    Value struct_sz_val = OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL);
+    Value struct_sz_val = OBJECT_LOOKUP_STRING(ret_type, "sizeof");
     VM_ASSERT(IS_INT(struct_sz_val), "sizeof should really have been int");
     int struct_sz = AS_INT(struct_sz_val);
     // NOTE: point of danger??
@@ -529,12 +529,12 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
       // VM_ASSERT(obj_instance_of(str_obj, type), "ffi struct argument %i must match struct type", i);
       VM_ASSERT(obj_instance_of(str_obj, ffi->struct_obj), "ffi struct argument %i must be struct", i);
       
-      Value sizeof_val = OBJECT_LOOKUP_STRING(str_obj, "sizeof", NULL);
+      Value sizeof_val = OBJECT_LOOKUP_STRING(str_obj, "sizeof");
       VM_ASSERT(IS_INT(sizeof_val), "internal error: sizeof wrong type or undefined");
       int struct_size = AS_INT(sizeof_val);
       VM_ASSERT(struct_size >= 0 && struct_size < 16384, "scuse me wat r u doin");
       
-      PointerObject *ptr_obj = (PointerObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(str_obj, "pointer", NULL)), pointer_base);
+      PointerObject *ptr_obj = (PointerObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(str_obj, "pointer")), pointer_base);
       VM_ASSERT(ptr_obj, "struct's \"pointer\" not set, null or not a pointer");
       
       unsigned int step_size = struct_size;
@@ -595,7 +595,7 @@ static void ffi_call_fn(VMState *state, CallInfo *info) {
     vm_return(state, info, FLOAT2VAL((float) *(double*) ret_ptr));
   } else if (obj_instance_of(ret_type, ffi->struct_obj)) {
     // validated above
-    unsigned int struct_sz = AS_INT(OBJECT_LOOKUP_STRING(ret_type, "sizeof", NULL));
+    unsigned int struct_sz = AS_INT(OBJECT_LOOKUP_STRING(ret_type, "sizeof"));
     void *struct_data = malloc(struct_sz);
     memcpy(struct_data, ret_ptr, struct_sz);
     Object *struct_val_obj = AS_OBJ(make_object(state, ret_type, false));
@@ -702,12 +702,12 @@ static void ffi_sym_fn(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base;
   Object *ffi = state->shared->vcache.ffi_obj;
   FFIObject *ffi_obj = (FFIObject*) ffi;
-  Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle", NULL));
-  Object *type_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "type", NULL));
+  Object *handle_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "handle"));
+  Object *type_base = AS_OBJ(OBJECT_LOOKUP_STRING(ffi, "type"));
   
   Object *handle_obj = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), handle_base);
   VM_ASSERT(handle_obj, "ffi sym called on bad object");
-  Object *handle_ptr_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(handle_obj, "pointer", NULL));
+  Object *handle_ptr_obj = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(handle_obj, "pointer"));
   VM_ASSERT(handle_ptr_obj && handle_ptr_obj->parent == pointer_base, "sym handle must be pointer");
   PointerObject *handle_ptr = (PointerObject*) handle_ptr_obj;
   void *handle = handle_ptr->ptr;

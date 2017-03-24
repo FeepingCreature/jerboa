@@ -14,7 +14,7 @@ static inline TableEntry *table_lookup_prepared_internal(HashTable *tbl, FastKey
   assert(key->ptr != NULL);
   // implied by the bloom test, since key->hash is never 0
   // if (tbl->entries_stored == 0) return NULL;
-  if (LIKELY((tbl->bloom & key->hash) != key->hash)) return NULL;
+  if ((tbl->bloom & key->hash) != key->hash) return NULL;
   // printf(":: %.*s\n", (int) key->len, key->ptr);
   int entries_num = tbl->entries_num;
   // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
@@ -71,7 +71,7 @@ static TableEntry *table_lookup_alloc_prepared_internal(HashTable *tbl, FastKey 
   int newlen;
   if (entries_num == 0) {
     // definitely resize
-    newlen = 4;
+    newlen = 1;
   } else {
     int early_index = key->last_index & entries_mask;
     TableEntry *early_entry = &tbl->entries_ptr[early_index];

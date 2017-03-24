@@ -74,21 +74,23 @@ void free_cache(VMState *state) {
   state->shared->stack_data_len = 0;
 }
 
-Value object_lookup(Object *obj, FastKey *key, bool *key_found_p) {
-  if (!key_found_p) {
-    while (obj) {
-      TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
-      if (entry) return entry->value;
-      obj = obj->parent;
-    }
-    return VNULL;
-  }
-  while (obj) {
+Value object_lookup_p(Object *obj, FastKey *key, bool *key_found_p) {
+  assert(key_found_p && *key_found_p == false);
+  do {
     TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
     if (entry) { *key_found_p = true; return entry->value; }
     obj = obj->parent;
-  }
-  *key_found_p = false;
+  } while (obj);
+  return VNULL;
+}
+
+Value object_lookup(Object *obj, FastKey *key) {
+  assert(obj);
+  do {
+    TableEntry *entry = table_lookup_prepared(&obj->tbl, key);
+    if (entry) return entry->value;
+    obj = obj->parent;
+  } while (obj);
   return VNULL;
 }
 

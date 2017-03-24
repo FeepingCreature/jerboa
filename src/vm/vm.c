@@ -404,10 +404,10 @@ static FnWrap vm_instr_access(VMState *state) {
     key = skey->value;
     // otherwise, skey->value is independent of skey
     // TODO length in StringObject
-    set_arg(state, access_instr->target, OBJECT_LOOKUP_STRING(obj, key, &object_found));
+    set_arg(state, access_instr->target, OBJECT_LOOKUP_STRING_P(obj, key, &object_found));
   }
   if (!object_found) {
-    Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
+    Value index_op = OBJECT_LOOKUP_STRING(obj, "[]");
     if (NOT_NULL(index_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
       info->args_len = 1;
@@ -434,10 +434,10 @@ static FnWrap vm_instr_access(VMState *state) {
 static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessStringKeyInstr *aski, Instr *instr_after) {
   Value val = load_arg(state->frame, aski->obj);
   Object *obj = closest_obj(state, val);
-  Value index_op = OBJECT_LOOKUP_STRING(obj, "[]", NULL);
+  Value index_op = OBJECT_LOOKUP_STRING(obj, "[]");
   if (NOT_NULL(index_op)) {
     Value key = make_string(state, aski->key.ptr, aski->key.len);
-    state->frame->slots_ptr[aski->key_slot] = key;
+    write_slot(state->frame, aski->key_slot, key);
     
     CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
     info->args_len = 1;
@@ -463,7 +463,7 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
   Object *obj = closest_obj(state, load_arg(state->frame, aski->obj));
   
   bool object_found = false;
-  Value result = object_lookup(obj, &aski->key, &object_found);
+  Value result = object_lookup_p(obj, &aski->key, &object_found);
   
   if (UNLIKELY(!object_found)) {
     return vm_instr_access_string_key_index_fallback(state, aski, (Instr*)(aski + 1));
@@ -488,7 +488,7 @@ static FnWrap vm_instr_assign(VMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
   if (!skey) {
     // non-string key, goes to []=
-    Value index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=", NULL);
+    Value index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=");
     if (NOT_NULL(index_assign_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
       info->args_len = 2;
@@ -549,12 +549,12 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
     /*if (key_in_obj_instr->key.kind == ARG_VALUE) {
       printf(": %s\n", key);
     }*/
-    OBJECT_LOOKUP_STRING(obj, key, &object_found);
+    OBJECT_LOOKUP_STRING_P(obj, key, &object_found);
     set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
   }
   
   if (!object_found) {
-    Value in_overload_op = OBJECT_LOOKUP_STRING(obj, "in", NULL);
+    Value in_overload_op = OBJECT_LOOKUP_STRING(obj, "in");
     if (NOT_NULL(in_overload_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 1);
       info->args_len = 1;
@@ -577,7 +577,7 @@ static FnWrap vm_instr_string_key_in_obj(VMState *state) {
   Object *obj = closest_obj(state, load_arg(state->frame, skioi->obj));
   // printf(": %.*s\n", (int) skioi->key.len, skioi->key.ptr);
   bool object_found = false;
-  object_lookup(obj, &skioi->key, &object_found);
+  object_lookup_p(obj, &skioi->key, &object_found);
   set_arg(state, skioi->target, BOOL2VAL(object_found));
   
   state->instr = (Instr*)(skioi + 1);
@@ -663,7 +663,7 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
       char *error = object_set_shadowing(state, AS_OBJ(obj_val), &aski->key, value, &key_set);
       VM_ASSERT2(error == NULL, "while shadow-assigning '%.*s': %s", (int) aski->key.len, aski->key.ptr, error);
       if (!key_set) { // fall back to index?
-        Value index_assign_op = OBJECT_LOOKUP_STRING(AS_OBJ(obj_val), "[]=", NULL);
+        Value index_assign_op = OBJECT_LOOKUP_STRING(AS_OBJ(obj_val), "[]=");
         if (NOT_NULL(index_assign_op)) {
           Value key = make_string(state, aski->key.ptr, aski->key.len);
           CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);

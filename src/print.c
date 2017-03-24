@@ -61,7 +61,7 @@ static void print_recursive_indent(VMState *state, FILE *fh, Value val, bool all
     obj->flags &= ~OBJ_PRINT_HACK;
     return;
   }
-  Value toString_fn = OBJECT_LOOKUP_STRING(obj, "toString", NULL);
+  Value toString_fn = OBJECT_LOOKUP_STRING(obj, "toString");
   if (allow_tostring && NOT_NULL(toString_fn)) {
     VMState substate;
     vm_setup_substate_of(&substate, state);

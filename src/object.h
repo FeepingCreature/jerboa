@@ -27,17 +27,25 @@ void free_cache(VMState *state);
 
 void save_profile_output(char *file, VMProfileState *profile_state);
 
-Value object_lookup(Object *obj, FastKey *key, bool *key_found);
+Value object_lookup_p(Object *obj, FastKey *key, bool *key_found);
+
+Value object_lookup(Object *obj, FastKey *key);
 
 Object *closest_obj(VMState *state, Value val);
 
 Object *proto_obj(VMState *state, Value val);
 
 // hope the compiler will inline prepare_key
-static inline Value object_lookup_key_internal(Object *obj, FastKey key, bool *key_found) {
-  return object_lookup(obj, &key, key_found);
+static inline Value object_lookup_key_internal_p(Object *obj, FastKey key, bool *key_found) {
+  return object_lookup_p(obj, &key, key_found);
 }
-#define OBJECT_LOOKUP_STRING(obj, key, key_found) object_lookup_key_internal(obj, prepare_key(key, strlen(key)), key_found)
+
+static inline Value object_lookup_key_internal(Object *obj, FastKey key) {
+  return object_lookup(obj, &key);
+}
+
+#define OBJECT_LOOKUP_STRING_P(obj, key, key_found) object_lookup_key_internal_p(obj, prepare_key(key, strlen(key)), key_found)
+#define OBJECT_LOOKUP_STRING(obj, key) object_lookup_key_internal(obj, prepare_key(key, strlen(key)))
 
 // returns NULL on success, error string otherwise
 char *object_set_existing(VMState *state, Object *obj, FastKey *key, Value value);

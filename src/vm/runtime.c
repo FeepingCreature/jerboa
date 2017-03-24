@@ -714,10 +714,10 @@ static void array_iterator_next_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(this_obj, "internal error");
   
   Object *array_base = state->shared->vcache.array_base;
-  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(this_obj, "array", NULL)), array_base);
+  ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP_STRING(this_obj, "array")), array_base);
   VM_ASSERT(arr_obj, "internal error");
   
-  Value index_val = OBJECT_LOOKUP_STRING(this_obj, "index", NULL);
+  Value index_val = OBJECT_LOOKUP_STRING(this_obj, "index");
   VM_ASSERT(IS_INT(index_val), "internal error");
   
   Object *iter_obj = AS_OBJ(make_object(state, NULL, false));
@@ -795,7 +795,7 @@ static void array_compare_fn(VMState *state, CallInfo *info) {
         VMState substate;
         vm_setup_substate_of(&substate, state);
         
-        Object *cmp_fn = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(AS_OBJ(val1), "==", NULL));
+        Object *cmp_fn = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(AS_OBJ(val1), "=="));
         if (!cmp_fn) {
           res = val1.obj == val2.obj;
         } else {
@@ -928,11 +928,11 @@ static void array_join_fn(VMState *state, CallInfo *info) {
 
 static void file_print_fn(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base;
-  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
+  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file"));
   assert(file_base);
   
   VM_ASSERT(obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), file_base), "print() called on object that is not a file");
-  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(load_arg(state->frame, info->this_arg)), "_handle", NULL));
+  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(load_arg(state->frame, info->this_arg)), "_handle"));
   VM_ASSERT(hdl_obj, "missing _handle!");
   VM_ASSERT(hdl_obj->parent == pointer_base, "_handle must be a pointer!");
   PointerObject *hdl_ptrobj = (PointerObject*) hdl_obj;
@@ -948,7 +948,7 @@ static void file_print_fn(VMState *state, CallInfo *info) {
 
 static void file_exists_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
+  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file"));
   Object *string_base = state->shared->vcache.string_base;
   assert(file_base);
   
@@ -962,7 +962,7 @@ static void file_exists_fn(VMState *state, CallInfo *info) {
 
 static void file_open_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
-  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
+  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file"));
   Object *string_base = state->shared->vcache.string_base;
   assert(file_base);
   
@@ -984,12 +984,12 @@ static void file_open_fn(VMState *state, CallInfo *info) {
 static void file_close_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Value this_val = load_arg(state->frame, info->this_arg);
-  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file", NULL));
+  Object *file_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "file"));
   Object *pointer_base = state->shared->vcache.pointer_base;
   assert(file_base);
   
   VM_ASSERT(obj_instance_of(OBJ_OR_NULL(this_val), file_base), "close() called on object that is not a file!");
-  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(this_val), "_handle", NULL));
+  Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP_STRING(AS_OBJ(this_val), "_handle"));
   VM_ASSERT(hdl_obj, "missing _handle!");
   VM_ASSERT(hdl_obj->parent == pointer_base, "_handle must be a pointer!");
   PointerObject *hdl_ptrobj = (PointerObject*) hdl_obj;
@@ -1075,9 +1075,9 @@ static void xml_load_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
-  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(root, "xml", NULL));
-  Object *text_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "text_node", NULL));
-  Object *element_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL));
+  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(root, "xml"));
+  Object *text_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "text_node"));
+  Object *element_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node"));
   
   StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(str_obj, "parameter to xml.load must be string");
@@ -1102,9 +1102,9 @@ static void xml_parse_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
-  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(root, "xml", NULL));
-  Object *text_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "text_node", NULL));
-  Object *element_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL));
+  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(root, "xml"));
+  Object *text_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "text_node"));
+  Object *element_node_base = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node"));
   
   StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(str_obj, "parameter to xml.parse must be string");
@@ -1164,7 +1164,7 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayO
   }
   
   if (obj_instance_of(closest_obj(state, node), element_node_obj)) {
-    Object *children_obj = AS_OBJ(OBJECT_LOOKUP_STRING(closest_obj(state, node), "children", NULL));
+    Object *children_obj = AS_OBJ(OBJECT_LOOKUP_STRING(closest_obj(state, node), "children"));
     VM_ASSERT(children_obj, "missing 'children' property in node");
     ArrayObject *children_aobj = (ArrayObject*) obj_instance_of(children_obj, array_base);
     VM_ASSERT(children_aobj, "'children' property in node is not an array");
@@ -1180,8 +1180,8 @@ static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   
   ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
-  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "xml", NULL));
-  Object *elembase = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node", NULL));
+  Object *xml_base = AS_OBJ(OBJECT_LOOKUP_STRING(state->root, "xml"));
+  Object *elembase = AS_OBJ(OBJECT_LOOKUP_STRING(xml_base, "element_node"));
   gc_disable(state);
   xml_node_find_recurse(state, load_arg(state->frame, info->this_arg), load_arg(state->frame, INFO_ARGS_PTR(info)[0]), aobj, elembase);
   array_resize(state, aobj, aobj->length, true);
@@ -1194,12 +1194,12 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
   Object *string_base = state->shared->vcache.string_base;
   Object *array_base = state->shared->vcache.array_base;
   Object *node_obj = closest_obj(state, node);
-  Value node_type = OBJECT_LOOKUP_STRING(node_obj, "nodeType", NULL);
+  Value node_type = OBJECT_LOOKUP_STRING(node_obj, "nodeType");
   VM_ASSERT(IS_INT(node_type), "invalid xml node");
   if (AS_INT(node_type) == 3) return; // text
   VM_ASSERT(AS_INT(node_type), "node is not element");
   
-  Value node_name = OBJECT_LOOKUP_STRING(node_obj, "nodeName", NULL);
+  Value node_name = OBJECT_LOOKUP_STRING(node_obj, "nodeName");
   
   VM_ASSERT(NOT_NULL(node_name), "missing 'nodeName' property in node");
   StringObject *nodeName_str = (StringObject*) obj_instance_of(OBJ_OR_NULL(node_name), string_base);
@@ -1209,7 +1209,7 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
     aobj->ptr[aobj->length - 1] = node;
   }
   
-  Value children = OBJECT_LOOKUP_STRING(node_obj, "children", NULL);
+  Value children = OBJECT_LOOKUP_STRING(node_obj, "children");
   VM_ASSERT(NOT_NULL(children), "missing 'children' property in node");
   ArrayObject *children_arr = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(children), array_base);
   VM_ASSERT(children_arr, "'children' property in node is not an array");
@@ -1249,23 +1249,23 @@ static void xml_node_find_by_attr_recurse(VMState *state, Value node, char *attr
 {
   Object *array_base = state->shared->vcache.array_base;
   Object *node_obj = closest_obj(state, node);
-  Value node_type = OBJECT_LOOKUP_STRING(node_obj, "nodeType", NULL);
+  Value node_type = OBJECT_LOOKUP_STRING(node_obj, "nodeType");
   VM_ASSERT(IS_INT(node_type), "invalid xml node");
   if (AS_INT(node_type) == 3) return; // text
   VM_ASSERT(AS_INT(node_type), "node is not element");
   
-  Object *attr_obj = closest_obj(state, OBJECT_LOOKUP_STRING(node_obj, "attr", NULL));
+  Object *attr_obj = closest_obj(state, OBJECT_LOOKUP_STRING(node_obj, "attr"));
   VM_ASSERT(attr_obj, "attr property must not be null");
   
   bool entry_found = false;
-  Value attr_entry = OBJECT_LOOKUP_STRING(attr_obj, attr, &entry_found);
+  Value attr_entry = OBJECT_LOOKUP_STRING_P(attr_obj, attr, &entry_found);
   // TODO is handling the "=" overload necessary here? I think not?
   if (entry_found && values_identical_plus_str(state, attr_entry, value)) {
     array_resize(state, aobj, aobj->length + 1, false);
     aobj->ptr[aobj->length - 1] = node;
   }
   
-  Value children = OBJECT_LOOKUP_STRING(node_obj, "children", NULL);
+  Value children = OBJECT_LOOKUP_STRING(node_obj, "children");
   VM_ASSERT(NOT_NULL(children), "missing 'children' property in node");
   ArrayObject *children_arr = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(children), array_base);
   VM_ASSERT(children_arr, "'children' property in node is not an array");
@@ -1305,7 +1305,7 @@ struct _ModuleCache {
 static ModuleCache *mod_cache = 0;
 
 static char *find_file_in_searchpath(VMState *state, char *filename) {
-  Object *searchpath = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(state->root, "searchpath", NULL));
+  Object *searchpath = OBJ_OR_NULL(OBJECT_LOOKUP_STRING(state->root, "searchpath"));
   VM_ASSERT(searchpath, "search path must exist, internal error") NULL;
   Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
