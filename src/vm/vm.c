@@ -404,10 +404,11 @@ static FnWrap vm_instr_access(VMState *state) {
     key = skey->value;
     // otherwise, skey->value is independent of skey
     // TODO length in StringObject
-    set_arg(state, access_instr->target, OBJECT_LOOKUP_STRING_P(obj, key, &object_found));
+    FastKey fkey = prepare_key(key, strlen(key));
+    set_arg(state, access_instr->target, object_lookup_p(obj, &fkey, &object_found));
   }
   if (!object_found) {
-    Value index_op = OBJECT_LOOKUP_STRING(obj, "[]");
+    Value index_op = OBJECT_LOOKUP(obj, __slice);
     if (NOT_NULL(index_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
       info->args_len = 1;
@@ -434,9 +435,9 @@ static FnWrap vm_instr_access(VMState *state) {
 static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessStringKeyInstr *aski, Instr *instr_after) {
   Value val = load_arg(state->frame, aski->obj);
   Object *obj = closest_obj(state, val);
-  Value index_op = OBJECT_LOOKUP_STRING(obj, "[]");
+  Value index_op = OBJECT_LOOKUP(obj, __slice);
   if (NOT_NULL(index_op)) {
-    Value key = make_string(state, aski->key.ptr, aski->key.len);
+    Value key = make_string(state, aski->key.key, strlen(aski->key.key));
     write_slot(state->frame, aski->key_slot, key);
     
     CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
@@ -452,7 +453,7 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
     // if (obj) val = OBJ2VAL(obj);
     // print_recursive(state, stderr, val, true);
     fprintf(stderr, "\n");
-    VM_ASSERT(false, "[3] property not found: '%.*s'", (int) aski->key.len, aski->key.ptr) (FnWrap) { vm_halt };
+    VM_ASSERT(false, "[3] property not found: '%s'", aski->key.key) (FnWrap) { vm_halt };
   }
 }
 
@@ -488,7 +489,7 @@ static FnWrap vm_instr_assign(VMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
   if (!skey) {
     // non-string key, goes to []=
-    Value index_assign_op = OBJECT_LOOKUP_STRING(obj, "[]=");
+    Value index_assign_op = OBJECT_LOOKUP(obj, __slice_assign);
     if (NOT_NULL(index_assign_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
       info->args_len = 2;
@@ -549,12 +550,13 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
     /*if (key_in_obj_instr->key.kind == ARG_VALUE) {
       printf(": %s\n", key);
     }*/
-    OBJECT_LOOKUP_STRING_P(obj, key, &object_found);
+    FastKey fkey = prepare_key(key, strlen(key));
+    object_lookup_p(obj, &fkey, &object_found);
     set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
   }
   
   if (!object_found) {
-    Value in_overload_op = OBJECT_LOOKUP_STRING(obj, "in");
+    Value in_overload_op = OBJECT_LOOKUP(obj, in);
     if (NOT_NULL(in_overload_op)) {
       CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 1);
       info->args_len = 1;
@@ -661,11 +663,11 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
       VM_ASSERT2(IS_OBJ(obj_val), "can't assign to primitive");
       bool key_set;
       char *error = object_set_shadowing(state, AS_OBJ(obj_val), &aski->key, value, &key_set);
-      VM_ASSERT2(error == NULL, "while shadow-assigning '%.*s': %s", (int) aski->key.len, aski->key.ptr, error);
+      VM_ASSERT2(error == NULL, "while shadow-assigning '%s': %s", aski->key.key, error);
       if (!key_set) { // fall back to index?
-        Value index_assign_op = OBJECT_LOOKUP_STRING(AS_OBJ(obj_val), "[]=");
+        Value index_assign_op = OBJECT_LOOKUP(AS_OBJ(obj_val), __slice_assign);
         if (NOT_NULL(index_assign_op)) {
-          Value key = make_string(state, aski->key.ptr, aski->key.len);
+          Value key = make_string(state, aski->key.key, strlen(aski->key.key));
           CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg) * 2);
           info->args_len = 2;
           info->this_arg = (Arg) { .kind = ARG_VALUE, .value = obj_val };
@@ -677,7 +679,7 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
           return call_internal(state, info, (Instr*)(aski + 1));
         }
       }
-      VM_ASSERT2(key_set, "key '%.*s' not found in object", (int) aski->key.len, aski->key.ptr);
+      VM_ASSERT2(key_set, "key '%s' not found in object", aski->key.key);
       break;
     }
   }
@@ -696,8 +698,7 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
   VM_ASSERT2(IS_OBJ(constraint_val), "constraint must not be primitive!");
   Object *constraint = AS_OBJ(constraint_val);
   
-  FastKey fkey = prepare_key(scski->key_ptr, scski->key_len);
-  char *error = object_set_constraint(state, obj, &fkey, constraint);
+  char *error = object_set_constraint(state, obj, &scski->key, constraint);
   VM_ASSERT2(!error, error);
   
   state->instr = (Instr*)(scski + 1);

@@ -20,7 +20,7 @@ pkg_check_modules (LIBXML REQUIRED libxml-2.0)
 
 file(GLOB VM_SRC "src/vm/*.c")
 set(BASE_SRC "src/hash.c" "src/object.c" "src/parser.c" "src/print.c" "src/language.c"
-             "src/gc.c" "src/util.c" "src/trie.c" "src/win32_compat.c")
+             "src/gc.c" "src/util.c" "src/trie.c" "src/win32_compat.c" "src/static_keys.c")
 
 include_directories("${PROJECT_SOURCE_DIR}/src" "${LIBFFI_INCLUDE_DIRS}" "${LIBXML_INCLUDE_DIRS}")
 add_executable(jerboa src/jerboa.c ${BASE_SRC} ${VM_SRC})

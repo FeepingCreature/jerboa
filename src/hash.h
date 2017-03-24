@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include "core.h"
 
+// NOTE: if you ever add code to remove keys from a table, it is VITAL that the bloom filter be reset to zero at the last key!
+// otherwise, lookups will break badly!
+
 FastKey prepare_key(const char *key_ptr, size_t key_len);
 
 // pretend "ptr" is an already-interned char pointer
@@ -20,27 +23,5 @@ TableEntry *table_lookup_alloc_prepared(HashTable *tbl, FastKey *key, TableEntry
 void create_table_with_single_entry_prepared(HashTable *tbl, FastKey key, Value value);
 
 void table_free(HashTable *tbl);
-
-// thanks http://stackoverflow.com/questions/7666509/hash-function-for-string
-// note: NEVER returns 0!
-static inline size_t hash(const char *ptr, int len) {
-  size_t hash = 5381;
-  int i = 0;
-  for (; i < (len &~7); i+=8) {
-    hash = hash * 33 + ptr[i+0];
-    hash = hash * 33 + ptr[i+1];
-    hash = hash * 33 + ptr[i+2];
-    hash = hash * 33 + ptr[i+3];
-    hash = hash * 33 + ptr[i+4];
-    hash = hash * 33 + ptr[i+5];
-    hash = hash * 33 + ptr[i+6];
-    hash = hash * 33 + ptr[i+7];
-  }
-  for (; i < len; i++) {
-    hash = hash * 33 + ptr[i];
-  }
-  if (hash == 0) hash = 1; // this makes some other code safer
-  return hash;
-} 
 
 #endif

@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "object.h"
+#include "trie.h"
 
 #define DEBUG_MEM 0
 
@@ -129,7 +130,7 @@ void obj_mark(VMState *state, Object *obj) {
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
-    if (entry->key_ptr && IS_OBJ(entry->value)) {
+    if (entry->hash && IS_OBJ(entry->value)) {
       obj_mark(state, AS_OBJ(entry->value));
     }
   }
@@ -227,7 +228,7 @@ char *object_set_existing(VMState *state, Object *obj, FastKey *key, Value value
     TableEntry *entry = table_lookup_prepared(&current->tbl, key);
     if (entry != NULL) {
       if (current->flags & OBJ_FROZEN) {
-        return my_asprintf("Tried to set existing key '%.*s', but object %p was frozen.", (int) key->len, key->ptr, (void*) current);
+        return my_asprintf("Tried to set existing key '%s', but object %p was frozen.", trie_reverse_lookup(key->hash), (void*) current);
       }
       if (!value_fits_constraint(state->shared, value, entry->constraint)) {
         return "type constraint violated on assignment";
@@ -237,7 +238,7 @@ char *object_set_existing(VMState *state, Object *obj, FastKey *key, Value value
     }
     current = current->parent;
   }
-  return my_asprintf("Key '%.*s' not found in object %p.", (int) key->len, key->ptr, (void*) obj);
+  return my_asprintf("Key '%s' not found in object %p.", trie_reverse_lookup(key->hash), (void*) obj);
 }
 
 // change a property but only if it exists somewhere in the prototype chain
@@ -304,7 +305,7 @@ void *alloc_object_internal(VMState *state, int size, bool stack) {
   Object *res;
   if (stack) {
     res = vm_stack_alloc_uninitialized(state, size);
-    if (!res) return NULL;
+    if (UNLIKELY(!res)) return NULL;
     *res = (Object) {
 #if COUNT_OBJECTS
       .alloc_id = state->shared->gcstate.num_obj_allocated_total++,
@@ -394,7 +395,7 @@ Value make_array(VMState *state, Value *ptr, int length, bool owned) {
   if (owned) obj->capacity = length;
   else obj->capacity = 0;
   obj->owned = owned;
-  OBJECT_SET_STRING(state, (Object*) obj, "length", INT2VAL(length));
+  OBJECT_SET(state, (Object*) obj, length, INT2VAL(length));
   return OBJ2VAL((Object*) obj);
 }
 
@@ -417,7 +418,7 @@ void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_le
     aobj->capacity = newcap;
   }
   aobj->length = newsize;
-  if (update_len) OBJECT_SET_STRING(state, (Object*) aobj, "length", INT2VAL(aobj->length));
+  if (update_len) OBJECT_SET(state, (Object*) aobj, length, INT2VAL(aobj->length));
 }
 
 Value make_ptr(VMState *state, void *ptr) {
@@ -509,8 +510,9 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   int k = 0;
   for (int i = 0; i < excl_table->entries_num; ++i) {
     TableEntry *entry = &excl_table->entries_ptr[i];
-    if (entry->key_ptr) {
-      FileRange *range = (FileRange*) entry->key_ptr;
+    if (entry->hash) {
+      // TODO encode as offset so we can change hash to 32-bit
+      FileRange *range = (FileRange*) entry->hash;
       int samples = entry->value.i;
       // printf("dir entry %i of %i: %p; %i %.*s (%i)\n", i, excl_table->entries_num, (void*) range, (int) range->text_len, (int) range->text_len, range->text_from, samples);
       record_entries[k++] = (ProfilerRecord) { .range = range, .table = NULL, .num_samples = samples };
@@ -518,8 +520,8 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   }
   for (int i = 0; i < incl_table->entries_num; ++i) {
     TableEntry *entry = &incl_table->entries_ptr[i];
-    if (entry->key_ptr) {
-      FileRange *range = (FileRange*) entry->key_ptr;
+    if (entry->hash) {
+      FileRange *range = (FileRange*) entry->hash;
       HashTable *table = (HashTable*) entry->value.obj;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, incl_table->entries_num, (int) range->text_len, (int) range->text_len, range->text_from, table->entries_num);
       record_entries[k++] = (ProfilerRecord) { .range = range, .table = table, .num_samples = 0 };
@@ -565,8 +567,8 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
           // fprintf(stderr, ": %i calls\n", row_calls.entries_num);
           for (int l = 0; l < row_calls.entries_num; l++) {
             TableEntry *entry = &row_calls.entries_ptr[l];
-            if (entry->key_ptr) {
-              FileRange *fun_range = (FileRange*) entry->key_ptr;
+            if (entry->hash) {
+              FileRange *fun_range = (FileRange*) entry->hash;
               int samples = entry->value.i;
               const char *name2, *fn2; TextRange line2; int row2, col2;
               // find call target site
@@ -593,9 +595,9 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
         HashTable *sub_table = CUR_ENTRY->table;
         for (int l = 0; l < sub_table->entries_num; l++) {
           TableEntry *entry = &sub_table->entries_ptr[l];
-          if (entry->key_ptr) {
+          if (entry->hash) {
             // function range
-            FastKey key = fixed_pointer_key((void*) entry->key_ptr);
+            FastKey key = { .hash = entry->hash };
             TableEntry *freeptr;
             TableEntry *call_p = table_lookup_alloc_prepared(&row_calls, &key, &freeptr);
             if (freeptr) freeptr->value.i = entry->value.i;

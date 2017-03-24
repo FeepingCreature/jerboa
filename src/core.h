@@ -168,16 +168,14 @@ typedef struct {
 
 // key, interned and prehashed for fast lookup
 typedef struct {
-  size_t len;
-  const char *ptr;
-  size_t hash;
-  size_t last_index; // instrs usually access the same object, or objects with the same layout
+  uint32_t hash; // guaranteed to be unique
+  uint32_t last_index; // instrs usually access the same object, or objects with the same layout
+  const char *key; // mostly just for debugging
 } FastKey;
 
 struct _TableEntry {
-  const char *key_ptr;
-  size_t hash;
   Object *constraint;
+  size_t hash;
   Value value;
 };
 

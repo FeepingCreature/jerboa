@@ -1,10 +1,12 @@
-#include "vm/dump.h"
-
 #include <stdio.h>
+
+#include "vm/dump.h"
+#include "trie.h"
 
 void dump_instr(VMState *state, Instr **instr_p) {
   Instr *instr = *instr_p;
   // fprintf(stderr, "%p", (void*) instr);
+  // fprintf(stderr, "%p", *(void**) &instr->fn);
   fprintf(stderr, "    ");
   fprintf(stderr, "%i ", instr->context_slot);
   switch (instr->type) {

@@ -130,11 +130,10 @@ typedef struct {
   Instr *after_object_decl;
 } SlotIsStaticObjInfo;
 
-static int static_info_find_field(SlotIsStaticObjInfo *rec, int name_len, const char *name_ptr) {
+static int static_info_find_field(SlotIsStaticObjInfo *rec, const char *name_ptr) {
   assert(rec->static_object);
   for (int k = 0; k < rec->fields_len; ++k) {
-    int field_len = rec->names_len_ptr[k];
-    if (field_len == name_len && strncmp(rec->names_ptr[k], name_ptr, name_len) == 0) {
+    if (rec->names_ptr[k] == name_ptr) {
       return k;
     }
   }
@@ -167,7 +166,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         int obj_slot = dri->obj_slot;
         SlotIsStaticObjInfo *rec = &((*slots_p)[obj_slot]);
         if (rec->static_object) {
-          int field = static_info_find_field(rec, dri->key.len, dri->key.ptr);
+          int field = static_info_find_field(rec, dri->key.key);
           if (field != -1) {
             objslot_for_refslot[dri->target_refslot] = obj_slot;
             field_for_refslot[dri->target_refslot] = field;
@@ -190,8 +189,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
             instr = (Instr*) (aski + 1);
             names_ptr = realloc(names_ptr, sizeof(char*) * ++fields_len);
             names_len_ptr = realloc(names_len_ptr, sizeof(int) * fields_len);
-            names_ptr[fields_len - 1] = aski->key.ptr;
-            names_len_ptr[fields_len - 1] = aski->key.len;
+            names_ptr[fields_len - 1] = aski->key.key;
           } else if (instr->type == INSTR_CLOSE_OBJECT) {
             break;
           } else {
@@ -209,7 +207,6 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
         (*slots_p)[target_slot].parent_slot = alobi->parent_slot;
         (*slots_p)[target_slot].fields_len = fields_len;
         (*slots_p)[target_slot].names_ptr = names_ptr;
-        (*slots_p)[target_slot].names_len_ptr = names_len_ptr;
         (*slots_p)[target_slot].constraints_ptr = calloc(sizeof(ConstraintInfo), fields_len);
         (*slots_p)[target_slot].belongs_to = *instr_belongs_to_p(&uf->body, instr);
         (*slots_p)[target_slot].context_slot = instr->context_slot;
@@ -237,7 +234,7 @@ static void slot_is_static_object(UserFunction *uf, SlotIsStaticObjInfo **slots_
           SlotIsStaticObjInfo *rec = &(*slots_p)[scski->obj.slot];
           
           if (constraint && rec->static_object) {
-            int field = static_info_find_field(rec, scski->key_len, scski->key_ptr);
+            int field = static_info_find_field(rec, scski->key.key);
             assert(field != -1); // wat, object was closed and we set a constraint on a field that doesn't exist??
             ConstraintInfo *info = &rec->constraints_ptr[field];
             info->constraint_ptr = realloc(info->constraint_ptr, sizeof(Object*) * ++info->constraint_len);
@@ -433,14 +430,11 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
         AccessStringKeyInstr *aski = (AccessStringKeyInstr*) instr;
         if (aski->obj.kind == ARG_SLOT && aski->target.kind == ARG_SLOT) {
           int obj_slot = aski->obj.slot;
-          size_t keylen = aski->key.len;
-          const char *keyptr = aski->key.ptr;
+          const char *keyptr = aski->key.key;
           if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
             bool continue_outer = false;
             for (int k = 0; k < info[obj_slot].fields_len; ++k) {
-              const char *name = info[obj_slot].names_ptr[k];
-              size_t name_len = (size_t) info[obj_slot].names_len_ptr[k];
-              if (keylen == name_len && strncmp(keyptr, name, keylen) == 0) {
+              if (keyptr == info[obj_slot].names_ptr[k]) {
                 int refslot = ref_slots_ptr[obj_slot][k];
                 use_range_start(&builder, *instr_belongs_to_p(&uf->body, instr));
                 builder.scope = instr->context_slot;
@@ -466,9 +460,7 @@ UserFunction *access_vars_via_refslots(UserFunction *uf) {
           if (info[obj_slot].static_object && obj_refslots_initialized[obj_slot]) {
             bool continue_outer = false;
             for (int k = 0; k < info[obj_slot].fields_len; ++k) {
-              const char *name_ptr = info[obj_slot].names_ptr[k];
-              size_t name_len = info[obj_slot].names_len_ptr[k];
-              if (name_len == key.len && strncmp(key.ptr, name_ptr, name_len) == 0) {
+              if (key.key == info[obj_slot].names_ptr[k]) {
                 int refslot = ref_slots_ptr[obj_slot][k];
                 use_range_start(&builder, *instr_belongs_to_p(&uf->body, instr));
                 builder.scope = instr->context_slot;
@@ -1665,7 +1657,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
             info_ptr = realloc(info_ptr, sizeof(StaticFieldInfo) * ++info_len);
             info_ptr[info_len - 1] = (StaticFieldInfo) {0};
             StaticFieldInfo *info = &info_ptr[info_len - 1];
-            info->key = aski->key.ptr;
+            info->key = aski->key;
             info->slot = aski->value.slot;
             info->refslot = -1;
             
@@ -1679,7 +1671,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
             DefineRefslotInstr *dri = (DefineRefslotInstr*) instr_reading;
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
-              if (info->key == dri->key.ptr) {
+              if (info->key.hash == dri->key.hash) {
                 if (info->refslot != -1) {
                   failed = true;
                   break; // wat wat wat
@@ -1708,7 +1700,7 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
             
             for (int k = 0; k < info_len; ++k) {
               StaticFieldInfo *info = &info_ptr[k];
-              if (info->key == scski->key_ptr) {
+              if (info->key.hash == scski->key.hash) {
                 if (info->constraint) abort(); // wat wat wat
                 if (scski->constraint.kind == ARG_SLOT) info->constraint = AS_OBJ(constant_slots[scski->constraint.slot]);
                 else info->constraint = AS_OBJ(scski->constraint.value);
@@ -1720,15 +1712,15 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
           Object sample_obj = {0};
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
-            FastKey key = prepare_key(info->key, strlen(info->key));
+            FastKey key = info->key;
             char *error = object_set(state, &sample_obj, &key, VNULL);
             if (error) { fprintf(stderr, "INTERNAL LOGIC ERROR: %s\n", error); abort(); }
           }
           for (int k = 0; k < info_len; ++k) {
             StaticFieldInfo *info = &info_ptr[k];
-            FastKey key = prepare_key(info->key, strlen(info->key));
+            FastKey key = info->key;
             TableEntry *entry = table_lookup_prepared(&sample_obj.tbl, &key);
-            if (!entry) { fprintf(stderr, "where has it gone?? missing %s\n", info->key); abort(); }
+            if (!entry) { fprintf(stderr, "where has it gone?? missing %s\n", info->key.key); abort(); }
             info->offset = (char*) entry - (char*) sample_obj.tbl.entries_ptr;
           }
           
@@ -1743,10 +1735,10 @@ UserFunction *fuse_static_object_alloc(VMState *state, UserFunction *uf) {
           int info_idx = 0;
           for (int k = 0; k < sample_obj.tbl.entries_num; k++) {
             TableEntry *entry = &sample_obj.tbl.entries_ptr[k];
-            if (entry->key_ptr) {
+            if (entry->hash) {
               StaticFieldInfo *info_entry = NULL;
               for (int l = 0; l < info_len; ++l) {
-                if (info_ptr[l].key == entry->key_ptr) {
+                if (info_ptr[l].key.hash == entry->hash) {
                   info_entry = &info_ptr[l];
                   break;
                 }

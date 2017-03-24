@@ -12,6 +12,7 @@
 #include "util.h"
 #include "vm/vm.h"
 #include "vm/instr.h"
+#include "static_keys.h"
 
 void *cache_alloc_uninitialized(int size);
 
@@ -44,8 +45,8 @@ static inline Value object_lookup_key_internal(Object *obj, FastKey key) {
   return object_lookup(obj, &key);
 }
 
-#define OBJECT_LOOKUP_STRING_P(obj, key, key_found) object_lookup_key_internal_p(obj, prepare_key(key, strlen(key)), key_found)
-#define OBJECT_LOOKUP_STRING(obj, key) object_lookup_key_internal(obj, prepare_key(key, strlen(key)))
+#define OBJECT_LOOKUP_P(obj, key, key_found) object_lookup_key_internal_p(obj, _skey_##key, key_found)
+#define OBJECT_LOOKUP(obj, key) object_lookup_key_internal(obj, _skey_##key)
 
 // returns NULL on success, error string otherwise
 char *object_set_existing(VMState *state, Object *obj, FastKey *key, Value value);
@@ -59,7 +60,7 @@ char *object_set(VMState *state, Object *obj, FastKey *key, Value value);
 static inline char *object_set_key_internal(VMState *state, Object *obj, FastKey key, Value value) {
   return object_set(state, obj, &key, value);
 }
-#define OBJECT_SET_STRING(state, obj, key, value) object_set_key_internal(state, obj, prepare_key(key, strlen(key)), value)
+#define OBJECT_SET(state, obj, key, value) object_set_key_internal(state, obj, _skey_##key, value)
 
 void obj_mark(VMState *state, Object *obj);
 

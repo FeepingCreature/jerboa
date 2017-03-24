@@ -179,7 +179,7 @@ typedef struct {
 typedef struct {
   Instr base;
   Arg obj, constraint;
-  char *key_ptr; int key_len;
+  FastKey key;
 } SetConstraintStringKeyInstr;
 
 typedef struct {
@@ -198,7 +198,7 @@ typedef struct {
 
 typedef struct {
   int offset;
-  const char *key;
+  FastKey key;
   Object *constraint;
   int slot;
   int refslot;

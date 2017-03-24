@@ -300,3 +300,8 @@ const char *my_dlerror(void *ptr) {
   list->error = NULL;
   return res;
 }
+
+// taken from https://en.wikipedia.org/wiki/Lehmer_random_number_generator
+uint32_t lcg_parkmiller(uint32_t a) {
+    return ((uint64_t)a * 48271UL) % 2147483647UL;
+}

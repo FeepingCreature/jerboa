@@ -2,6 +2,7 @@
 
 #include "hash.h"
 #include "core.h"
+#include "util.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -11,6 +12,7 @@
 static void *freeslab = NULL; // should be 1-2MB, so allocate in MB-size steps
 static int freeslab_size_left = 0;
 static void *trie_alloc_uninitialized(int size) {
+  assert(size <= 1024*1024);
   if (UNLIKELY(freeslab_size_left < size)) {
     freeslab = malloc(1024*1024);
     freeslab_size_left = 1024*1024;
@@ -33,39 +35,30 @@ static size_t common_len(const char *a_ptr, size_t a_len, const char *b_ptr, siz
   return i;
 }
 
-/*
-static void trie_dump_internal(FILE *file, TrieNode *node) {
+static void trie_dump_internal(FILE *file, TrieNode *node, int spacing) {
   if (node == NULL) fprintf(file, "<null>");
   else if (node->type == TRIE_LEAF) {
-    fprintf(file, "<%.*s>", (int) node->key_len, node->key_ptr);
+    for (int i = 0; i < spacing; i++) fprintf(file, "| ");
+    fprintf(file, "-<%.*s: %i>\n", (int) node->key_len, node->key_ptr, node->leaf.hash);
   } else {
     assert(node->type == TRIE_NODE);
-    fprintf(file, "[%.*s| ", (int) node->key_len, node->key_ptr);
+    for (int i = 0; i < spacing; i++) fprintf(file, "| ");
+    fprintf(file, "+%.*s|\n", (int) node->key_len, node->key_ptr);
     if (node->node.entries) {
-      int count = 0;
       for (int i = 0; i < 16; i++) {
         TrieNode **sublist = node->node.entries[i];
         if (sublist) {
           for (int k = 0; k < 16; ++k) {
             TrieNode *child = sublist[k];
             if (child) {
-              if (count++) fprintf(file, ", ");
-              trie_dump_internal(file, child);
+              trie_dump_internal(file, child, spacing + 1);
             }
           }
         }
       }
     }
-    fprintf(file, "]");
   }
 }
-
-void trie_dump(FILE *file, TrieNode *node) {
-  fprintf(file, ": ");
-  trie_dump_internal(file, node);
-  fprintf(file, "\n");
-}
-*/
 
 static TrieNode *trie_insert_node(TrieNode *target, TrieNode *node);
 
@@ -169,13 +162,13 @@ static TrieNode *trie_insert_node(TrieNode *target, TrieNode *node) {
   return new_node;
 }
 
-TrieNode *trie_insert(TrieNode *target, const char *key_ptr, size_t key_len, const char *value) {
+TrieNode *trie_insert(TrieNode *target, const char *key_ptr, size_t key_len, const uint32_t hash, const char *key) {
   TrieNode *new_leaf = trie_alloc_uninitialized(sizeof(TrieNode));
-  *new_leaf = (TrieNode) {TRIE_LEAF, key_ptr, key_len, .leaf = {value}};
+  *new_leaf = (TrieNode) {TRIE_LEAF, key_ptr, key_len, .leaf = {hash, key}};
   return trie_insert_node(target, new_leaf);
 }
 
-bool trie_lookup(TrieNode * __restrict__ node, const char *key_ptr, size_t key_len, const char **value_p) {
+bool trie_lookup(TrieNode * __restrict__ node, const char *key_ptr, size_t key_len, uint32_t *hash_p, const char **key_p) {
   if (!node) return false;
   // printf(": '%.*s' against '%.*s'\n", (int) key_len, key_ptr, (int) node->key_len, node->key_ptr);
   if (node->key_len > key_len) return false;
@@ -186,7 +179,8 @@ bool trie_lookup(TrieNode * __restrict__ node, const char *key_ptr, size_t key_l
   
   if (node->type == TRIE_LEAF) {
     if (key_len > 0) return false;
-    *value_p = node->leaf.value;
+    *hash_p = node->leaf.hash;
+    *key_p = node->leaf.key;
     return true;
   } else {
     assert(node->type == TRIE_NODE);
@@ -202,41 +196,60 @@ bool trie_lookup(TrieNode * __restrict__ node, const char *key_ptr, size_t key_l
     if (!node->node.entries) return false;
     if (!node->node.entries[index0]) return false;
     if (!node->node.entries[index0][index1]) return false;
-    return trie_lookup(node->node.entries[index0][index1], key_ptr, key_len, value_p);
+    return trie_lookup(node->node.entries[index0][index1], key_ptr, key_len, hash_p, key_p);
   }
 }
 
 // TODO mutex or make lockless (read/write lock? writes should be rare)
 static TrieNode *intern_string_trie = NULL;
+static uint32_t lcg_state = 1;
+static HashTable intern_reverse = {0}; // unique hash value to string
+
+void trie_dump_intern(FILE *file) {
+  trie_dump_internal(file, intern_string_trie, 0);
+}
 
 FastKey prepare_key(const char *key_ptr, size_t key_len) {
   // printf(":: %.*s\n", (int) key_len, key_ptr);
   assert(key_ptr != NULL);
   // const char *old_ptr = key_ptr;
   // hash will be identical
-  if (!trie_lookup(intern_string_trie, key_ptr, key_len, &key_ptr)) {
+  uint32_t hash; const char *key;
+  if (!trie_lookup(intern_string_trie, key_ptr, key_len, &hash, &key)) {
     char *copy = trie_alloc_uninitialized(key_len + 1);
     memcpy(copy, key_ptr, key_len);
     copy[key_len] = 0;
     // fprintf(stderr, "+ %.*s\n", (int) key_len, key_ptr);
-    intern_string_trie = trie_insert(intern_string_trie, copy, key_len, copy);
+    lcg_state = lcg_parkmiller(lcg_state);
+    if (UNLIKELY(lcg_state == 1)) {
+      fprintf(stderr, "ran out of keys! how did you manage that, you had 2^31 to play with\n");
+      abort();
+    }
+    hash = lcg_state;
+    key = copy;
+    intern_string_trie = trie_insert(intern_string_trie, copy, key_len, hash, key);
+    
+    FastKey fkey = { .hash = hash, .key = key };
+    TableEntry *empty_entry = NULL;
+    TableEntry *rev_entry = table_lookup_alloc_prepared(&intern_reverse, &fkey, &empty_entry);
+    (void) rev_entry; assert(rev_entry == NULL); // existing entry for this hash? what
+    empty_entry->value.obj = (Object*) key;
     // trie_dump(stderr, intern_string_trie);
     // fprintf(stderr, "------\n");
-    key_ptr = copy;
   }
-  // fprintf(stderr, "prepare: %p %.*s -> %p\n", old_ptr, (int) key_len, key_ptr, key_ptr);
-  size_t hashv = hash(key_ptr, key_len);
   return (FastKey) {
-    .len = key_len,
-    .ptr = key_ptr,
-    .hash = hashv
+    .hash = hash,
+    .key = key
   };
 }
 
+const char *trie_reverse_lookup(uint32_t hash) {
+  FastKey fkey = { .hash = hash };
+  TableEntry *rev_entry = table_lookup_prepared(&intern_reverse, &fkey);
+  assert(rev_entry != NULL);
+  return (const char*) rev_entry->value.obj;
+}
+
 FastKey fixed_pointer_key(void *ptr) {
-  return (FastKey) {
-    .len = 0, // no idea what lives there
-    .ptr = (const char*) ptr,
-    .hash = hash((const char*) &ptr, sizeof(void*)) // any hash will do, really
-  };
+  return (FastKey) { .hash = (size_t) ptr };
 }

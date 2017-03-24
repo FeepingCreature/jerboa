@@ -53,22 +53,20 @@ static FnWrap FN_NAME(VMState * __restrict__ state) {
     TableEntry * __restrict__ entry = (TableEntry*) ((char*) obj_entries_ptr + info->offset);
     __builtin_prefetch(entry, 1 /* write */, 1 /* 1/3 locality */);
     // fprintf(stderr, ":: %p\n", (void*) &entry->value);
-    const char *key = info->key;
+    uint32_t hash = info->key.hash;
     Object *constraint = info->constraint;
     TableEntry **refslot = &refslots_ptr[info->refslot];
     Value value = slots_ptr[info->slot];
     VM_ASSERT2(!constraint || value_instance_of(state, value, constraint), "type constraint violated on variable");
     *refslot = entry;
-    entry->key_ptr = key;
+    entry->hash = hash;
     entry->constraint = constraint;
     entry->value = value;
   }
   
   slots_ptr[target_slot] = OBJ2VAL(obj);
   
-  /*fprintf(stderr, "%i = %li + %li + %li * %i + %li * %i\n", instr_size(state->instr), sizeof(AllocStaticObjectInstr), sizeof(Object),
-    sizeof(TableEntry), asoi->tbl_len, sizeof(StaticFieldInfo), asoi->info_len
-  );*/
+  // fprintf(stderr, "%i = %li + %li * %i\n", instr_size(state->instr), sizeof(AllocStaticObjectInstr), sizeof(StaticFieldInfo), entries_stored);
   state->instr = (Instr*)((char*) asoi
                           + sizeof(AllocStaticObjectInstr)
                           + sizeof(StaticFieldInfo) * entries_stored);

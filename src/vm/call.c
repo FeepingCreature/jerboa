@@ -76,7 +76,7 @@ static bool setup_closure_call(VMState *state, CallInfo *info, Object *fn_obj_n)
     for (int i = 0; i < varargs_len; ++i) {
       varargs_ptr[i] = load_arg(state->frame, INFO_ARGS_PTR(info)[vmfun->arity + i]);
     }
-    OBJECT_SET_STRING(state, context, "arguments", make_array(state, varargs_ptr, varargs_len, true));
+    OBJECT_SET(state, context, arguments, make_array(state, varargs_ptr, varargs_len, true));
     context->flags |= OBJ_CLOSED;
   }
   if (UNLIKELY(++cl_obj->num_called == 10)) {

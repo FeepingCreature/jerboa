@@ -23,6 +23,8 @@
 int main(int argc, char **argv) {
   init_instr_fn_table();
   
+  initStaticKeys();
+  
   VMState vmstate = {0};
   vmstate.runstate = VM_TERMINATED;
   vmstate.shared = calloc(sizeof(VMSharedState), 1);

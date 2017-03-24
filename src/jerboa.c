@@ -21,6 +21,8 @@ int main(int argc, char **argv) {
     return 1;
   }
   
+  initStaticKeys();
+  
   VMState vmstate = {0};
   vmstate.runstate = VM_TERMINATED;
   vmstate.shared = calloc(sizeof(VMSharedState), 1);
@@ -70,7 +72,7 @@ int main(int argc, char **argv) {
   }
   
   Value args = make_array(&vmstate, args_ptr, args_len, true);
-  OBJECT_SET_STRING(&vmstate, root, "arguments", args);
+  OBJECT_SET(&vmstate, root, arguments, args);
   
   if (vmstate.shared->verbose) {
     dump_fn(&vmstate, module);

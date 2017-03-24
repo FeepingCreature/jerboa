@@ -5,8 +5,9 @@
 
 #include <time.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <stdarg.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 typedef struct {
   char *start, *end;
@@ -51,5 +52,9 @@ void *my_dlopen(int files_len, const char **files_ptr);
 void *my_dlsym(void *ptr, const char *symbol);
 
 const char *my_dlerror(void *ptr);
+
+// if seeded with 1, does not repeat until it hits 1 again (see lcgtest.c) at 2^31.
+// This SHOULD be sufficient.
+uint32_t lcg_parkmiller(uint32_t a);
 
 #endif
