@@ -37,11 +37,17 @@ int main(int argc, char **argv) {
     if (i > 0 && strcmp(argv[i], "-v") == 0) {
       vmstate.shared->verbose = true;
     } else if (i > 0 && strcmp(argv[i], "-pg") == 0) {
-      vmstate.shared->profstate.profiling_enabled = true;
+      vmstate.shared->settings.profiling_enabled = true;
+    } else if (i > 0 && strcmp(argv[i], "-j") == 0) {
+      vmstate.shared->settings.jit_enabled = true;
     } else {
       argv2 = realloc(argv2, sizeof(char*) * ++argc2);
       argv2[argc2 - 1] = argv[i];
     }
+  }
+  if (vmstate.shared->settings.profiling_enabled && vmstate.shared->settings.jit_enabled) {
+    fprintf(stderr, "Profiling breaks JIT. Disabling JIT.\n");
+    vmstate.shared->settings.jit_enabled = false;
   }
   argc = argc2;
   argv = argv2;
@@ -90,7 +96,7 @@ int main(int argc, char **argv) {
   vm_update_frame(&vmstate);
   vm_run(&vmstate);
   
-  if (vmstate.shared->profstate.profiling_enabled) {
+  if (vmstate.shared->settings.profiling_enabled) {
     save_profile_output("profile.cg", &vmstate.shared->profstate);
   }
   

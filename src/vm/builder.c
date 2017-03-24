@@ -443,5 +443,6 @@ UserFunction *build_function(FunctionBuilder *builder) {
   fn->optimized = false;
   fn->resolved = false;
   fn->num_optimized = 0;
+  fn->proposed_jit_fn = fn->opt_jit_fn = NULL;
   return fn;
 }

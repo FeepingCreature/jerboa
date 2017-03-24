@@ -18,7 +18,7 @@ struct _VMState {
   VMState *parent;
 };
 
-#if defined(NDEBUG) && defined(__llvm__)
+#if defined(NDEBUG) && defined(__llvm__) && !defined(ENABLE_JIT)
 // rely on llvm function tailcall optimization being on
 #define STEP_VM return state->instr->fn(state)
 #else

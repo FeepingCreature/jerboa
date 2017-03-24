@@ -1,6 +1,7 @@
 #include "vm/call.h"
 
 #include "vm/optimize.h"
+#include "vm/myjit.h"
 #include "vm/vm.h"
 #include "util.h"
 #include "gc.h"
@@ -36,6 +37,10 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
     resolve_slot_ref(cf->uf, &slot);
     write_slot(cf, slot, load_arg(callf, INFO_ARGS_PTR(info)[i]));
   }
+  
+  if (fn->opt_jit_fn) {
+    fn->opt_jit_fn(state);
+    state->shared->cyclecount ++; // TODO account properly!
   }
 }
 
@@ -86,11 +91,18 @@ static bool setup_closure_call(VMState *state, CallInfo *info, Object *fn_obj_n)
     OBJECT_SET(state, context, arguments, make_array(state, varargs_ptr, varargs_len, true));
     context->flags |= OBJ_CLOSED;
   }
-  if (UNLIKELY(++cl_obj->num_called == 10)) {
+  cl_obj->num_called ++;
+  if (UNLIKELY(cl_obj->num_called == 10)) {
     assert(!vmfun->optimized);
     vmfun = cl_obj->vmfun = optimize_runtime(state, vmfun, context);
     vm_resolve_functions(vmfun);
   }
+#if defined(ENABLE_JIT)
+  if (UNLIKELY(cl_obj->num_called == 20 && state->shared->settings.jit_enabled)) {
+    fprintf(stderr, "jit compiling '%s'\n", vmfun->name);
+    myjit_flatten(vmfun);
+  }
+#endif
   call_function(state, context, vmfun, info);
   // gc_enable(state);
   return state->runstate != VM_ERRORED;

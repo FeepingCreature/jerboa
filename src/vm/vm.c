@@ -961,8 +961,9 @@ static void vm_step(VMState *state) {
     fn = fn(state).self;
   }
   state->shared->cyclecount += i * 9;
+  
   if (state->frame) vm_update_frame(state);
-  if (state->shared->profstate.profiling_enabled) {
+  if (state->shared->settings.profiling_enabled) {
     vm_maybe_record_profile(state);
   }
 }

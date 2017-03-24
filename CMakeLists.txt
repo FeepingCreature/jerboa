@@ -13,7 +13,7 @@ else()
   set(EXTRA_LIBS "dl")
 endif()
 
-set(FLAGS "-g" "-O0" "-Wall" "-Wno-maybe-uninitialized" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE")
+set(FLAGS "-g" "-O0" "-Wall" "-Wno-maybe-uninitialized" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE" "-DENABLE_JIT")
 pkg_check_modules (LIBICU REQUIRED icu-uc)
 pkg_check_modules (LIBFFI REQUIRED libffi)
 pkg_check_modules (LIBXML REQUIRED libxml-2.0)

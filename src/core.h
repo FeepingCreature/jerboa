@@ -267,7 +267,6 @@ typedef enum {
 
 typedef struct {
   struct timespec last_prof_time;
-  bool profiling_enabled;
   
   // table position -> count
   HashTable excl_table;
@@ -305,11 +304,16 @@ typedef struct {
   bool missed_gc; // tried to run gc when it was disabled
 } GCState;
 
+typedef struct {
+  bool profiling_enabled, jit_enabled;
+} Settings;
+
 // shared between parent and child VMs
 typedef struct {
   GCState gcstate;
   VMProfileState profstate;
   ValueCache vcache;
+  Settings settings;
   int cyclecount;
   
   // backing storage for stack allocations
@@ -329,7 +333,7 @@ typedef struct {
 struct _FnWrap;
 typedef struct _FnWrap FnWrap;
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__GNUC__)
 #define FAST_DECL
 #else
 #define FAST_DECL __attribute__ ((regparm (3)))
@@ -378,6 +382,9 @@ typedef struct {
   char *name;
   bool is_method, variadic_tail;
   FunctionBody body;
+  // proposed_jit_fn is "wip function pointer"; it's opt_jit_fn but can't be called yet.
+  // this is used for breaking circular deps with recursion
+  VMInstrFn opt_jit_fn, proposed_jit_fn;
   bool non_ssa, optimized, resolved;
   int num_optimized;
 } UserFunction;
