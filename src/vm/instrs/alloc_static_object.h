@@ -11,21 +11,17 @@ static FnWrap FN_NAME(VMState *state) FAST_FN;
 static FnWrap FN_NAME(VMState * __restrict__ state) {
   AllocStaticObjectInstr * __restrict__ asoi = (AllocStaticObjectInstr*) state->instr;
   Callframe * __restrict__ frame = state->frame;
-  Value * __restrict__ slots_ptr = frame->slots_ptr;
-  TableEntry ** __restrict__ refslots_ptr = frame->refslots_ptr;
   
-  int target_slot = asoi->target_slot, parent_slot = asoi->parent_slot;
-  VM_ASSERT2_SLOT(target_slot < frame->slots_len, "slot numbering error");
-  VM_ASSERT2_SLOT(parent_slot < frame->slots_len, "slot numbering error");
-  Object *parent_obj = OBJ_OR_NULL(slots_ptr[parent_slot]);
+  Slot target_slot = asoi->target_slot, parent_slot = asoi->parent_slot;
+  Object *parent_obj = closest_obj(state, read_slot(frame, parent_slot));
   
 #if defined(ENTRIES_NUM) && defined(ENTRIES_STORED) && defined(STACK)
   static const int entries_stored = ENTRIES_STORED;
   static const int tbl_num = ENTRIES_NUM;
   static const bool alloc_stack = STACK;
-  VM_ASSERT2_DEBUG(asoi->tbl.entries_stored == entries_stored, "instr specialization error");
-  VM_ASSERT2_DEBUG(tbl_num == asoi->tbl.entries_num, "instr specialization error: %i != %i", tbl_num, asoi->tbl.entries_num);
-  VM_ASSERT2_DEBUG(alloc_stack == asoi->alloc_stack, "instr specialization error: %i != %i", alloc_stack, asoi->alloc_stack);
+  VM_ASSERT2_DEBUG(asoi->tbl.entries_stored == entries_stored, "1. instr specialization error: %i != %i", asoi->tbl.entries_stored, entries_stored);
+  VM_ASSERT2_DEBUG(tbl_num == asoi->tbl.entries_num, "2. instr specialization error: %i != %i", tbl_num, asoi->tbl.entries_num);
+  VM_ASSERT2_DEBUG(alloc_stack == asoi->alloc_stack, "3. instr specialization error: %i != %i", alloc_stack, asoi->alloc_stack);
 #else
   int entries_stored = asoi->tbl.entries_stored;
   int tbl_num = asoi->tbl.entries_num;
@@ -49,22 +45,21 @@ static FnWrap FN_NAME(VMState * __restrict__ state) {
   
   StaticFieldInfo * __restrict__ info = ASOI_INFO(asoi);
   for (int i = 0; i != entries_stored; i++, info++) {
-    VM_ASSERT2_SLOT(info->slot < frame->slots_len, "slot numbering error");
     TableEntry * __restrict__ entry = (TableEntry*) ((char*) obj_entries_ptr + info->offset);
     __builtin_prefetch(entry, 1 /* write */, 1 /* 1/3 locality */);
     // fprintf(stderr, ":: %p\n", (void*) &entry->value);
     uint32_t hash = info->key.hash;
     Object *constraint = info->constraint;
-    TableEntry **refslot = &refslots_ptr[info->refslot];
-    Value value = slots_ptr[info->slot];
-    VM_ASSERT2(!constraint || value_instance_of(state, value, constraint), "type constraint violated on variable");
+    TableEntry **refslot = get_refslot_ref(frame, info->refslot);
+    Value value = read_slot(frame, info->slot);
+    VM_ASSERT2(!constraint || value_should_be_instance_of(state, value, constraint), "type constraint violated on variable");
     *refslot = entry;
     entry->hash = hash;
     entry->constraint = constraint;
     entry->value = value;
   }
   
-  slots_ptr[target_slot] = OBJ2VAL(obj);
+  write_slot(frame, target_slot, OBJ2VAL(obj));
   
   // fprintf(stderr, "%i = %li + %li * %i\n", instr_size(state->instr), sizeof(AllocStaticObjectInstr), sizeof(StaticFieldInfo), entries_stored);
   state->instr = (Instr*)((char*) asoi

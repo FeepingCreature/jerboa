@@ -42,16 +42,32 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   setup_stub_frame(state, len);
   state->frame->target = info->target;
   for (int i = 0; i < len; ++i) {
-    state->frame->slots_ptr[i + 1] = args_array->ptr[i];
+    int slotnum = i + 1;
+#ifndef NDEBUG
+    Slot writeslot = (Slot) { .offset = sizeof(Callframe) + sizeof(Value) * slotnum, .is_resolved = true };
+#else
+    Slot writeslot = (Slot) { .offset = sizeof(Callframe) + sizeof(Value) * slotnum };
+#endif
+    write_slot(state->frame, writeslot, args_array->ptr[i]);
   }
   
   CallInfo *info2 = alloca(sizeof(CallInfo) + sizeof(Arg) * len);
   info2->args_len = len;
   info2->this_arg = (Arg) { .kind = ARG_VALUE, .value = this_value };
   info2->fn = (Arg) { .kind = ARG_VALUE, .value = fn_value };
-  info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = 0 }; // 0 is the return slot
+#ifndef NDEBUG
+  info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = { .offset = sizeof(Callframe), .is_resolved = true } }; // equivalent to index 0, the return slot
+#else
+  info2->target = (WriteArg) { .kind = ARG_SLOT, .slot = { .offset = sizeof(Callframe) } };
+#endif
   for (int i = 0; i < len; ++i) {
-    INFO_ARGS_PTR(info2)[i] = (Arg) { .kind = ARG_SLOT, .slot = i + 1 };
+    int slotnum = i + 1;
+#ifndef NDEBUG
+    Slot altslot = (Slot) { .offset = sizeof(Callframe) + sizeof(Value) * slotnum, .is_resolved = true };
+#else
+    Slot altslot = (Slot) { .offset = sizeof(Callframe) + sizeof(Value) * slotnum };
+#endif
+    INFO_ARGS_PTR(info2)[i] = (Arg) { .kind = ARG_SLOT, .slot = altslot };
   }
   // passthrough call to actual function
   // note: may set its own errors
@@ -1470,6 +1486,17 @@ static void obj_keys_fn(VMState *state, CallInfo *info) {
     assert(k == keys_len);
   }
   vm_return(state, info, make_array(state, keys_ptr, keys_len, true));
+}
+
+static void obj_length_fn(VMState *state, CallInfo *info) {
+  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+  VM_ASSERT(NOT_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), "cannot get length of null");
+  Object *obj = OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0]));
+  int keys_len = 0;
+  if (obj) {
+    keys_len = obj->tbl.entries_stored;
+  }
+  vm_return(state, info, INT2VAL(keys_len));
 }
 
 static void sin_fn(VMState *state, CallInfo *info) {

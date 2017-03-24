@@ -6,15 +6,15 @@
 #include "object.h"
 
 char *get_arg_info(VMState *state, Arg arg) {
-  if (arg.kind == ARG_SLOT) return my_asprintf("%%%i", arg.slot);
-  if (arg.kind == ARG_REFSLOT) return my_asprintf("&%i", arg.refslot);
+  if (arg.kind == ARG_SLOT) return my_asprintf("%%%i", arg.slot.index);
+  if (arg.kind == ARG_REFSLOT) return my_asprintf("&%i", arg.refslot.index);
   assert(arg.kind == ARG_VALUE);
   return get_val_info(state, arg.value);
 }
 
 char *get_write_arg_info(WriteArg warg) {
-  if (warg.kind == ARG_SLOT) return my_asprintf("%%%i", warg.slot);
-  if (warg.kind == ARG_REFSLOT) return my_asprintf("&%i", warg.refslot);
+  if (warg.kind == ARG_SLOT) return my_asprintf("%%%i", warg.slot.index);
+  if (warg.kind == ARG_REFSLOT) return my_asprintf("&%i", warg.refslot.index);
   abort();
 }
 

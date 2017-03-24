@@ -69,4 +69,7 @@ void vm_setup_substate_of(VMState *state, VMState *substate);
 
 void init_instr_fn_table();
 
+void vm_resolve(UserFunction *uf);
+void vm_resolve_functions(UserFunction *uf);
+
 #endif

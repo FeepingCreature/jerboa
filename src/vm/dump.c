@@ -8,11 +8,11 @@ void dump_instr(VMState *state, Instr **instr_p) {
   // fprintf(stderr, "%p", (void*) instr);
   // fprintf(stderr, "%p", *(void**) &instr->fn);
   fprintf(stderr, "    ");
-  fprintf(stderr, "%i ", instr->context_slot);
+  fprintf(stderr, "%i ", instr->context_slot.index);
   switch (instr->type) {
     case INSTR_ALLOC_OBJECT:
       fprintf(stderr, "alloc object: %%%i = new object(%%%i, %s)\n",
-              ((AllocObjectInstr*) instr)->target_slot, ((AllocObjectInstr*) instr)->parent_slot,
+              ((AllocObjectInstr*) instr)->target_slot.index, ((AllocObjectInstr*) instr)->parent_slot.index,
               ((AllocObjectInstr*) instr)->alloc_stack?"stack":"heap"
              );
       *instr_p = (Instr*) ((AllocObjectInstr*) instr + 1);
@@ -56,16 +56,16 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     case INSTR_FREE_OBJECT:
       fprintf(stderr, "free object: %%%i (%s)\n",
-              ((FreeObjectInstr*) instr)->obj_slot,
+              ((FreeObjectInstr*) instr)->obj_slot.index,
               ((FreeObjectInstr*) instr)->on_stack?"stack":"heap");
       *instr_p = (Instr*) ((FreeObjectInstr*) instr + 1);
       break;
     case INSTR_CLOSE_OBJECT:
-      fprintf(stderr, "close object: %%%i\n", ((CloseObjectInstr*) instr)->slot);
+      fprintf(stderr, "close object: %%%i\n", ((CloseObjectInstr*) instr)->slot.index);
       *instr_p = (Instr*) ((CloseObjectInstr*) instr + 1);
       break;
     case INSTR_FREEZE_OBJECT:
-      fprintf(stderr, "freeze object: %%%i\n", ((FreezeObjectInstr*) instr)->slot);
+      fprintf(stderr, "freeze object: %%%i\n", ((FreezeObjectInstr*) instr)->slot.index);
       *instr_p = (Instr*) ((FreezeObjectInstr*) instr + 1);
       break;
     case INSTR_ACCESS:
@@ -81,7 +81,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
       if (((AssignInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
       fprintf(stderr, "assign%s: (%%%i=) %s . %s = %s\n",
-              mode, ((AssignInstr*) instr)->target_slot,
+              mode, ((AssignInstr*) instr)->target_slot.index,
               get_arg_info(state, ((AssignInstr*) instr)->obj),
               get_arg_info(state, ((AssignInstr*) instr)->key),
               get_arg_info(state, ((AssignInstr*) instr)->value));
@@ -176,11 +176,11 @@ void dump_instr(VMState *state, Instr **instr_p) {
       break;
     }
     case INSTR_ACCESS_STRING_KEY:
-      fprintf(stderr, "access: %s = %s . '%.*s' \t\t(opt: string key, scratch %%%i)\n",
+      fprintf(stderr, "access: %s = %s . '%s' \t\t(opt: string key, scratch %%%i)\n",
               get_write_arg_info(((AccessStringKeyInstr*) instr)->target),
               get_arg_info(state, ((AccessStringKeyInstr*) instr)->obj),
-              (int) ((AccessStringKeyInstr*) instr)->key.len, ((AccessStringKeyInstr*) instr)->key.ptr,
-              ((AccessStringKeyInstr*) instr)->key_slot);
+              ((AccessStringKeyInstr*) instr)->key.key,
+              ((AccessStringKeyInstr*) instr)->key_slot.index);
       *instr_p = (Instr*) ((AccessStringKeyInstr*) instr + 1);
       break;
     case INSTR_ASSIGN_STRING_KEY:
@@ -188,11 +188,11 @@ void dump_instr(VMState *state, Instr **instr_p) {
       char *mode = "(plain)";
       if (((AssignStringKeyInstr*) instr)->type == ASSIGN_EXISTING) mode = "(existing)";
       else if (((AssignStringKeyInstr*) instr)->type == ASSIGN_SHADOWING) mode = "(shadowing)";
-      fprintf(stderr, "assign%s: (%i=) %s . '%.*s' = %s \t\t(opt: string key)\n",
+      fprintf(stderr, "assign%s: (%i=) %s . '%s' = %s \t\t(opt: string key)\n",
               mode,
-              ((AssignStringKeyInstr*) instr)->target_slot,
+              ((AssignStringKeyInstr*) instr)->target_slot.index,
               get_arg_info(state, ((AssignStringKeyInstr*) instr)->obj),
-              (int) ((AssignStringKeyInstr*) instr)->key.len, ((AssignStringKeyInstr*) instr)->key.ptr,
+              ((AssignStringKeyInstr*) instr)->key.key,
               get_arg_info(state, ((AssignStringKeyInstr*) instr)->value));
       *instr_p = (Instr*) ((AssignStringKeyInstr*) instr + 1);
       break;
@@ -200,9 +200,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_SET_CONSTRAINT_STRING_KEY:
     {
       SetConstraintStringKeyInstr *sci = (SetConstraintStringKeyInstr*) instr;
-      fprintf(stderr, "set constraint: %s . '%.*s' : %s \t\t(opt: string key)\n",
+      fprintf(stderr, "set constraint: %s . '%s' : %s \t\t(opt: string key)\n",
               get_arg_info(state, sci->obj),
-              sci->key_len, sci->key_ptr,
+              sci->key.key,
               get_arg_info(state, sci->constraint));;
       *instr_p = (Instr*) (sci + 1);
       break;
@@ -210,9 +210,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_STRING_KEY_IN_OBJ:
     {
       StringKeyInObjInstr *skioi = (StringKeyInObjInstr*) instr;
-      fprintf(stderr, "key in obj: %s = '%.*s' in %s\t\t(opt: string key)\n",
+      fprintf(stderr, "key in obj: %s = '%s' in %s\t\t(opt: string key)\n",
               get_write_arg_info(((StringKeyInObjInstr*) instr)->target),
-              (int) skioi->key.len, skioi->key.ptr,
+              skioi->key.key,
               get_arg_info(state, ((StringKeyInObjInstr*) instr)->obj));
       *instr_p = (Instr*) (skioi + 1);
       break;
@@ -220,8 +220,8 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_DEFINE_REFSLOT:
     {
       DefineRefslotInstr *dri = (DefineRefslotInstr*) instr;
-      fprintf(stderr, "def refslot: &%i = %%%i . '%.*s' \t\t (opt: refslot)\n",
-              dri->target_refslot, dri->obj_slot, (int) dri->key.len, dri->key.ptr);
+      fprintf(stderr, "def refslot: &%i = %%%i . '%s' \t\t (opt: refslot)\n",
+              dri->target_refslot.index, dri->obj_slot.index, dri->key.key);
       *instr_p = (Instr*) (dri + 1);
       break;
     }
@@ -236,13 +236,13 @@ void dump_instr(VMState *state, Instr **instr_p) {
     case INSTR_ALLOC_STATIC_OBJECT:
     {
       AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) instr;
-      fprintf(stderr, "%%%i = new frame %%%i { ", asoi->target_slot, asoi->parent_slot);
+      fprintf(stderr, "%%%i = new frame %%%i { ", asoi->target_slot.index, asoi->parent_slot.index);
       for (int i = 0; i < asoi->tbl.entries_stored; ++i) {
         StaticFieldInfo *info = &ASOI_INFO(asoi)[i];
         char *infostr = "";
         if (info->constraint) infostr = get_type_info(state, OBJ2VAL(info->constraint));
         fprintf(stderr, "%s%s%s = %%%i (&%i); ",
-                info->key, info->constraint?": ":"", infostr, info->slot, info->refslot);
+                info->key.key, info->constraint?": ":"", infostr, info->slot.index, info->refslot.index);
       }
       fprintf(stderr, "} %s\n", asoi->alloc_stack?"stack":"heap");
       *instr_p = (Instr*) ((char*) instr + instr_size(instr));

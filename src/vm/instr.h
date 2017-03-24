@@ -28,7 +28,7 @@ typedef struct _Object Object;
 
 typedef struct {
   Instr base;
-  int target_slot, parent_slot;
+  Slot target_slot, parent_slot;
   bool alloc_stack;
 } AllocObjectInstr;
 
@@ -69,18 +69,18 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int obj_slot;
+  Slot obj_slot;
   bool on_stack;
 } FreeObjectInstr;
 
 typedef struct {
   Instr base;
-  int slot;
+  Slot slot;
 } CloseObjectInstr;
 
 typedef struct {
   Instr base;
-  int slot;
+  Slot slot;
 } FreezeObjectInstr;
 
 typedef struct {
@@ -92,7 +92,7 @@ typedef struct {
 typedef struct {
   Instr base;
   Arg obj, value, key;
-  int target_slot /* scratch space for calls */;
+  Slot target_slot /* scratch space for calls */;
   AssignType type;
 } AssignInstr;
 
@@ -156,7 +156,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int key_slot; // fallback slot in case we need to call an overload
+  Slot key_slot; // fallback slot in case we need to call an overload
   FastKey key;
   Arg obj;
   WriteArg target;
@@ -166,7 +166,7 @@ typedef struct {
   Instr base;
   FastKey key;
   Arg obj, value;
-  int target_slot /* scratch space for calls */;
+  Slot target_slot /* scratch space for calls */;
   AssignType type;
 } AssignStringKeyInstr;
 
@@ -184,8 +184,8 @@ typedef struct {
 
 typedef struct {
   Instr base;
-  int target_refslot;
-  int obj_slot;
+  Refslot target_refslot;
+  Slot obj_slot;
   FastKey key;
 } DefineRefslotInstr;
 
@@ -200,14 +200,14 @@ typedef struct {
   int offset;
   FastKey key;
   Object *constraint;
-  int slot;
-  int refslot;
+  Slot slot;
+  Refslot refslot;
 } StaticFieldInfo;
 
 // object is allocated, some fields are defined, object is closed, and refslots are created for its fields
 typedef struct {
   Instr base;
-  int target_slot, parent_slot;
+  Slot target_slot, parent_slot;
   bool alloc_stack;
   
   // entries_stored is len of ASOI_INFO

@@ -33,37 +33,26 @@ void *vm_stack_alloc_uninitialized(VMState *state, int size) {
 
 void vm_stack_free(VMState *state, void *ptr, int size) {
   VMSharedState *shared = state->shared;
+  if (size == -1) size = (char*) shared->stack_data_ptr + shared->stack_data_offset - (char*) ptr; // Only use this when there is no other way!
   int new_offset = shared->stack_data_offset - size;
   (void) ptr; assert(ptr == (char*) shared->stack_data_ptr + new_offset); // must free in reverse order!
   shared->stack_data_offset = new_offset;
 }
 
 void vm_alloc_frame(VMState *state, int slots, int refslots) {
-  Callframe *cf = (Callframe*) vm_stack_alloc_uninitialized(state, sizeof(Callframe));
+  Callframe * __restrict__ cf = (Callframe*) vm_stack_alloc_uninitialized(state, sizeof(Callframe) + sizeof(TableEntry*) * refslots + sizeof(Value) * slots);
   if (!cf) return; // stack overflow
   cf->uf = NULL;
   cf->above = state->frame;
   cf->last_stack_obj = NULL;
   cf->block = 0;
-  cf->slots_len = slots;
-  cf->slots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value) * slots);
-  if (UNLIKELY(!cf->slots_ptr)) { // stack overflow
-    vm_stack_free(state, cf, sizeof(Callframe));
-    return;
-  }
-  bzero(cf->slots_ptr, sizeof(Value) * slots);
   
-  cf->refslots_len = refslots;
-  cf->refslots_ptr = vm_stack_alloc_uninitialized(state, sizeof(Value*) * refslots);
-  if (UNLIKELY(!cf->refslots_ptr)) { // stack overflow
-    vm_stack_free(state, cf->slots_ptr, sizeof(Value) * slots);
-    vm_stack_free(state, cf, sizeof(Callframe));
-    return;
-  }
+  Value *slots_ptr = (Value*) ((unsigned char*) cf + sizeof(Callframe) + sizeof(TableEntry*) * refslots);
   // no need to zero refslots, as they're not gc'd
+  bzero(slots_ptr, sizeof(Value) * slots);
   
   state->frame = cf;
-  gc_add_roots(state, cf->slots_ptr, cf->slots_len, &cf->frameroot_slots);
+  gc_add_roots(state, slots_ptr, slots, &cf->frameroot_slots);
 }
 
 void vm_error(VMState *state, const char *fmt, ...) {
@@ -87,10 +76,12 @@ void vm_remove_frame(VMState *state) {
     vm_stack_free(state, obj, obj->size);
     obj = prev_obj;
   }
-  vm_stack_free(state, cf->refslots_ptr, sizeof(Value*)*cf->refslots_len);
-  vm_stack_free(state, cf->slots_ptr, sizeof(Value)*cf->slots_len);
   state->frame = cf->above;
-  vm_stack_free(state, cf, sizeof(Callframe));
+  if (LIKELY(cf->uf)) {
+    vm_stack_free(state, cf, sizeof(Callframe) + sizeof(TableEntry*) * cf->uf->refslots + sizeof(Value) * cf->uf->slots);
+  } else {
+    vm_stack_free(state, cf, -1);
+  }
 }
 
 static FnWrap vm_instr_return(VMState *state) FAST_FN;
@@ -99,7 +90,11 @@ const static __thread struct __attribute__((__packed__)) {
   ReturnInstr stub_ret0;
 } stub_instrs = {
   .stub_call = { { .type = INSTR_CALL }, .size = sizeof(CallInstr) },
-  .stub_ret0 = { { .type = INSTR_RETURN, .fn = vm_instr_return }, .ret = { .kind = ARG_SLOT, .slot = 0 } }
+#ifndef NDEBUG
+  .stub_ret0 = { { .type = INSTR_RETURN, .fn = vm_instr_return }, .ret = { .kind = ARG_SLOT, .slot = { .offset = sizeof(Callframe), .is_resolved = true } } }
+#else
+  .stub_ret0 = { { .type = INSTR_RETURN, .fn = vm_instr_return }, .ret = { .kind = ARG_SLOT, .slot = { .offset = sizeof(Callframe) } } }
+#endif
 };
 
 void setup_stub_frame(VMState *state, int slots) {
@@ -248,12 +243,10 @@ static VMInstrFn instr_fns[INSTR_LAST] = {0};
 static FnWrap vm_instr_alloc_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_object(VMState *state) {
   AllocObjectInstr * __restrict__ alloc_obj_instr = (AllocObjectInstr*) state->instr;
-  int target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
-  VM_ASSERT2_SLOT(target_slot < state->frame->slots_len, "slot numbering error");
-  VM_ASSERT2_SLOT(parent_slot < state->frame->slots_len, "slot numbering error");
-  Object *parent_obj = OBJ_OR_NULL(state->frame->slots_ptr[parent_slot]);
+  Slot target_slot = alloc_obj_instr->target_slot, parent_slot = alloc_obj_instr->parent_slot;
+  Object *parent_obj = OBJ_OR_NULL(read_slot(state->frame, parent_slot));
   VM_ASSERT2(!parent_obj || !(parent_obj->flags & OBJ_NOINHERIT), "cannot inherit from object marked no-inherit");
-  state->frame->slots_ptr[target_slot] = make_object(state, parent_obj, alloc_obj_instr->alloc_stack);
+  write_slot(state->frame, target_slot, make_object(state, parent_obj, alloc_obj_instr->alloc_stack));
   state->instr = (Instr*)(alloc_obj_instr + 1);
   STEP_VM;
 }
@@ -305,9 +298,8 @@ static FnWrap vm_instr_alloc_string_object(VMState *state) {
 static FnWrap vm_instr_alloc_closure_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_closure_object(VMState *state) {
   AllocClosureObjectInstr * __restrict__ alloc_closure_obj_instr = (AllocClosureObjectInstr*) state->instr;
-  int context_slot = alloc_closure_obj_instr->base.context_slot;
-  VM_ASSERT2_SLOT(context_slot < state->frame->slots_len, "slot numbering error");
-  Value context = state->frame->slots_ptr[context_slot];
+  Slot context_slot = alloc_closure_obj_instr->base.context_slot;
+  Value context = read_slot(state->frame, context_slot);
   VM_ASSERT2(IS_OBJ(context), "bad slot type");
   Object *context_obj = AS_OBJ(context);
   set_arg(state, alloc_closure_obj_instr->target, make_closure_fn(state, context_obj, alloc_closure_obj_instr->fn));
@@ -318,9 +310,8 @@ static FnWrap vm_instr_alloc_closure_object(VMState *state) {
 static FnWrap vm_instr_free_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_free_object(VMState *state) {
   FreeObjectInstr * __restrict__ free_object_instr = (FreeObjectInstr*) state->instr;
-  int slot = free_object_instr->obj_slot;
-  VM_ASSERT2_SLOT(slot < state->frame->slots_len, "slot numbering error");
-  Value val = state->frame->slots_ptr[slot];
+  Slot slot = free_object_instr->obj_slot;
+  Value val = read_slot(state->frame, slot);
   // non-object values are always OBJ_CLOSED
   if (LIKELY(free_object_instr->on_stack)) {
     // this instr should only be applied to static objects
@@ -328,16 +319,18 @@ static FnWrap vm_instr_free_object(VMState *state) {
     AS_OBJ(val)->flags |= OBJ_STACK_FREED;
     
     Callframe * __restrict__ cf = state->frame;
-    // important! don't gc scan anymore
 #ifndef NDEBUG
-    for (int i = 0; i < cf->slots_len; i++) {
-      if (i != slot && cf->slots_ptr[i].type == TYPE_OBJECT && cf->slots_ptr[i].obj == AS_OBJ(val)) {
+    for (int i = 0; i < SLOTS_LEN(cf); i++) {
+      Slot slot_i = (Slot) { .index = i };
+      resolve_slot_ref(cf->uf, &slot_i);
+      if (slot_i.offset != slot.offset && read_slot(cf, slot_i).type == TYPE_OBJECT && read_slot(cf, slot_i).obj == AS_OBJ(val)) {
         fprintf(stderr, "bad - stack reference to freed object");
         abort();
       }
     }
 #endif
-    cf->slots_ptr[slot].type = TYPE_NULL;
+    // important! don't gc scan anymore
+    write_slot(cf, slot, VNULL);
     
     Object *last_stack_obj = cf->last_stack_obj;
     while (last_stack_obj && last_stack_obj->flags & OBJ_STACK_FREED) {
@@ -355,9 +348,8 @@ static FnWrap vm_instr_free_object(VMState *state) {
 static FnWrap vm_instr_close_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_close_object(VMState *state) {
   CloseObjectInstr * __restrict__ close_object_instr = (CloseObjectInstr*) state->instr;
-  int slot = close_object_instr->slot;
-  VM_ASSERT2_SLOT(slot < state->frame->slots_len, "slot numbering error");
-  Value val = state->frame->slots_ptr[slot];
+  Slot slot = close_object_instr->slot;
+  Value val = read_slot(state->frame, slot);
   // non-object values are always OBJ_CLOSED
   VM_ASSERT2(IS_OBJ(val) && !(AS_OBJ(val)->flags & OBJ_CLOSED), "object is already closed!");
   AS_OBJ(val)->flags |= OBJ_CLOSED;
@@ -368,9 +360,8 @@ static FnWrap vm_instr_close_object(VMState *state) {
 static FnWrap vm_instr_freeze_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_freeze_object(VMState *state) {
   FreezeObjectInstr * __restrict__ freeze_object_instr = (FreezeObjectInstr*) state->instr;
-  int slot = freeze_object_instr->slot;
-  VM_ASSERT2_SLOT(slot < state->frame->slots_len, "slot numbering error");
-  Value val = state->frame->slots_ptr[slot];
+  Slot slot = freeze_object_instr->slot;
+  Value val = read_slot(state->frame, slot);
   // non-object values are always OBJ_FROZEN
   VM_ASSERT2(IS_OBJ(val) && !(AS_OBJ(val)->flags & OBJ_FROZEN), "object is already frozen!");
   AS_OBJ(val)->flags |= OBJ_FROZEN;
@@ -382,7 +373,8 @@ FnWrap call_internal(VMState *state, CallInfo *info, Instr *instr_after_call) {
   if (!setup_call(state, info, instr_after_call)) {
     return (FnWrap) { vm_halt };
   }
-  STEP_VM;
+  // STEP_VM;
+  return (FnWrap) { state->instr->fn }; // not safe to recurse here!
 }
 
 static FnWrap vm_instr_access(VMState *state) FAST_FN;
@@ -478,8 +470,7 @@ static FnWrap vm_instr_access_string_key(VMState *state) {
 static FnWrap vm_instr_assign(VMState *state) FAST_FN;
 static FnWrap vm_instr_assign(VMState *state) {
   AssignInstr * __restrict__ assign_instr = (AssignInstr*) state->instr;
-  int target_slot = assign_instr->target_slot;
-  VM_ASSERT2_SLOT(target_slot < state->frame->slots_len, "slot numbering error");
+  Slot target_slot = assign_instr->target_slot;
   VM_ASSERT2(NOT_NULL(load_arg(state->frame, assign_instr->key)), "key slot null"); // TODO see above
   Value obj_val = load_arg(state->frame, assign_instr->obj);
   Object *obj = closest_obj(state, obj_val);
@@ -720,18 +711,14 @@ static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallFunctionDirectInstr * __restrict__ instr = (CallFunctionDirectInstr*) state->instr;
   CallInfo *info = &instr->info;
   
-  // cache beforehand, in case the function wants to set up its own stub call like apply
+  // cache beforehand, in case the function (wrongly) wants to set up its own stub call like apply
   Instr *prev_instr = state->instr;
   
   Instr *next_instr = (Instr*) ((char*) instr + instr->size);
-  Callframe *frame = state->frame;
   instr->fn(state, info);
   if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
-  if (LIKELY(state->instr == prev_instr)) {
-    state->instr = next_instr;
-  } else {
-    frame->return_next_instr = next_instr;
-  }
+  VM_ASSERT2_DEBUG(state->instr == prev_instr, "Directly called function must not change control flow!");
+  state->instr = next_instr;
   STEP_VM;
 }
 
@@ -920,16 +907,15 @@ static FnWrap vm_instr_define_refslot(VMState *state) FAST_FN;
 static FnWrap vm_instr_define_refslot(VMState *state) {
   DefineRefslotInstr * __restrict__ dri = (DefineRefslotInstr*) state->instr;
   
-  int target_refslot = dri->target_refslot;
-  int obj_slot = dri->obj_slot;
-  VM_ASSERT2_SLOT(obj_slot < state->frame->slots_len, "slot numbering error");
+  Refslot target_refslot = dri->target_refslot;
+  Slot obj_slot = dri->obj_slot;
   
-  Object *obj = OBJ_OR_NULL(state->frame->slots_ptr[obj_slot]);
+  Object *obj = OBJ_OR_NULL(read_slot(state->frame, obj_slot));
   VM_ASSERT2(obj, "cannot define refslot for null or primitive obj");
   
   TableEntry *entry = table_lookup_prepared(&obj->tbl, &dri->key);
   VM_ASSERT2(entry, "key not in object");
-  state->frame->refslots_ptr[target_refslot] = entry;
+  *get_refslot_ref(state->frame, target_refslot) = entry;
   
   state->instr = (Instr*)(dri + 1);
   STEP_VM;
@@ -952,13 +938,15 @@ void vm_update_frame(VMState *state) {
 static void vm_step(VMState *state) {
   state->instr = state->frame->instr_ptr;
   assert(!state->frame->uf || state->frame->uf->resolved);
+  
   VMInstrFn fn = state->instr->fn;
+  
   // fuzz to prevent profiler aliasing
   int limit = 128 + (state->shared->cyclecount % 64);
   int i;
   for (i = 0; i < limit && fn != vm_halt; i++) {
     /*{
-      fprintf(stderr, "run [%p] <%i> {%p, %i, %i} ", (void*) state->instr, state->frame->block, (void*) state->frame, state->frame->slots_len, state->frame->refslots_len);
+      fprintf(stderr, "run [%p] <%i> {%p, %i, %i} ", (void*) state->instr, state->frame->block, (void*) state->frame->uf, state->frame->uf->slots, state->frame->uf->refslots);
       Instr *instr = state->instr;
       dump_instr(state, &instr);
     }*/
@@ -1012,9 +1000,8 @@ void init_instr_fn_table() {
   instr_fns[INSTR_ALLOC_STATIC_OBJECT] = vm_instr_alloc_static_object;
 }
 
-
-void vm_resolve(UserFunction *uf) {
-  assert(!uf->resolved);
+// will be called again after runtime optimization
+void vm_resolve_functions(UserFunction *uf) {
   for (int i = 0; i < uf->body.blocks_len; i++) {
     Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
     while (instr_cur != instr_end) {
@@ -1080,6 +1067,33 @@ void vm_resolve(UserFunction *uf) {
         }
       }
       if (!instr_cur->fn) instr_cur->fn = instr_fns[instr_cur->type];
+      int size = instr_size(instr_cur);
+      instr_cur = (Instr*) ((char*) instr_cur + size);
+    }
+  }
+}
+
+void vm_resolve(UserFunction *uf) {
+  assert(!uf->resolved);
+  vm_resolve_functions(uf);
+  for (int i = 0; i < uf->body.blocks_len; i++) {
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+    while (instr_cur != instr_end) {
+      switch (instr_cur->type) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+#define CHKSLOT_READ(S) resolve_slot_ref(uf, &S)
+#define CHKSLOT_WRITE(S) resolve_slot_ref(uf, &S)
+#define CHKSLOT_REF(S) resolve_refslot_ref(uf, &S)
+        case INSTR_INVALID: { abort();
+#include "vm/slots.txt"
+          CASE(INSTR_LAST, Instr) abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+#undef CHKSLOT_READ
+#undef CHKSLOT_WRITE
+#undef CHKSLOT_REF
+#undef CASE
+      }
       int size = instr_size(instr_cur);
       instr_cur = (Instr*) ((char*) instr_cur + size);
     }
