@@ -72,6 +72,7 @@ void obj_free(Object *obj);
 Object *obj_instance_of(Object *obj, Object *proto);
 
 bool value_instance_of(VMState *state, Value val, Object *proto);
+bool value_should_be_instance_of(VMState *state, Value val, Object *proto);
 
 bool value_is_truthy(Value value);
 
@@ -82,16 +83,19 @@ char *get_type_info(VMState*, Value);
 char *get_val_info(VMState *state, Value val);
 
 static inline Value load_arg(Callframe *frame, Arg arg) {
-  if (arg.kind == ARG_SLOT) {
-    assert(arg.slot < frame->slots_len);
-  } else if (arg.kind == ARG_REFSLOT) {
-    assert(arg.refslot < frame->refslots_len);
-  } else assert(arg.kind == ARG_VALUE);
+  // offset already checked in resolve
+  assert(arg.kind == ARG_SLOT || arg.kind == ARG_REFSLOT || arg.kind == ARG_VALUE);
   
   if (arg.kind == ARG_SLOT) {
-    return frame->slots_ptr[arg.slot];
+#ifndef NDEBUG
+    assert(arg.slot.is_resolved);
+#endif
+    return read_slot(frame, arg.slot);
   } else if (arg.kind == ARG_REFSLOT) {
-    return frame->refslots_ptr[arg.refslot]->value;
+#ifndef NDEBUG
+    assert(arg.refslot.is_resolved);
+#endif
+    return read_refslot(frame, arg.refslot);
   } else return arg.value;
   // NOT faster
   /*
@@ -108,16 +112,17 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
 static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) __attribute__ ((always_inline));
 static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) {
   assert(arg.kind == kind);
-  if (kind == ARG_SLOT) {
-    assert(arg.slot < frame->slots_len);
-  } else if (kind == ARG_REFSLOT) {
-    assert(arg.refslot < frame->refslots_len);
-  } else assert(kind == ARG_VALUE);
   
   if (kind == ARG_SLOT) {
-    return frame->slots_ptr[arg.slot];
+#ifndef NDEBUG
+    assert(arg.slot.is_resolved);
+#endif
+    return read_slot(frame, arg.slot);
   } else if (kind == ARG_REFSLOT) {
-    return frame->refslots_ptr[arg.refslot]->value;
+#ifndef NDEBUG
+    assert(arg.refslot.is_resolved);
+#endif
+    return read_refslot(frame, arg.refslot);
   } else return arg.value;
 }
 
@@ -125,8 +130,11 @@ void value_failed_type_constraint_error(VMState *state, Object *constraint, Valu
 
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
   if (warg.kind == ARG_REFSLOT) {
-    assert(warg.refslot < state->frame->refslots_len);
-    TableEntry *entry = state->frame->refslots_ptr[warg.refslot];
+#ifndef NDEBUG
+    assert(warg.refslot.is_resolved);
+#endif
+    
+    TableEntry *entry = get_refslot(state->frame, warg.refslot);
     Object *constraint = entry->constraint;
     if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
       value_failed_type_constraint_error(state, constraint, value);
@@ -137,7 +145,7 @@ static inline void set_arg(VMState *state, WriteArg warg, Value value) {
     *warg.pointer = value;
   } else {
     assert(warg.kind == ARG_SLOT);
-    state->frame->slots_ptr[warg.slot] = value;
+    write_slot(state->frame, warg.slot, value);
   }
 }
 
@@ -145,8 +153,11 @@ static inline void set_arg_specialized(VMState *state, WriteArg warg, Value valu
 static inline void set_arg_specialized(VMState *state, WriteArg warg, Value value, int kind) {
   assert(warg.kind == kind);
   if (kind == ARG_REFSLOT) {
-    assert(warg.refslot < state->frame->refslots_len);
-    TableEntry *entry = state->frame->refslots_ptr[warg.refslot];
+#ifndef NDEBUG
+    assert(warg.refslot.is_resolved);
+#endif
+    
+    TableEntry *entry = get_refslot(state->frame, warg.refslot);
     Object *constraint = entry->constraint;
     if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
       value_failed_type_constraint_error(state, constraint, value);
@@ -157,7 +168,7 @@ static inline void set_arg_specialized(VMState *state, WriteArg warg, Value valu
     *warg.pointer = value;
   } else {
     assert(kind == ARG_SLOT);
-    state->frame->slots_ptr[warg.slot] = value;
+    write_slot(state->frame, warg.slot, value);
   }
 }
 

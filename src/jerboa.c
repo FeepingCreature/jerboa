@@ -78,7 +78,9 @@ int main(int argc, char **argv) {
     dump_fn(&vmstate, module);
   }
   
+  vm_resolve(module);
   module = optimize_runtime(&vmstate, module, root);
+  vm_resolve_functions(module);
   
   Value retval;
   

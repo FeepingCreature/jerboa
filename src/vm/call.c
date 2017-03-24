@@ -7,13 +7,17 @@
 
 void vm_resolve(UserFunction *uf);
 
+void vm_resolve_functions(UserFunction *uf);
+
 void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *info) {
   if (UNLIKELY(!fn->resolved)) vm_resolve(fn);
   Callframe *callf = state->frame;
   vm_alloc_frame(state, fn->slots, fn->refslots);
   Callframe *cf = state->frame;
   cf->uf = fn;
-  cf->slots_ptr[1] = OBJ2VAL(context);
+  Slot slot1 = (Slot) { .index = 1 };
+  resolve_slot_ref(cf->uf, &slot1);
+  write_slot(cf, slot1, OBJ2VAL(context));
   cf->target = info->target;
   
   // enforced in build_function
@@ -28,7 +32,10 @@ void call_function(VMState *state, Object *context, UserFunction *fn, CallInfo *
   }
   
   for (int i = 0; i < info->args_len; ++i) {
-    cf->slots_ptr[2 + i] = load_arg(callf, INFO_ARGS_PTR(info)[i]);
+    Slot slot = (Slot) { .index = i + 2 };
+    resolve_slot_ref(cf->uf, &slot);
+    write_slot(cf, slot, load_arg(callf, INFO_ARGS_PTR(info)[i]));
+  }
   }
 }
 
@@ -82,6 +89,7 @@ static bool setup_closure_call(VMState *state, CallInfo *info, Object *fn_obj_n)
   if (UNLIKELY(++cl_obj->num_called == 10)) {
     assert(!vmfun->optimized);
     vmfun = cl_obj->vmfun = optimize_runtime(state, vmfun, context);
+    vm_resolve_functions(vmfun);
   }
   call_function(state, context, vmfun, info);
   // gc_enable(state);

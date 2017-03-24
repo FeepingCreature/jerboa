@@ -155,14 +155,27 @@ Object *obj_instance_of(Object *obj, Object *proto) {
 }
 
 bool value_instance_of(VMState *state, Value val, Object *proto) {
+#ifndef NDEBUG
   if (proto == NULL) {
     fprintf(stderr, "vacuous case\n");
     abort();
   }
+#endif
   if (IS_NULL(val)) return false;
   Object *obj = proto_obj(state, val);
   while (obj) {
     if (obj == proto) return true;
+    obj = obj->parent;
+  }
+  return false;
+}
+
+// version of value_instance_of hinted to presume that value is a trivial instance of proto, as is the case with most type hints.
+bool value_should_be_instance_of(VMState *state, Value val, Object *proto) {
+  if (UNLIKELY(IS_NULL(val))) return false;
+  Object *obj = proto_obj(state, val);
+  while (obj) {
+    if (LIKELY(obj == proto)) return true;
     obj = obj->parent;
   }
   return false;

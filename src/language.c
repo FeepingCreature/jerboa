@@ -15,8 +15,8 @@ typedef enum {
 
 // if 'key' is -1, the value is just 'base'
 typedef struct {
-  int base;
-  int key;
+  Slot base;
+  Slot key;
   RefMode mode;
   FileRange *range;
   // some expressions such as variable definitions create accesses as side effect
@@ -26,37 +26,37 @@ typedef struct {
 
 static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, UserFunction **uf);
 
-static RefValue ref_simple(int slot) {
-  return (RefValue) { slot, -1, REFMODE_NONE, NULL };
+static RefValue ref_simple(Slot slot) {
+  return (RefValue) { slot, (Slot) { .index = -1 }, REFMODE_NONE, NULL };
 }
 
-static int ref_access(FunctionBuilder *builder, RefValue rv) {
-  if (!builder) return 0; // happens when speculatively parsing
-  if (rv.key != -1) {
+static Slot ref_access(FunctionBuilder *builder, RefValue rv) {
+  if (!builder) return (Slot) {0}; // happens when speculatively parsing
+  if (slot_index(rv.key) != -1) {
     bool use_range = builder->current_range == NULL;
     if (use_range) use_range_start(builder, rv.range);
-    int res = addinstr_access(builder, rv.base, rv.key);
+    Slot res = addinstr_access(builder, rv.base, rv.key);
     if (use_range) use_range_end(builder, rv.range);
     return res;
   }
   return rv.base;
 }
 
-static void ref_assign(FunctionBuilder *builder, RefValue rv, int value) {
+static void ref_assign(FunctionBuilder *builder, RefValue rv, Slot value) {
   if (!builder) return;
-  assert(rv.key != -1);
+  assert(slot_index(rv.key) != -1);
   addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_PLAIN);
 }
 
-static void ref_assign_existing(FunctionBuilder *builder, RefValue rv, int value) {
+static void ref_assign_existing(FunctionBuilder *builder, RefValue rv, Slot value) {
   if (!builder) return;
-  assert(rv.key != -1);
+  assert(rv.key.index != -1);
   addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_EXISTING);
 }
 
-static void ref_assign_shadowing(FunctionBuilder *builder, RefValue rv, int value) {
+static void ref_assign_shadowing(FunctionBuilder *builder, RefValue rv, Slot value) {
   if (!builder) return;
-  assert(rv.key != -1);
+  assert(rv.key.index != -1);
   addinstr_assign(builder, rv.base, rv.key, value, ASSIGN_SHADOWING);
 }
 
@@ -66,11 +66,11 @@ static void ref_assign_shadowing(FunctionBuilder *builder, RefValue rv, int valu
 //  scope immediately after the variable declaration, allowing optimization later)
 
 // IMPORTANT: because this is pure, you do NOT need to call end_lex_scope before returning errors!
-static int begin_lex_scope(FunctionBuilder *builder) {
+static Slot begin_lex_scope(FunctionBuilder *builder) {
   return builder->scope;
 }
 
-static void end_lex_scope(FunctionBuilder *builder, int backup) {
+static void end_lex_scope(FunctionBuilder *builder, Slot backup) {
   builder->scope = backup;
 }
 
@@ -91,13 +91,13 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
 static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, FileRange *var_range, bool isconst, RefValue *var_value);
 
 static RefValue get_scope(FunctionBuilder *builder, char *name) {
-  if (!builder) return (RefValue) {0, 0, REFMODE_VARIABLE, NULL};
+  if (!builder) return (RefValue) { .base = {0}, .key = {0}, .mode = REFMODE_VARIABLE };
   assert(builder->current_range);
-  int name_slot = addinstr_alloc_string_object(builder, name);
-  return (RefValue) {builder->scope, name_slot, REFMODE_VARIABLE, builder->current_range};
+  Slot name_slot = addinstr_alloc_string_object(builder, name);
+  return (RefValue) { .base = builder->scope, .key = name_slot, .mode = REFMODE_VARIABLE, .range = builder->current_range};
 }
 
-static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *builder, int obj_slot) {
+static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *builder, Slot obj_slot) {
   char *text = *textp;
   while (!eat_string(&text, "}")) {
     
@@ -127,8 +127,8 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
       assert(res == PARSE_OK);
       if (builder) {
         use_range_start(builder, add_entry_range);
-        int fn_slot = addinstr_alloc_closure_object(builder, fn);
-        int key_slot = addinstr_alloc_string_object(builder, ident_name);
+        Slot fn_slot = addinstr_alloc_closure_object(builder, fn);
+        Slot key_slot = addinstr_alloc_string_object(builder, ident_name);
         addinstr_assign(builder, obj_slot, key_slot, fn_slot, ASSIGN_PLAIN);
         use_range_end(builder, add_entry_range);
       }
@@ -147,7 +147,7 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     record_end(text, add_entry_range);
     
     FileRange *define_constraint = alloc_and_record_start(text);
-    int constraint_slot = -1;
+    Slot constraint_slot = (Slot) { .index = -1 };
     if (eat_string(&text, ":")) {
       RefValue rv;
       record_end(text, define_constraint);
@@ -167,7 +167,7 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
       if (res == PARSE_ERROR) return res;
       assert(res == PARSE_OK);
     } else {
-      value = ref_simple(0); // init to null
+      value = ref_simple((Slot) {0}); // init to null
     }
     
     
@@ -177,14 +177,14 @@ static ParseResult parse_object_literal_body(char **textp, FunctionBuilder *buil
     }
     
     if (builder) {
-      int value_slot = ref_access(builder, value);
+      Slot value_slot = ref_access(builder, value);
       
       use_range_start(builder, add_entry_range);
-      int key_slot = addinstr_alloc_string_object(builder, key_name);
+      Slot key_slot = addinstr_alloc_string_object(builder, key_name);
       addinstr_assign(builder, obj_slot, key_slot, value_slot, ASSIGN_PLAIN);
       use_range_end(builder, add_entry_range);
       
-      if (constraint_slot != -1) {
+      if (constraint_slot.index != -1) {
         use_range_start(builder, define_constraint);
         addinstr_set_constraint(builder, obj_slot, key_slot, constraint_slot);
         use_range_end(builder, define_constraint);
@@ -203,9 +203,9 @@ static ParseResult parse_object_literal(char **textp, FunctionBuilder *builder, 
     return PARSE_NONE;
   }
   
-  int obj_slot = 0;
+  Slot obj_slot = {0};
   use_range_start(builder, range);
-  if (builder) obj_slot = addinstr_alloc_object(builder, 0);
+  if (builder) obj_slot = addinstr_alloc_object(builder, (Slot) {0});
   use_range_end(builder, range);
   *textp = text;
   *rv_p = ref_simple(obj_slot);
@@ -215,7 +215,7 @@ static ParseResult parse_object_literal(char **textp, FunctionBuilder *builder, 
   return res;
 }
 
-static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *builder, int obj_slot, FileRange *range) {
+static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *builder, Slot obj_slot, FileRange *range) {
   char *text = *textp;
   RefValue *values_ptr = NULL; int values_len = 0;
   while (!eat_string(&text, "]")) {
@@ -236,16 +236,16 @@ static ParseResult parse_array_literal_body(char **textp, FunctionBuilder *build
   *textp = text;
   if (builder) {
     use_range_start(builder, range);
-    int keyslot1 = addinstr_alloc_string_object(builder, "resize");
-    int keyslot2 = addinstr_alloc_string_object(builder, "[]=");
-    int resizefn = ref_access(builder, (RefValue) {obj_slot, keyslot1, REFMODE_OBJECT, range});
-    int assignfn = ref_access(builder, (RefValue) {obj_slot, keyslot2, REFMODE_OBJECT, range});
-    int newsize_slot = addinstr_alloc_int_object(builder, values_len);
+    Slot keyslot1 = addinstr_alloc_string_object(builder, "resize");
+    Slot keyslot2 = addinstr_alloc_string_object(builder, "[]=");
+    Slot resizefn = ref_access(builder, (RefValue) {obj_slot, keyslot1, REFMODE_OBJECT, range});
+    Slot assignfn = ref_access(builder, (RefValue) {obj_slot, keyslot2, REFMODE_OBJECT, range});
+    Slot newsize_slot = addinstr_alloc_int_object(builder, values_len);
     obj_slot = addinstr_call1(builder, resizefn, obj_slot, newsize_slot);
     for (int i = 0; i < values_len; ++i) {
-      int index_slot = addinstr_alloc_int_object(builder, i);
+      Slot index_slot = addinstr_alloc_int_object(builder, i);
       use_range_end(builder, range);
-      int value_slot = ref_access(builder, values_ptr[i]);
+      Slot value_slot = ref_access(builder, values_ptr[i]);
       use_range_start(builder, range);
       addinstr_call2(builder, assignfn, obj_slot, index_slot, value_slot);
     }
@@ -263,7 +263,7 @@ static ParseResult parse_array_literal(char **textp, FunctionBuilder *builder, R
     return PARSE_NONE;
   }
   
-  int obj_slot = 0;
+  Slot obj_slot = {0};
   use_range_start(builder, lit_range);
   if (builder) obj_slot = addinstr_alloc_array_object(builder);
   *textp = text;
@@ -284,7 +284,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   if (parse_float(&text, &f_value)) {
     *textp = text;
     record_end(text, range);
-    int slot = 0;
+    Slot slot = {0};
     if (builder) {
       use_range_start(builder, range);
       slot = addinstr_alloc_float_object(builder, f_value);
@@ -298,7 +298,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   if (parse_int(&text, &i_value)) {
     *textp = text;
     record_end(text, range);
-    int slot = 0;
+    Slot slot = {0};
     if (builder) {
       use_range_start(builder, range);
       slot = addinstr_alloc_int_object(builder, i_value);
@@ -312,7 +312,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
   
   char *t_value;
   if ((res = parse_string(&text, &t_value)) != PARSE_NONE) {
-    int slot = 0;
+    Slot slot = {0};
     if (res == PARSE_OK) {
       *textp = text;
       record_end(text, range);
@@ -374,7 +374,7 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
       
       fn->is_method = is_method;
       
-      int slot = 0;
+      Slot slot = {0};
       if (builder) {
         use_range_start(builder, range); // count the closure allocation under 'function'
         slot = addinstr_alloc_closure_object(builder, fn);
@@ -393,8 +393,8 @@ static ParseResult parse_expr_stem(char **textp, FunctionBuilder *builder, RefVa
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
-    int parent_slot = ref_access(builder, parent_var);
-    int obj_slot = 0;
+    Slot parent_slot = ref_access(builder, parent_var);
+    Slot obj_slot = {0};
     use_range_start(builder, range);
     if (builder) obj_slot = addinstr_alloc_object(builder, parent_slot);
     use_range_end(builder, range);
@@ -435,7 +435,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
     return PARSE_NONE;
   }
   
-  int *args_ptr = NULL; int args_len = 0;
+  Slot *args_ptr = NULL; int args_len = 0;
   
   while (!eat_string(&text, ")")) {
     if (args_len && !eat_string(&text, ",")) {
@@ -447,7 +447,7 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
     if (res == PARSE_ERROR) return res;
     assert(res == PARSE_OK);
     
-    args_ptr = realloc(args_ptr, sizeof(int) * ++args_len);
+    args_ptr = realloc(args_ptr, sizeof(Slot) * ++args_len);
     args_ptr[args_len - 1] = ref_access(builder, arg);
   }
   
@@ -455,19 +455,18 @@ static ParseResult parse_cont_call(char **textp, FunctionBuilder *builder, RefVa
   
   *textp = text;
   if (builder) {
-    int this_slot;
+    Slot this_slot = {0};
     // scopes are not a valid form of "this"
-    if (expr->key) this_slot = expr->base;
-    else this_slot = 0;
+    if (expr->key.index) this_slot = expr->base;
     
-    int expr_slot = ref_access(builder, *expr);
+    Slot expr_slot = ref_access(builder, *expr);
     
     // use_range_start(builder, call_range);
     use_range_start(builder, expr_range);
     *expr = ref_simple(addinstr_call(builder, expr_slot, this_slot, args_ptr, args_len));
     // use_range_end(builder, call_range);
     use_range_end(builder, expr_range);
-  } else *expr = ref_simple(0);
+  } else *expr = ref_simple((Slot) {0});
   return PARSE_OK;
 }
 
@@ -484,7 +483,7 @@ static ParseResult parse_cond_cont_call(char **textp, FunctionBuilder *builder, 
   int start_blk, call_blk, end_blk;
   int branch_start_call, branch_start_end;
   if (builder) {
-    int rv_slot = ref_access(builder, *rv);
+    Slot rv_slot = ref_access(builder, *rv);
     
     start_blk = get_block(builder);
     
@@ -505,7 +504,7 @@ static ParseResult parse_cond_cont_call(char **textp, FunctionBuilder *builder, 
   
   if (builder) {
     use_range_start(builder, expr_range);
-    int rv_slot = ref_access(builder, *rv);
+    Slot rv_slot = ref_access(builder, *rv);
     
     int branch_call_end;
     addinstr_branch(builder, &branch_call_end);
@@ -514,11 +513,11 @@ static ParseResult parse_cond_cont_call(char **textp, FunctionBuilder *builder, 
     set_int_var(builder, branch_start_end, end_blk);
     set_int_var(builder, branch_call_end, end_blk);
     
-    rv_slot = addinstr_phi(builder, start_blk, 0, call_blk, rv_slot);
+    rv_slot = addinstr_phi(builder, start_blk, (Slot) {0}, call_blk, rv_slot);
     use_range_end(builder, expr_range);
     
     *rv = ref_simple(rv_slot);
-  } else *rv = ref_simple(0);
+  } else *rv = ref_simple((Slot) {0});
   *textp = text;
   return PARSE_OK;
 }
@@ -545,10 +544,10 @@ static ParseResult parse_array_access(char **textp, FunctionBuilder *builder, Re
   
   *textp = text;
   
-  int key_slot = ref_access(builder, key);
-  int expr_slot = ref_access(builder, *expr);
+  Slot key_slot = ref_access(builder, key);
+  Slot expr_slot = ref_access(builder, *expr);
   
-  if (builder && key_slot == builder->hints.string_literal_hint_slot) {
+  if (builder && key_slot.index == builder->hints.string_literal_hint_slot.index) {
     builder->hints.fun_name_hint_pos = text;
     builder->hints.fun_name_hint = builder->hints.string_literal_hint;
   }
@@ -571,8 +570,8 @@ static ParseResult parse_prop_access(char **textp, FunctionBuilder *builder, Ref
   record_end(text, prop_range);
   *textp = text;
   
-  int expr_slot = 0;
-  int key_slot = 0;
+  Slot expr_slot = {0};
+  Slot key_slot = {0};
   if (builder) expr_slot = ref_access(builder, *expr);
   use_range_start(builder, prop_range);
   if (builder) key_slot = addinstr_alloc_string_object(builder, keyname);
@@ -595,7 +594,7 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
   record_end(text, cprop_range);
   *textp = text;
   
-  int lhs_slot = 0;
+  Slot lhs_slot = (Slot) {0};
   if (builder) lhs_slot = ref_access(builder, *rv);
   
   use_range_start(builder, cprop_range);
@@ -606,14 +605,14 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
   
   int branch_start_lhs_nonnull, branch_start_end1;
   if (builder) {
-    int lhs_test = addinstr_test(builder, lhs_slot);
+    Slot lhs_test = addinstr_test(builder, lhs_slot);
     addinstr_test_branch(builder, lhs_test, &branch_start_lhs_nonnull, &branch_start_end1);
     lhs_nonnull_blk = new_block(builder);
     set_int_var(builder, branch_start_lhs_nonnull, lhs_nonnull_blk);
   }
   
-  int key_slot = 0;
-  int key_in_slot = 0;
+  Slot key_slot = {0};
+  Slot key_in_slot = {0};
   int branch_lhs_nonnull_rhs_in_lhs, branch_lhs_nonnull_end2;
   if (builder) {
     key_slot = addinstr_alloc_string_object(builder, keyname);
@@ -633,7 +632,7 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
   ParseResult res = parse_expr_continuation(&text, builder, rv, expr_range);
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
-  int res_slot = ref_access(builder, *rv);
+  Slot res_slot = ref_access(builder, *rv);
   
   int branch_rhs_in_lhs_end2;
   if (builder) {
@@ -645,7 +644,7 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
     end2_blk = new_block(builder);
     set_int_var(builder, branch_lhs_nonnull_end2, end2_blk);
     set_int_var(builder, branch_rhs_in_lhs_end2, end2_blk);
-    res_slot = addinstr_phi(builder, lhs_nonnull_blk, 0, rhs_in_lhs_end_blk, res_slot);
+    res_slot = addinstr_phi(builder, lhs_nonnull_blk, (Slot) { .index = 0 }, rhs_in_lhs_end_blk, res_slot);
   }
   
   int branch_end2_end1;
@@ -655,7 +654,7 @@ static ParseResult parse_cond_prop_access(char **textp, FunctionBuilder *builder
     end1_blk = new_block(builder);
     set_int_var(builder, branch_end2_end1, end1_blk);
     set_int_var(builder, branch_start_end1, end1_blk);
-    res_slot = addinstr_phi(builder, start_blk, 0, end2_blk, res_slot);
+    res_slot = addinstr_phi(builder, start_blk, (Slot) { .index = 0 }, end2_blk, res_slot);
     use_range_end(builder, cprop_range);
   }
   
@@ -688,7 +687,7 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
   
   *textp = text;
   
-  int expr_slot = 0;
+  Slot expr_slot = {0};
   if (builder) expr_slot = ref_access(builder, *rv);
   
   use_range_start(builder, carr_range);
@@ -699,14 +698,14 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
   
   int branch_start_expr_nonnull, branch_start_end1;
   if (builder) {
-    int expr_test = addinstr_test(builder, expr_slot);
+    Slot expr_test = addinstr_test(builder, expr_slot);
     addinstr_test_branch(builder, expr_test, &branch_start_expr_nonnull, &branch_start_end1);
     expr_nonnull_blk = new_block(builder);
     set_int_var(builder, branch_start_expr_nonnull, expr_nonnull_blk);
   }
   
-  int key_slot = 0;
-  int key_in_slot = 0;
+  Slot key_slot = {0};
+  Slot key_in_slot = {0};
   int branch_expr_nonnull_key_in_expr, branch_key_nonnull_end2;
   if (builder) {
     key_slot = ref_access(builder, key);
@@ -726,7 +725,7 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
   res = parse_expr_continuation(&text, builder, rv, expr_range);
   if (res == PARSE_ERROR) return res;
   assert(res == PARSE_OK);
-  int res_slot = ref_access(builder, *rv);
+  Slot res_slot = ref_access(builder, *rv);
   
   int branch_key_in_expr_end2;
   if (builder) {
@@ -738,7 +737,7 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
     end2_blk = new_block(builder);
     set_int_var(builder, branch_key_nonnull_end2, end2_blk);
     set_int_var(builder, branch_key_in_expr_end2, end2_blk);
-    res_slot = addinstr_phi(builder, expr_nonnull_blk, 0, idx_in_expr_end_blk, res_slot);
+    res_slot = addinstr_phi(builder, expr_nonnull_blk, (Slot) { .index = 0 }, idx_in_expr_end_blk, res_slot);
   }
   
   int branch_end2_end1;
@@ -748,7 +747,7 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
     end1_blk = new_block(builder);
     set_int_var(builder, branch_end2_end1, end1_blk);
     set_int_var(builder, branch_start_end1, end1_blk);
-    res_slot = addinstr_phi(builder, start_blk, 0, end2_blk, res_slot);
+    res_slot = addinstr_phi(builder, start_blk, (Slot) { .index = 0 }, end2_blk, res_slot);
     use_range_end(builder, carr_range);
   }
   
@@ -760,16 +759,16 @@ static ParseResult parse_cond_array_access(char **textp, FunctionBuilder *builde
 
 void build_op(FunctionBuilder *builder, char *op, RefValue *res_rv, RefValue lhs_expr, RefValue rhs_expr, FileRange *range) {
   if (builder) {
-    int lhs_value = ref_access(builder, lhs_expr);
-    int rhs_value = ref_access(builder, rhs_expr);
+    Slot lhs_value = ref_access(builder, lhs_expr);
+    Slot rhs_value = ref_access(builder, rhs_expr);
     use_range_start(builder, range);
-    int fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, op));
+    Slot fn = addinstr_access(builder, lhs_value, addinstr_alloc_string_object(builder, op));
     *res_rv = ref_simple(addinstr_call1(builder, fn, lhs_value, rhs_value));
     use_range_end(builder, range);
-  } else *res_rv = ref_simple(0);
+  } else *res_rv = ref_simple((Slot) {0});
 }
 
-static bool assign_value(FunctionBuilder *builder, RefValue rv, int value, FileRange *assign_range) {
+static bool assign_value(FunctionBuilder *builder, RefValue rv, Slot value, FileRange *assign_range) {
   switch (rv.mode) {
     case REFMODE_NONE:
       use_range_end(builder, assign_range);
@@ -796,7 +795,7 @@ static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefV
   
   record_end(text, op_range);
   
-  int prev_slot = 0, one_slot = 0;
+  Slot prev_slot = {0}, one_slot = {0};
   if (builder) {
     prev_slot = ref_access(builder, *rv);
     use_range_start(builder, op_range);
@@ -817,12 +816,12 @@ static ParseResult parse_postincdec(char **textp, FunctionBuilder *builder, RefV
 }
 
 static void negate(FunctionBuilder *builder, FileRange *range, RefValue *rv) {
-  int negate_slot = 0;
+  Slot negate_slot = {0};
   if (builder) {
     use_range_start(builder, range);
     
-    int start_slot_t = addinstr_alloc_bool_object(builder, true);
-    int start_rv_slot = ref_access(builder, *rv);
+    Slot start_slot_t = addinstr_alloc_bool_object(builder, true);
+    Slot start_rv_slot = ref_access(builder, *rv);
     int start_blk = get_block(builder);
     int start_br_true, start_br_false;
     start_rv_slot = addinstr_test(builder, start_rv_slot);
@@ -830,7 +829,7 @@ static void negate(FunctionBuilder *builder, FileRange *range, RefValue *rv) {
     
     int true_blk = new_block(builder);
     set_int_var(builder, start_br_true, true_blk);
-    int true_slot_f = addinstr_alloc_bool_object(builder, false);
+    Slot true_slot_f = addinstr_alloc_bool_object(builder, false);
     int true_br;
     addinstr_branch(builder, &true_br);
     
@@ -884,7 +883,7 @@ static ParseResult parse_expr_base(char **textp, FunctionBuilder *builder, RefVa
     *textp = text;
     
     use_range_start(builder, neg_range);
-    int zero_slot = 0;
+    Slot zero_slot = {0};
     if (builder) zero_slot = addinstr_alloc_int_object(builder, 0);
     use_range_end(builder, neg_range);
     RefValue zref = ref_simple(zero_slot);
@@ -961,11 +960,11 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       
-      int lhs_slot = ref_access(builder, *rv);
-      int rhs_slot = ref_access(builder, rhs_expr);
+      Slot lhs_slot = ref_access(builder, *rv);
+      Slot rhs_slot = ref_access(builder, rhs_expr);
       
       use_range_start(builder, range);
-      int result_slot = 0;
+      Slot result_slot = {0};
       if (builder) result_slot = addinstr_instanceof(builder, lhs_slot, rhs_slot);
       use_range_end(builder, range);
       *rv = ref_simple(result_slot);
@@ -978,9 +977,9 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
       res = parse_expr_oper(&text, builder, 7, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
-      int key_slot = ref_access(builder, *rv);
-      int obj_slot = ref_access(builder, rhs_expr);
-      int in_slot = 0;
+      Slot key_slot = ref_access(builder, *rv);
+      Slot obj_slot = ref_access(builder, rhs_expr);
+      Slot in_slot = {0};
       use_range_start(builder, range);
       if (builder) in_slot = addinstr_key_in_obj(builder, key_slot, obj_slot);
       use_range_end(builder, range);
@@ -994,9 +993,9 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
       res = parse_expr_oper(&text, builder, 7, &rhs_expr);
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
-      int obj1_slot = ref_access(builder, *rv);
-      int obj2_slot = ref_access(builder, rhs_expr);
-      int is_slot = 0;
+      Slot obj1_slot = ref_access(builder, *rv);
+      Slot obj2_slot = ref_access(builder, rhs_expr);
+      Slot is_slot = {0};
       use_range_start(builder, range);
       if (builder) is_slot = addinstr_identical(builder, obj1_slot, obj2_slot);
       use_range_end(builder, range);
@@ -1157,7 +1156,8 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
        */
       record_end(text, range);
       
-      int rhs_blk, lhs_br_false, lhs_blk, lhs_slot;
+      int rhs_blk, lhs_br_false, lhs_blk;
+      Slot lhs_slot;
       if (builder) {
         // short-circuiting evaluation
         lhs_slot = ref_access(builder, *rv);
@@ -1166,7 +1166,7 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
         int lhs_br_true;
         use_range_start(builder, range);
         
-        int lhs_test = addinstr_test(builder, lhs_slot);
+        Slot lhs_test = addinstr_test(builder, lhs_slot);
         addinstr_test_branch(builder, lhs_test, &lhs_br_true, &lhs_br_false);
         
         rhs_blk = new_block(builder);
@@ -1177,7 +1177,7 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       if (builder) {
-        int rhs_slot = ref_access(builder, rhs_expr);
+        Slot rhs_slot = ref_access(builder, rhs_expr);
         use_range_start(builder, range);
         rhs_blk = get_block(builder); // update because parse_expr_oper
         int rhs_br;
@@ -1187,12 +1187,12 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
         int phi_blk = new_block(builder);
         set_int_var(builder, lhs_br_false, phi_blk);
         set_int_var(builder, rhs_br, phi_blk);
-        int phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
+        Slot phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
         use_range_end(builder, range);
         
         *rv = ref_simple(phi_slot);
       } else {
-        *rv = ref_simple(0);
+        *rv = ref_simple((Slot) { .index = 0 });
       }
       continue;
     }
@@ -1215,7 +1215,8 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
        */
       record_end(text, range);
       
-      int rhs_blk, lhs_br_true, lhs_blk, lhs_slot;
+      int rhs_blk, lhs_br_true, lhs_blk;
+      Slot lhs_slot;
       if (builder) {
         // short-circuiting evaluation
         lhs_slot = ref_access(builder, *rv);
@@ -1224,7 +1225,7 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
         int lhs_br_false;
         use_range_start(builder, range);
         
-        int lhs_test = addinstr_test(builder, lhs_slot);
+        Slot lhs_test = addinstr_test(builder, lhs_slot);
         addinstr_test_branch(builder, lhs_test, &lhs_br_true, &lhs_br_false);
         
         rhs_blk = new_block(builder);
@@ -1235,7 +1236,7 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
       if (res == PARSE_ERROR) return PARSE_ERROR;
       assert(res == PARSE_OK);
       if (builder) {
-        int rhs_slot = ref_access(builder, rhs_expr);
+        Slot rhs_slot = ref_access(builder, rhs_expr);
         use_range_start(builder, range);
         rhs_blk = get_block(builder); // parse_expr_oper may have changed block
         int rhs_br;
@@ -1245,12 +1246,12 @@ static ParseResult parse_expr_oper(char **textp, FunctionBuilder *builder, int l
         int phi_blk = new_block(builder);
         set_int_var(builder, lhs_br_true, phi_blk);
         set_int_var(builder, rhs_br, phi_blk);
-        int phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
+        Slot phi_slot = addinstr_phi(builder, lhs_blk, lhs_slot, rhs_blk, rhs_slot);
         use_range_end(builder, range);
         
         *rv = ref_simple(phi_slot);
       } else {
-        *rv = ref_simple(0);
+        *rv = ref_simple((Slot) {0});
       }
       continue;
     }
@@ -1289,12 +1290,12 @@ static ParseResult parse_if(char **textp, FunctionBuilder *builder, FileRange *k
     log_parser_error(text, "if expected opening paren");
     return PARSE_ERROR;
   }
-  int if_scope = begin_lex_scope(builder);
+  Slot if_scope = begin_lex_scope(builder);
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, &test_expr);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
-  int testslot = ref_access(builder, test_expr);
+  Slot testslot = ref_access(builder, test_expr);
   if (!eat_string(&text, ")")) {
     log_parser_error(text, "if expected closing paren");
     return PARSE_ERROR;
@@ -1355,13 +1356,13 @@ static ParseResult parse_while(char **textp, FunctionBuilder *builder, char *loo
   
   int branch_test_loop, branch_test_end;
   
-  int while_scope = begin_lex_scope(builder);
+  Slot while_scope = begin_lex_scope(builder);
   RefValue test_expr;
   ParseResult res = parse_expr(&text, builder, &test_expr);
   if (res == PARSE_ERROR) return PARSE_ERROR;
   assert(res == PARSE_OK);
   
-  int testslot = ref_access(builder, test_expr);
+  Slot testslot = ref_access(builder, test_expr);
   if (!eat_string(&text, ")")) {
     log_parser_error(text, "'while' expected closing paren");
     return PARSE_ERROR;
@@ -1406,7 +1407,7 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
   record_end(text, alloc_var_name);
   
   FileRange *define_constraint = alloc_and_record_start(text);
-  int constraint_slot = -1;
+  Slot constraint_slot = { .index = -1 };
   if (eat_string(&text, ":")) {
     RefValue rv;
     record_end(text, define_constraint);
@@ -1423,7 +1424,7 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
   // allocate the new scope upfront, so that the variable
   // is in scope for the value expression.
   // (this is important for recursion, ie. var foo = function() { foo(); }; )
-  int value = 0, varname_slot = 0, var_scope = 0;
+  Slot value = {0}, varname_slot = {0}, var_scope = {0};
   if (builder) {
     use_range_start(builder, var_range);
     builder->scope = addinstr_alloc_object(builder, builder->scope);
@@ -1432,7 +1433,7 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
     
     use_range_start(builder, alloc_var_name);
     varname_slot = addinstr_alloc_string_object(builder, varname);
-    addinstr_assign(builder, var_scope, varname_slot, 0, ASSIGN_PLAIN);
+    addinstr_assign(builder, var_scope, varname_slot, (Slot) { .index = 0 }, ASSIGN_PLAIN);
     addinstr_close_object(builder, var_scope);
     use_range_end(builder, alloc_var_name);
   }
@@ -1442,7 +1443,6 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
   if (!eat_string(&text, "=")) {
     free(assign_value);
     assign_value = alloc_var_name;
-    value = 0;
   } else {
     record_end(text, assign_value);
     RefValue rv;
@@ -1462,7 +1462,7 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
     addinstr_assign(builder, var_scope, varname_slot, value, ASSIGN_EXISTING);
     use_range_end(builder, assign_value);
     
-    if (constraint_slot != -1) {
+    if (constraint_slot.index != -1) {
       use_range_start(builder, define_constraint);
       addinstr_set_constraint(builder, var_scope, varname_slot, constraint_slot);
       use_range_end(builder, define_constraint);
@@ -1474,7 +1474,7 @@ static ParseResult parse_vardecl_expr(char **textp, FunctionBuilder *builder, Fi
     
     if (var_value) *var_value = (RefValue) {var_scope, varname_slot, REFMODE_VARIABLE, alloc_var_name, .safe_to_discard = true};
   } else {
-    if (var_value) *var_value = (RefValue) {0, 0, REFMODE_VARIABLE, 0, .safe_to_discard = true};
+    if (var_value) *var_value = (RefValue) {(Slot) {0}, (Slot) {0}, REFMODE_VARIABLE, 0, .safe_to_discard = true};
   }
   
   // var a, b;
@@ -1527,7 +1527,7 @@ static ParseResult parse_assign(char **textp, FunctionBuilder *builder) {
     build_op(builder, op, &value_expr, rv, value_expr, assign_range);
   }
   
-  int value = ref_access(builder, value_expr);
+  Slot value = ref_access(builder, value_expr);
   
   use_range_start(builder, assign_range);
   if (!assign_value(builder, rv, value, assign_range)) {
@@ -1576,19 +1576,17 @@ static ParseResult parse_for_in(char **textp, FunctionBuilder *builder, char *lo
   
   LoopRecord *loop_record = open_loop(builder, loop_label);
   
-  int scope_backup, test_blk, branch_test_body, branch_test_exit;
+  Slot scope_backup;
+  int test_blk, branch_test_body, branch_test_exit;
   if (builder) {
     scope_backup = begin_lex_scope(builder);
     
     use_range_start(builder, range);
     
-    int obj_slot = ref_access(builder, rv);
-    int iter_key = addinstr_alloc_string_object(builder, "iterator");
-    int iterfn = ref_access(builder, (RefValue) {obj_slot, iter_key, REFMODE_OBJECT, range});
-    int iter_slot = addinstr_call0(builder, iterfn, obj_slot);
-    
-    int next_key = addinstr_alloc_string_object(builder, "next");
-    int nextfn = ref_access(builder, (RefValue) {iter_slot, next_key, REFMODE_OBJECT, range});
+    Slot obj_slot = ref_access(builder, rv);
+    Slot iter_key = addinstr_alloc_string_object(builder, "iterator");
+    Slot iterfn = ref_access(builder, (RefValue) {obj_slot, iter_key, REFMODE_OBJECT, range});
+    Slot iter_slot = addinstr_call0(builder, iterfn, obj_slot);
     
     int branch_enter_test;
     
@@ -1597,9 +1595,11 @@ static ParseResult parse_for_in(char **textp, FunctionBuilder *builder, char *lo
     test_blk = new_block(builder);
     set_int_var(builder, branch_enter_test, test_blk);
     
-    int pass_obj = addinstr_call0(builder, nextfn, iter_slot);
-    int done_key = addinstr_alloc_string_object(builder, "done");
-    int done_slot = ref_access(builder, (RefValue) { pass_obj, done_key, REFMODE_OBJECT, range});
+    Slot next_key = addinstr_alloc_string_object(builder, "next");
+    Slot nextfn = ref_access(builder, (RefValue) {iter_slot, next_key, REFMODE_OBJECT, range});
+    Slot pass_obj = addinstr_call0(builder, nextfn, iter_slot);
+    Slot done_key = addinstr_alloc_string_object(builder, "done");
+    Slot done_slot = ref_access(builder, (RefValue) { pass_obj, done_key, REFMODE_OBJECT, range});
     
     done_slot = addinstr_test(builder, done_slot);
     addinstr_test_branch(builder, done_slot, &branch_test_exit, &branch_test_body);
@@ -1608,17 +1608,17 @@ static ParseResult parse_for_in(char **textp, FunctionBuilder *builder, char *lo
     set_int_var(builder, branch_test_body, body_blk);
     
     builder->scope = addinstr_alloc_object(builder, builder->scope);
-    int var_scope = builder->scope; // in case we later decide that expressions can open new scopes
+    Slot var_scope = builder->scope; // in case we later decide that expressions can open new scopes
     
-    int varname_slot = addinstr_alloc_string_object(builder, var_name);
-    int value_key = addinstr_alloc_string_object(builder, "value");
-    int value_slot = ref_access(builder, (RefValue) { pass_obj, value_key, REFMODE_OBJECT, range});
+    Slot varname_slot = addinstr_alloc_string_object(builder, var_name);
+    Slot value_key = addinstr_alloc_string_object(builder, "value");
+    Slot value_slot = ref_access(builder, (RefValue) { pass_obj, value_key, REFMODE_OBJECT, range});
     addinstr_assign(builder, var_scope, varname_slot, value_slot, ASSIGN_PLAIN);
     
     if (key_name) {
-      int keyname_slot = addinstr_alloc_string_object(builder, key_name);
-      int key_key = addinstr_alloc_string_object(builder, "key");
-      int key_slot = ref_access(builder, (RefValue) { pass_obj, key_key, REFMODE_OBJECT, range});
+      Slot keyname_slot = addinstr_alloc_string_object(builder, key_name);
+      Slot key_key = addinstr_alloc_string_object(builder, "key");
+      Slot key_slot = ref_access(builder, (RefValue) { pass_obj, key_key, REFMODE_OBJECT, range});
       addinstr_assign(builder, var_scope, keyname_slot, key_slot, ASSIGN_PLAIN);
     }
     addinstr_close_object(builder, var_scope);
@@ -1667,7 +1667,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_
   }
   
   // variable is out of scope after the loop
-  int scope_backup = begin_lex_scope(builder);
+  Slot scope_backup = begin_lex_scope(builder);
   
   FileRange *decl_range = alloc_and_record_start(text);
   if (eat_keyword(&text, "var")) {
@@ -1725,7 +1725,7 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_
   }
   
   use_range_start(builder, range);
-  int testslot = ref_access(builder, test_expr);
+  Slot testslot = ref_access(builder, test_expr);
 
   testslot = addinstr_test(builder, testslot);
   addinstr_test_branch(builder, testslot, &loop_blk, &branch_test_end);
@@ -1768,9 +1768,9 @@ static ParseResult parse_for(char **textp, FunctionBuilder *builder, char *loop_
 static ParseResult parse_return(char **textp, FunctionBuilder *builder, FileRange *keywd_range) {
   RefValue ret_value;
   char *text2 = *textp;
-  int value;
+  Slot value;
   if (eat_string(&text2, ";")) {
-    value = 0; // null slot
+    value = (Slot) { .index = 0 }; // null slot
   } else {
     ParseResult res = parse_expr(textp, builder, &ret_value);
     if (res == PARSE_ERROR) return res;
@@ -1804,8 +1804,8 @@ static ParseResult parse_fundecl(char **textp, FunctionBuilder *builder, FileRan
   assert(res == PARSE_OK);
   fn->is_method = is_method;
   use_range_start(builder, range);
-  int name_slot = addinstr_alloc_string_object(builder, fn->name);
-  int slot = addinstr_alloc_closure_object(builder, fn);
+  Slot name_slot = addinstr_alloc_string_object(builder, fn->name);
+  Slot slot = addinstr_alloc_closure_object(builder, fn);
   addinstr_assign(builder, builder->scope, name_slot, slot, ASSIGN_PLAIN);
   addinstr_close_object(builder, builder->scope);
   addinstr_freeze_object(builder, builder->scope);
@@ -1852,7 +1852,7 @@ static ParseResult parse_semicolon_statement(char **textp, FunctionBuilder *buil
       }
       char *text2 = text;
       if (eat_string(&text2, ";")) { // otherwise it was just a syntax error after all
-        if (rv.key != -1 && !rv.safe_to_discard) {
+        if (rv.key.index != -1 && !rv.safe_to_discard) {
           log_parser_error(text, "property access discarded without effect");
           return PARSE_ERROR;
         }
@@ -1930,7 +1930,7 @@ static ParseResult parse_statement(char **textp, FunctionBuilder *builder) {
 static ParseResult parse_block(char **textp, FunctionBuilder *builder, bool force_brackets) {
   char *text = *textp;
   
-  int scope_backup = begin_lex_scope(builder);
+  Slot scope_backup = begin_lex_scope(builder);
   ParseResult res;
   
   if (eat_string(&text, "{")) {
@@ -1961,7 +1961,8 @@ static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, 
     fun_hint = pbuilder->hints.fun_name_hint;
   }
   // TODO remove global use
-  if (!fun_hint) fun_hint = my_asprintf("Lambda #%i", lambda_count++);
+  if (fun_hint) fun_hint = my_asprintf("%s <%i>", fun_hint, lambda_count++);
+  else fun_hint = my_asprintf("Lambda <%i>", lambda_count++);
   /*
   ┌────────┐  ┌─────┐
   │function│═▷│  (  │
@@ -1970,7 +1971,7 @@ static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, 
                ▽   ║
       ┌───┐  ┌───┐ ║
       │ , │◁═│arg│ ║
-      │   │═▷│   │ ║
+      │   │═▷│...│ ║
       └───┘  └───┘ ║
                ║   ║
                ▽   ▽
@@ -2045,12 +2046,12 @@ static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, 
   
   // generate lexical scope, initialize with parameters
   new_block(builder);
-  builder->scope = 1;
+  builder->scope = (Slot) { .index = 1 };
   
   // look up constraints upfront (simplifies IR)
-  int *constraint_slots = malloc(sizeof(int) * arg_list_len);
+  Slot *constraint_slots = malloc(sizeof(Slot) * arg_list_len);
   for (int i = 0; i < arg_list_len; ++i) {
-    constraint_slots[i] = -1;
+    constraint_slots[i] = (Slot) { .index = -1 };
     if (type_constraints_ptr[i]) {
       RefValue constraint;
       char *text2 = type_constraints_ptr[i];
@@ -2061,11 +2062,11 @@ static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, 
   }
   
   use_range_start(builder, fnframe_range);
-  int *argname_slots = malloc(sizeof(int) * arg_list_len);
+  Slot *argname_slots = malloc(sizeof(Slot) * arg_list_len);
   builder->scope = addinstr_alloc_object(builder, builder->scope);
   for (int i = 0; i < arg_list_len; ++i) {
     argname_slots[i] = addinstr_alloc_string_object(builder, arg_list_ptr[i]);
-    addinstr_assign(builder, builder->scope, argname_slots[i], 2 + i, ASSIGN_PLAIN);
+    addinstr_assign(builder, builder->scope, argname_slots[i], (Slot) { .index = 2 + i }, ASSIGN_PLAIN);
   }
   addinstr_close_object(builder, builder->scope);
   for (int i = 0; i < arg_list_len; ++i) {
@@ -2111,7 +2112,7 @@ ParseResult parse_module(char **textp, UserFunction **uf_p) {
   
   use_range_start(builder, modrange);
   new_block(builder);
-  builder->scope = 1;
+  builder->scope = (Slot) { .index = 1 };
   use_range_end(builder, modrange);
   
   if (eat_string(textp, "#!")) {

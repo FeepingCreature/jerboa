@@ -137,11 +137,43 @@ typedef enum {
   ARG_POINTER = ARG_VALUE // for WriteArg
 } ArgKind;
 
+#ifndef NDEBUG
+typedef struct {
+  bool is_resolved;
+  int index;
+  int offset;
+} Slot;
+typedef struct {
+  bool is_resolved;
+  int index;
+  int offset;
+} Refslot;
+#else
+typedef union {
+  int index; // before resolution: index into the slot table
+  int offset; // after resolution: offset from the start of the stackframe
+} Slot;
+typedef union {
+  int index; // before resolution: index into the refslot table
+  int offset; // after resolution: offset from the start of the stackframe
+} Refslot;
+#endif
+
+static inline int refslot_index(Refslot rs) {
+  assert(!rs.is_resolved);
+  return rs.index;
+}
+
+static inline int refslot_offset(Refslot rs) {
+  assert(rs.is_resolved);
+  return rs.offset;
+}
+
 typedef struct {
   ArgKind kind;
   union {
-    int slot;
-    int refslot;
+    Slot slot;
+    Refslot refslot;
     Value value;
   };
 } Arg;
@@ -149,8 +181,8 @@ typedef struct {
 typedef struct {
   ArgKind kind;
   union {
-    int slot;
-    int refslot;
+    Slot slot;
+    Refslot refslot;
     Value *pointer;
   };
 } WriteArg;
@@ -319,7 +351,7 @@ typedef struct {
     struct {
       VMInstrFn fn; // cache
       InstrType type;
-      int context_slot; // this is actually important - it keeps the stackframe
+      Slot context_slot; // this is actually important - it keeps the stackframe
                         // alive in the optimizer (CAREFUL when removing)
     };
   };
@@ -354,8 +386,6 @@ void free_function(UserFunction *uf);
 
 struct _Callframe {
   UserFunction *uf;
-  Value *slots_ptr; int slots_len;
-  TableEntry **refslots_ptr; int refslots_len; // references to values in closed objects
   GCRootSet frameroot_slots; // gc entries
   // this is set from state->instr as the callframe becomes "not the top frame"
   // if a callframe is the top frame, you should always be using state->instr.
@@ -383,6 +413,88 @@ static inline bool values_identical(Value arg1, Value arg2) {
   } else if (arg1.type == TYPE_FLOAT) {
     return arg1.f == arg2.f;
   } else abort();
+}
+
+// TODO move those somewhere better
+#define SLOTS_LEN(CF) (CF)->uf->slots
+
+#define REFSLOTS_LEN(CF) (CF)->uf->refslots
+
+#ifndef NDEBUG
+#define read_slot(frame, sl) (assert(sl.is_resolved), *(Value*) ((unsigned char*) frame + sl.offset))
+#define write_slot(frame, sl, value) *(assert(sl.is_resolved), (Value*) ((unsigned char*) frame + sl.offset)) = value;
+#define read_refslot(frame, rs) (assert(rs.is_resolved), (*(TableEntry**) ((unsigned char*) frame + rs.offset))->value)
+#else
+#define read_slot(frame, sl) (*(Value*) ((unsigned char*) frame + sl.offset))
+#define write_slot(frame, sl, value) *(Value*) ((unsigned char*) frame + sl.offset) = value;
+#define read_refslot(frame, rs) ((*(TableEntry**) ((unsigned char*) frame + rs.offset))->value)
+#endif
+
+static inline TableEntry **get_refslot_ref(Callframe *frame, Refslot rs) {
+#ifndef NDEBUG
+  assert(rs.is_resolved);
+#endif
+  return (TableEntry**) ((unsigned char*) frame + rs.offset);
+}
+
+static inline TableEntry *get_refslot(Callframe *frame, Refslot rs) {
+  return *get_refslot_ref(frame, rs);
+}
+
+static inline int slot_index(Slot s) {
+  assert(!s.is_resolved);
+  return s.index;
+}
+
+static inline int slot_offset(Slot s) {
+  assert(s.is_resolved);
+  return s.offset;
+}
+
+static inline int slot_index_rt(UserFunction *uf, Slot s) {
+#ifndef NDEBUG
+  assert(uf->resolved == s.is_resolved);
+#endif
+  if (!uf->resolved) return s.index;
+  int byte_offs = s.offset - sizeof(Callframe) - sizeof(TableEntry*) * uf->refslots;
+  assert(byte_offs % sizeof(Value) == 0);
+  assert(byte_offs >= 0);
+  assert(byte_offs < sizeof(Value) * uf->slots);
+  return byte_offs / sizeof(Value);
+}
+
+static inline int refslot_index_rt(UserFunction *uf, Refslot rs) {
+#ifndef NDEBUG
+  assert(uf->resolved == rs.is_resolved);
+#endif
+  if (!uf->resolved) return rs.index;
+  int byte_offs = rs.offset - sizeof(Callframe);
+  assert(byte_offs % sizeof(TableEntry*) == 0);
+  assert(byte_offs >= 0);
+  assert(byte_offs < sizeof(TableEntry*) * uf->refslots);
+  return byte_offs / sizeof(TableEntry*);
+}
+
+static inline int slot_to_offset(UserFunction *uf, Slot sl) {
+  return sizeof(Callframe) + sizeof(TableEntry*) * uf->refslots + sizeof(Value) * slot_index(sl);
+}
+
+static inline void resolve_slot_ref(UserFunction *uf, Slot *sl) {
+  sl->offset = slot_to_offset(uf, *sl);
+#ifndef NDEBUG
+  assert(!sl->is_resolved);
+  assert(sl->index >= 0 && sl->index < uf->slots);
+  sl->is_resolved = true;
+#endif
+}
+
+static inline void resolve_refslot_ref(UserFunction *uf, Refslot *rs) {
+  rs->offset = sizeof(struct _Callframe) + sizeof(TableEntry*) * rs->index;
+#ifndef NDEBUG
+  assert(!rs->is_resolved);
+  assert(rs->index >= 0 && rs->index < uf->refslots);
+  rs->is_resolved = true;
+#endif
 }
 
 #endif

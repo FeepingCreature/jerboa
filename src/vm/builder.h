@@ -15,7 +15,7 @@ struct _LoopRecord {
 
 typedef struct {
   // used to enable foo["bar"] = function() { } name hinting
-  int string_literal_hint_slot; char *string_literal_hint;
+  Slot string_literal_hint_slot; char *string_literal_hint;
   char *fun_name_hint_pos, *fun_name_hint;
 } ContextHints;
 
@@ -26,7 +26,7 @@ typedef struct {
   int arglist_len;
   bool variadic_tail;
   
-  int scope;
+  Slot scope;
   int slot_base; // base-1; 0 is reserved for "null"
   int refslot_base;
   
@@ -67,61 +67,61 @@ void addinstr_like(FunctionBuilder *builder, FunctionBody *body, Instr *basis, i
 
 void set_int_var(FunctionBuilder *builder, int offset, int value);
 
-int addinstr_get_root(FunctionBuilder *builder);
+Slot addinstr_get_root(FunctionBuilder *builder);
 
-int addinstr_access(FunctionBuilder *builder, int obj_slot, int key_slot);
+Slot addinstr_access(FunctionBuilder *builder, Slot obj_slot, Slot key_slot);
 
-void addinstr_assign(FunctionBuilder *builder, int obj, int key_slot, int slot, AssignType type);
+void addinstr_assign(FunctionBuilder *builder, Slot obj, Slot key_slot, Slot slot, AssignType type);
 
-int addinstr_key_in_obj(FunctionBuilder *builder, int key_slot, int obj_slot);
+Slot addinstr_key_in_obj(FunctionBuilder *builder, Slot key_slot, Slot obj_slot);
 
-int addinstr_identical(FunctionBuilder *builder, int slot1, int slot2);
+Slot addinstr_identical(FunctionBuilder *builder, Slot slot1, Slot slot2);
 
-int addinstr_instanceof(FunctionBuilder *builder, int obj_slot, int proto_slot);
+Slot addinstr_instanceof(FunctionBuilder *builder, Slot obj_slot, Slot proto_slot);
 
-void addinstr_set_constraint(FunctionBuilder *builder, int obj_slot, int key_slot, int cons_slot);
+void addinstr_set_constraint(FunctionBuilder *builder, Slot obj_slot, Slot key_slot, Slot cons_slot);
 
-void addinstr_close_object(FunctionBuilder *builder, int obj);
+void addinstr_close_object(FunctionBuilder *builder, Slot obj);
 
-void addinstr_freeze_object(FunctionBuilder *builder, int obj);
+void addinstr_freeze_object(FunctionBuilder *builder, Slot obj);
 
-int addinstr_get_context(FunctionBuilder *builder);
+Slot addinstr_get_context(FunctionBuilder *builder);
 
-void addinstr_set_context(FunctionBuilder *builder, int obj);
+void addinstr_set_context(FunctionBuilder *builder, Slot obj);
 
-int addinstr_alloc_object(FunctionBuilder *builder, int parent);
+Slot addinstr_alloc_object(FunctionBuilder *builder, Slot parent);
 
-int addinstr_alloc_int_object(FunctionBuilder *builder, int value);
+Slot addinstr_alloc_int_object(FunctionBuilder *builder, int value);
 
-int addinstr_alloc_bool_object(FunctionBuilder *builder, bool value);
+Slot addinstr_alloc_bool_object(FunctionBuilder *builder, bool value);
 
-int addinstr_alloc_float_object(FunctionBuilder *builder, float value);
+Slot addinstr_alloc_float_object(FunctionBuilder *builder, float value);
 
-int addinstr_alloc_array_object(FunctionBuilder *builder);
+Slot addinstr_alloc_array_object(FunctionBuilder *builder);
 
-int addinstr_alloc_string_object(FunctionBuilder *builder, char *value);
+Slot addinstr_alloc_string_object(FunctionBuilder *builder, char *value);
 
-int addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn);
+Slot addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn);
 
-int addinstr_test(FunctionBuilder *builder, int value_slot);
+Slot addinstr_test(FunctionBuilder *builder, Slot value_slot);
 
-int addinstr_call(FunctionBuilder *builder, int fn, int this_slot, int *args_ptr, int args_len);
+Slot addinstr_call(FunctionBuilder *builder, Slot fn, Slot this_slot, Slot *args_ptr, int args_len);
 
-int addinstr_call0(FunctionBuilder *builder, int fn, int this_slot);
+Slot addinstr_call0(FunctionBuilder *builder, Slot fn, Slot this_slot);
 
-int addinstr_call1(FunctionBuilder *builder, int fn, int this_slot, int arg0);
+Slot addinstr_call1(FunctionBuilder *builder, Slot fn, Slot this_slot, Slot arg0);
 
-int addinstr_call2(FunctionBuilder *builder, int fn, int this_slot, int arg0, int arg1);
+Slot addinstr_call2(FunctionBuilder *builder, Slot fn, Slot this_slot, Slot arg0, Slot arg1);
 
-void addinstr_test_branch(FunctionBuilder *builder, int test, int *truebranch, int *falsebranch);
+void addinstr_test_branch(FunctionBuilder *builder, Slot test, int *truebranch, int *falsebranch);
 
 void addinstr_branch(FunctionBuilder *builder, int *branch);
 
-int addinstr_phi(FunctionBuilder *builder, int block1, int slot1, int block2, int slot2);
+Slot addinstr_phi(FunctionBuilder *builder, int block1, Slot slot1, int block2, Slot slot2);
 
-void addinstr_return(FunctionBuilder *builder, int slot);
+void addinstr_return(FunctionBuilder *builder, Slot slot);
 
-int addinstr_def_refslot(FunctionBuilder *builder, int obj_slot, const char *key_ptr, size_t key_len);
+Refslot addinstr_def_refslot(FunctionBuilder *builder, Slot obj_slot, const char *key_ptr, size_t key_len);
 
 void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target);
 
