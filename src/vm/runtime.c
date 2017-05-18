@@ -1323,7 +1323,7 @@ struct _ModuleCache {
 
 static ModuleCache *mod_cache = 0;
 
-static char *find_file_in_searchpath(VMState *state, char *filename) {
+static char *find_file_in_searchpath(VMState *state, char *filename, bool *found) {
   Object *searchpath = OBJ_OR_NULL(OBJECT_LOOKUP(state->root, searchpath));
   VM_ASSERT(searchpath, "search path must exist, internal error") NULL;
   Object *array_base = state->shared->vcache.array_base;
@@ -1341,6 +1341,7 @@ static char *find_file_in_searchpath(VMState *state, char *filename) {
     }
     free(path);
   }
+  *found = false;
   return NULL;
 }
 
@@ -1353,8 +1354,10 @@ static void require_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(file_obj, "parameter to require() must be string!");
   
   char *filename = file_obj->value;
-  filename = find_file_in_searchpath(state, filename);
-  if (!filename) return; // asserted
+	bool found_or_errored = true;
+  filename = find_file_in_searchpath(state, filename, &found_or_errored);
+	VM_ASSERT(found_or_errored, "required file not found"); // only error here if we didn't error otherwise
+  if (!filename) return; // one of the errors we already asserted
   
   ModuleCache *cur_cache = mod_cache;
   while (cur_cache) {
