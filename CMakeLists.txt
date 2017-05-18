@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.6)
 
 project(jerboa)
 
+set( ENABLE_JIT false CACHE BOOL "Use LibJIT to flatten VM instructions." )
+
 find_package(PkgConfig)
 
 if (WIN32)
@@ -13,7 +15,7 @@ else()
   set(EXTRA_LIBS "dl")
 endif()
 
-set(FLAGS "-g" "-O0" "-Wall" "-Wno-maybe-uninitialized" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE" "-DENABLE_JIT")
+set(FLAGS "-g" "-O0" "-Wall" "-Wno-maybe-uninitialized" "-Werror" "-pedantic" "-std=c11" "-D_POSIX_C_SOURCE=200809L" "-D_GNU_SOURCE")
 pkg_check_modules (LIBICU REQUIRED icu-uc)
 pkg_check_modules (LIBFFI REQUIRED libffi)
 pkg_check_modules (LIBXML REQUIRED libxml-2.0)
@@ -29,6 +31,17 @@ find_path(LIBXML_INCLUDE_DIR
 )
 
 file(GLOB VM_SRC "src/vm/*.c")
+
+if (ENABLE_JIT)
+   set(FLAGS "${FLAGS}" "-DENABLE_JIT")
+else()
+  foreach(FILE ${VM_SRC})
+    if("${FILE}" MATCHES "src/vm/myjit.c" OR "${FILE}" MATCHES "src/vm/myjit-lib.c")
+      list(REMOVE_ITEM VM_SRC "${FILE}")
+    endif()
+  endforeach()
+endif()
+
 set(BASE_SRC "src/hash.c" "src/object.c" "src/parser.c" "src/print.c" "src/language.c"
              "src/gc.c" "src/util.c" "src/trie.c" "src/win32_compat.c" "src/static_keys.c")
 
