@@ -1,7 +1,9 @@
 #include "vm/call.h"
 
 #include "vm/optimize.h"
+#ifdef ENABLE_JIT
 #include "vm/myjit.h"
+#endif
 #include "vm/vm.h"
 #include "util.h"
 #include "gc.h"
@@ -97,7 +99,7 @@ static bool setup_closure_call(VMState *state, CallInfo *info, Object *fn_obj_n)
     vmfun = cl_obj->vmfun = optimize_runtime(state, vmfun, context);
     vm_resolve_functions(vmfun);
   }
-#if defined(ENABLE_JIT)
+#ifdef ENABLE_JIT
   if (UNLIKELY(cl_obj->num_called == 20 && state->shared->settings.jit_enabled)) {
     fprintf(stderr, "jit compiling '%s'\n", vmfun->name);
     myjit_flatten(vmfun);
