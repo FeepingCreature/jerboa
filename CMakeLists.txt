@@ -18,11 +18,21 @@ pkg_check_modules (LIBICU REQUIRED icu-uc)
 pkg_check_modules (LIBFFI REQUIRED libffi)
 pkg_check_modules (LIBXML REQUIRED libxml-2.0)
 
+find_path(LIBFFI_INCLUDE_DIR
+  NAMES "ffi.h"
+  PATHS "${LIBFFI_INCLUDE_DIRS}"
+)
+
+find_path(LIBXML_INCLUDE_DIR
+  NAMES "libxml/parser.h"
+  PATHS "${LIBXML_INCLUDE_DIRS}"
+)
+
 file(GLOB VM_SRC "src/vm/*.c")
 set(BASE_SRC "src/hash.c" "src/object.c" "src/parser.c" "src/print.c" "src/language.c"
              "src/gc.c" "src/util.c" "src/trie.c" "src/win32_compat.c" "src/static_keys.c")
 
-include_directories("${PROJECT_SOURCE_DIR}/src" "${LIBFFI_INCLUDE_DIRS}" "${LIBXML_INCLUDE_DIRS}")
+include_directories("${PROJECT_SOURCE_DIR}/src" "${LIBFFI_INCLUDE_DIR}" "${LIBXML_INCLUDE_DIR}")
 add_executable(jerboa src/jerboa.c ${BASE_SRC} ${VM_SRC})
 add_executable(repl src/repl.c ${BASE_SRC} ${VM_SRC})
 
