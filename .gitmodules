@@ -1,0 +1,3 @@
+[submodule "rdparse"]
+	path = rdparse
+	url = https://github.com/FeepingCreature/rdparse
