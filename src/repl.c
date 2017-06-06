@@ -42,6 +42,8 @@ int main(int argc, char **argv) {
   GCRootSet set;
   gc_add_roots(&vmstate, &rootval, 1, &set);
   
+  add_reserved_identifier("new");
+  
   if (!isatty(1)) { fprintf(stderr, "repl must be running in a terminal!\n"); return 1; }
   while (true) {
     char *line = NULL;

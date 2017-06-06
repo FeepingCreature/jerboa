@@ -63,6 +63,8 @@ int main(int argc, char **argv) {
   TextRange source = readfile(argv[1]);
   register_file(source, argv[1], 0, 0);
   
+  add_reserved_identifier("new");
+  
   UserFunction *module;
   char *text = source.start;
   ParseResult res = parse_module(&text, &module);
