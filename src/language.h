@@ -2,7 +2,7 @@
 #define JERBOA_LANGUAGE_H
 
 #include "vm/instr.h"
-#include "parser.h"
+#include "rdparse/parser.h"
 
 ParseResult parse_module(char **textp, UserFunction **uf_p);
 

@@ -4,7 +4,7 @@
 
 #include "core.h"
 #include "util.h"
-#include "parser.h"
+#include <rdparse/parser.h>
 
 void record_start(char *text, FileRange *range) {
   eat_filler(&text); // record at the start of the [whatever], not on the end of the previous

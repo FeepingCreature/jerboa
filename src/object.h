@@ -10,6 +10,7 @@
 #include "core.h"
 #include "hash.h"
 #include "util.h"
+#include <rdparse/util.h>
 #include "vm/vm.h"
 #include "vm/instr.h"
 #include "static_keys.h"

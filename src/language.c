@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#include "parser.h"
+#include <rdparse/parser.h>
 #include "vm/builder.h"
 #include "vm/optimize.h"
 

@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 2.6)
 
 project(jerboa)
 
+add_subdirectory(rdparse)
+include_directories(${CMAKE_SOURCE_DIR}/rdparse/include)
+
 set( ENABLE_JIT false CACHE BOOL "Use LibJIT to flatten VM instructions." )
 
 find_package(PkgConfig)
@@ -42,17 +45,17 @@ else()
   endforeach()
 endif()
 
-set(BASE_SRC "src/hash.c" "src/object.c" "src/parser.c" "src/print.c" "src/language.c"
+set(BASE_SRC "src/hash.c" "src/object.c" "src/print.c" "src/language.c"
              "src/gc.c" "src/util.c" "src/trie.c" "src/win32_compat.c" "src/static_keys.c")
 
-include_directories("${PROJECT_SOURCE_DIR}/src" "${LIBFFI_INCLUDE_DIR}" "${LIBXML_INCLUDE_DIR}")
+include_directories("${PROJECT_SOURCE_DIR}/src" "${LIBFFI_INCLUDE_DIR}" "${LIBXML_INCLUDE_DIR}" "rdparse")
 add_executable(jerboa src/jerboa.c ${BASE_SRC} ${VM_SRC})
 add_executable(repl src/repl.c ${BASE_SRC} ${VM_SRC})
 
 target_compile_options(jerboa PRIVATE ${FLAGS})
 target_compile_options(repl PRIVATE ${FLAGS})
-target_link_libraries (jerboa ffi ${ICUUC} xml2 m ${EXTRA_LIBS})
-target_link_libraries (repl ffi ${ICUUC} xml2 m ${EXTRA_LIBS})
+target_link_libraries (jerboa ffi ${ICUUC} xml2 m ${EXTRA_LIBS} rdparse)
+target_link_libraries (repl ffi ${ICUUC} xml2 m ${EXTRA_LIBS} rdparse)
 install(TARGETS jerboa RUNTIME DESTINATION bin)
 install(TARGETS repl RUNTIME DESTINATION bin)
 install(DIRECTORY c DESTINATION share/jerboa)

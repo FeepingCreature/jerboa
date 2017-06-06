@@ -1,9 +1,7 @@
-#ifndef JERBOA_PARSER_H
-#define JERBOA_PARSER_H
+#ifndef RDPARSE_PARSER_H
+#define RDPARSE_PARSER_H
 
 #include <stdbool.h>
-
-#include "util.h"
 
 typedef enum {
   PARSE_NONE,
