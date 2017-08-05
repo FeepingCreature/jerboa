@@ -212,37 +212,239 @@ static void int_parse_fn(VMState *state, CallInfo *info) {
   vm_return(state, info, INT2VAL(res));
 }
 
-static inline void float_math_fn(VMState *state, CallInfo *info, MathOp mop) __attribute__ ((always_inline));
-static inline void float_math_fn(VMState *state, CallInfo *info, MathOp mop) {
-  VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
+#include "vm/instrs/float_math.h"
+
+#define FLOAT_OP MATH_ADD
+#define FAST_FN_NAME float_add_fn_fast
+#include "vm/instrs/float_op.h"
+#undef FLOAT_OP
+#undef FAST_FN_NAME
+
+#define FLOAT_OP MATH_SUB
+#define FAST_FN_NAME float_sub_fn_fast
+#include "vm/instrs/float_op.h"
+#undef FLOAT_OP
+#undef FAST_FN_NAME
+
+#define FLOAT_OP MATH_MUL
+#define FAST_FN_NAME float_mul_fn_fast
+#include "vm/instrs/float_op.h"
+#undef FLOAT_OP
+#undef FAST_FN_NAME
+
+#define FLOAT_OP MATH_DIV
+#define FAST_FN_NAME float_div_fn_fast
+#include "vm/instrs/float_op.h"
+#undef FLOAT_OP
+#undef FAST_FN_NAME
+
+
+
+#define LHS_KIND ARG_SLOT
+#define RHS_KIND ARG_SLOT
+#define TARGET_KIND ARG_SLOT
+
+#define FN_NAME float_add_fn_ls_rs_ts
+#define FAST_FN_NAME float_add_fn_ls_rs_ts_fast
+#define FLOAT_OP MATH_ADD
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_sub_fn_ls_rs_ts
+#define FAST_FN_NAME float_sub_fn_ls_rs_ts_fast
+#define FLOAT_OP MATH_SUB
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_mul_fn_ls_rs_ts
+#define FAST_FN_NAME float_mul_fn_ls_rs_ts_fast
+#define FLOAT_OP MATH_MUL
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_div_fn_ls_rs_ts
+#define FAST_FN_NAME float_div_fn_ls_rs_ts_fast
+#define FLOAT_OP MATH_DIV
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#undef LHS_KIND
+#undef RHS_KIND
+#undef TARGET_KIND
+
+
+
+#define LHS_KIND ARG_REFSLOT
+#define RHS_KIND ARG_REFSLOT
+#define TARGET_KIND ARG_REFSLOT
+
+#define FN_NAME float_add_fn_lr_rr_tr
+#define FAST_FN_NAME float_add_fn_lr_rr_tr_fast
+#define FLOAT_OP MATH_ADD
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_sub_fn_lr_rr_tr
+#define FAST_FN_NAME float_sub_fn_lr_rr_tr_fast
+#define FLOAT_OP MATH_SUB
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_mul_fn_lr_rr_tr
+#define FAST_FN_NAME float_mul_fn_lr_rr_tr_fast
+#define FLOAT_OP MATH_MUL
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_div_fn_lr_rr_tr
+#define FAST_FN_NAME float_div_fn_lr_rr_tr_fast
+#define FLOAT_OP MATH_DIV
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#undef LHS_KIND
+#undef RHS_KIND
+#undef TARGET_KIND
+
+
+
+#define LHS_KIND ARG_REFSLOT
+#define RHS_KIND ARG_VALUE
+#define TARGET_KIND ARG_SLOT
+
+#define FN_NAME float_add_fn_lr_rv_ts
+#define FAST_FN_NAME float_add_fn_lr_rv_ts_fast
+#define FLOAT_OP MATH_ADD
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_sub_fn_lr_rv_ts
+#define FAST_FN_NAME float_sub_fn_lr_rv_ts_fast
+#define FLOAT_OP MATH_SUB
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_mul_fn_lr_rv_ts
+#define FAST_FN_NAME float_mul_fn_lr_rv_ts_fast
+#define FLOAT_OP MATH_MUL
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#define FN_NAME float_div_fn_lr_rv_ts
+#define FAST_FN_NAME float_div_fn_lr_rv_ts_fast
+#define FLOAT_OP MATH_DIV
+  #include "vm/instrs/float_math.h"
+  #include "vm/instrs/float_op.h"
+#undef FN_NAME
+#undef FAST_FN_NAME
+#undef FLOAT_OP
+
+#undef LHS_KIND
+#undef RHS_KIND
+#undef TARGET_KIND
+
+FnWrap float_op_fn_dispatch(Instr *instr, MathOp mop) {
+  assert(instr->type == INSTR_CALL_FUNCTION_DIRECT);
+  CallFunctionDirectInstr *cfdi = (CallFunctionDirectInstr*) instr;
+  CallInfo *info = &cfdi->info;
   
-  Value obj1 = load_arg(state->frame, info->this_arg);
-  Value obj2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  VM_ASSERT(IS_FLOAT(obj1), "internal error: float math function called on wrong type of object");
+  if (info->args_len != 1) { abort(); }
   
-  float v1 = AS_FLOAT(obj1), v2;
-  if (IS_FLOAT(obj2)) v2 = AS_FLOAT(obj2);
-  else if (IS_INT(obj2)) v2 = AS_INT(obj2);
-  else { vm_error(state, "don't know how to perform float math with %s", get_type_info(state, obj2)); return; }
-  
-  float res;
+  if (cfdi->info.this_arg.kind == ARG_REFSLOT
+    && INFO_ARGS_PTR(info)[0].kind == ARG_VALUE
+    && cfdi->info.target.kind == ARG_SLOT
+  ) {
+    switch (mop) {
+      case MATH_ADD: return (FnWrap) { &float_add_fn_lr_rv_ts_fast };
+      case MATH_SUB: return (FnWrap) { &float_sub_fn_lr_rv_ts_fast };
+      case MATH_MUL: return (FnWrap) { &float_mul_fn_lr_rv_ts_fast };
+      case MATH_DIV: return (FnWrap) { &float_div_fn_lr_rv_ts_fast };
+      default: abort();
+    }
+  }
+  if (cfdi->info.this_arg.kind == ARG_SLOT
+    && INFO_ARGS_PTR(info)[0].kind == ARG_SLOT
+    && cfdi->info.target.kind == ARG_SLOT
+  ) {
+    switch (mop) {
+      case MATH_ADD: return (FnWrap) { &float_add_fn_ls_rs_ts_fast };
+      case MATH_SUB: return (FnWrap) { &float_sub_fn_ls_rs_ts_fast };
+      case MATH_MUL: return (FnWrap) { &float_mul_fn_ls_rs_ts_fast };
+      case MATH_DIV: return (FnWrap) { &float_div_fn_ls_rs_ts_fast };
+      default: abort();
+    }
+  }
+  if (cfdi->info.this_arg.kind == ARG_REFSLOT
+    && INFO_ARGS_PTR(info)[0].kind == ARG_REFSLOT
+    && cfdi->info.target.kind == ARG_REFSLOT
+  ) {
+    switch (mop) {
+      case MATH_ADD: return (FnWrap) { &float_add_fn_lr_rr_tr_fast };
+      case MATH_SUB: return (FnWrap) { &float_sub_fn_lr_rr_tr_fast };
+      case MATH_MUL: return (FnWrap) { &float_mul_fn_lr_rr_tr_fast };
+      case MATH_DIV: return (FnWrap) { &float_div_fn_lr_rr_tr_fast };
+      default: abort();
+    }
+  }
+  // printf("left kind %i, right kind %i, target kind %i\n", cfdi->info.this_arg.kind, INFO_ARGS_PTR(info)[0].kind, cfdi->info.target.kind);
   switch (mop) {
-    case MATH_ADD: res = v1 + v2; break;
-    case MATH_SUB: res = v1 - v2; break;
-    case MATH_MUL: res = v1 * v2; break;
-    case MATH_DIV: res = v1 / v2; break;
-    case MATH_MOD:
-      VM_ASSERT(v2 > 0.0f, "what are you even doing");
-      res = fmodf(v1, v2);
-      if (res < 0) res += v2;
-      break;
-    case MATH_BIT_OR:
-    case MATH_BIT_AND: vm_error(state, "bitops are undefined for float");
+    case MATH_ADD: return (FnWrap) { &float_add_fn_fast };
+    case MATH_SUB: return (FnWrap) { &float_sub_fn_fast };
+    case MATH_MUL: return (FnWrap) { &float_mul_fn_fast };
+    case MATH_DIV: return (FnWrap) { &float_div_fn_fast };
     default: abort();
   }
-  vm_return(state, info, FLOAT2VAL(res));
-  return;
 }
+
+FnWrap float_add_fn_dispatch(Instr *instr) {
+  return float_op_fn_dispatch(instr, MATH_ADD);
+}
+
+FnWrap float_sub_fn_dispatch(Instr *instr) {
+  return float_op_fn_dispatch(instr, MATH_SUB);
+}
+
+FnWrap float_mul_fn_dispatch(Instr *instr) {
+  return float_op_fn_dispatch(instr, MATH_MUL);
+}
+
+FnWrap float_div_fn_dispatch(Instr *instr) {
+  return float_op_fn_dispatch(instr, MATH_DIV);
+}
+
 
 static void float_add_fn(VMState *state, CallInfo *info) {
   float_math_fn(state, info, MATH_ADD);
@@ -1775,10 +1977,10 @@ Object *create_root(VMState *state) {
   Object *float_obj = AS_OBJ(make_object(state, NULL, false));
   float_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, float, OBJ2VAL(float_obj));
-  OBJECT_SET(state, float_obj, __add, make_fn(state, float_add_fn));
-  OBJECT_SET(state, float_obj, __sub, make_fn(state, float_sub_fn));
-  OBJECT_SET(state, float_obj, __mul, make_fn(state, float_mul_fn));
-  OBJECT_SET(state, float_obj, __div, make_fn(state, float_div_fn));
+  OBJECT_SET(state, float_obj, __add, make_fn_fast(state, float_add_fn, float_add_fn_dispatch));
+  OBJECT_SET(state, float_obj, __sub, make_fn_fast(state, float_sub_fn, float_sub_fn_dispatch));
+  OBJECT_SET(state, float_obj, __mul, make_fn_fast(state, float_mul_fn, float_mul_fn_dispatch));
+  OBJECT_SET(state, float_obj, __div, make_fn_fast(state, float_div_fn, float_div_fn_dispatch));
   OBJECT_SET(state, float_obj, __mod, make_fn(state, float_mod_fn));
   OBJECT_SET(state, float_obj, __equals , make_fn(state, float_eq_fn));
   OBJECT_SET(state, float_obj, __smaller, make_fn(state, float_lt_fn));
