@@ -446,3 +446,17 @@ UserFunction *build_function(FunctionBuilder *builder) {
   fn->proposed_jit_fn = fn->opt_jit_fn = NULL;
   return fn;
 }
+
+static size_t ranges_offset = 0;
+void finalize(UserFunction *uf) {
+  size_t ranges_offset_new = ranges_offset;
+  
+  uf->body.function_range_id = ranges_offset_new;
+  ranges_offset_new += 4;
+  size_t size = (char*) uf->body.instrs_ptr_end - (char*) uf->body.instrs_ptr;
+  uf->body.ranges_base = ranges_offset_new;
+  ranges_offset_new += size;
+  
+  if (ranges_offset_new < ranges_offset) abort(); // check for overflow
+  ranges_offset = ranges_offset_new;
+}

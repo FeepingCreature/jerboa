@@ -187,31 +187,39 @@ void vm_record_profile(VMState *state) {
       Instr *instr = curf->instr_ptr;
       if (!curf->uf) continue; // stub frame
       
-      FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
-      assert(belongs_to);
+      FileRange **belongs_to_p = instr_belongs_to_p(&curf->uf->body, instr);
+      assert(belongs_to_p && *belongs_to_p);
       
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
-      FastKey key = fixed_pointer_key(belongs_to);
+      size_t range_id = (char*) belongs_to_p - (char*) curf->uf->body.ranges_ptr + curf->uf->body.ranges_base;
+      FastKey key = { .hash = range_id };
       
       if (!prev_frame) { // top frame
         TableEntry *freeptr;
         TableEntry *entry_p = table_lookup_alloc_prepared(excl_table, &key, &freeptr);
         if (entry_p) entry_p->value.i ++;
-        else freeptr->value = INT2VAL(1);
+        else {
+          freeptr->value = INT2VAL(1);
+          freeptr->constraint = (Object*) *belongs_to_p;
+        }
       } else {
         TableEntry *freeptr;
         TableEntry *entry_p = table_lookup_alloc_prepared(incl_table, &key, &freeptr);
         if (freeptr) {
           freeptr->value.obj = calloc(sizeof(HashTable), 1);
+          freeptr->constraint = (Object*) *belongs_to_p;
           entry_p = freeptr;
         }
         HashTable *sub_table = (HashTable*) entry_p->value.obj;
         // assert(prev_frame->uf->body.function_range);
-        FastKey next_fn_key = fixed_pointer_key(prev_frame->uf->body.function_range);
+        FastKey next_fn_key = { .hash = prev_frame->uf->body.function_range_id };
         TableEntry *subentry_p = table_lookup_alloc_prepared(sub_table, &next_fn_key, &freeptr);
         if (subentry_p) subentry_p->value.i ++;
-        else freeptr->value = INT2VAL(1);
+        else {
+          freeptr->value = INT2VAL(1);
+          freeptr->constraint = (Object*) prev_frame->uf->body.function_range;
+        }
       }
       prev_frame = curf;
     }

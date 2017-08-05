@@ -35,6 +35,7 @@ static inline TableEntry *table_lookup_prepared_internal(HashTable * __restrict_
   // printf("::%.*s in %i\n", key_len, key_ptr, entries_num);
   size_t entries_mask = entries_num - 1;
   size_t early_index = key->last_index & entries_mask;
+  // fprintf(stderr, "%li\n", sizeof(TableEntry));
   TableEntry * __restrict__ early_entry = &tbl->entries_ptr[early_index];
   // approximately four times as likely, according to profiling
   if (LIKELY(early_entry->hash == key->hash)) {

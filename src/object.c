@@ -512,8 +512,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   for (int i = 0; i < excl_table->entries_num; ++i) {
     TableEntry *entry = &excl_table->entries_ptr[i];
     if (entry->hash) {
-      // TODO encode as offset so we can change hash to 32-bit
-      FileRange *range = (FileRange*) entry->hash;
+      FileRange *range = (FileRange*) entry->constraint;
       int samples = entry->value.i;
       // printf("dir entry %i of %i: %p; %i %.*s (%i)\n", i, excl_table->entries_num, (void*) range, (int) range->text_len, (int) range->text_len, range->text_from, samples);
       record_entries[k++] = (ProfilerRecord) { .range = range, .table = NULL, .num_samples = samples };
@@ -522,7 +521,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
   for (int i = 0; i < incl_table->entries_num; ++i) {
     TableEntry *entry = &incl_table->entries_ptr[i];
     if (entry->hash) {
-      FileRange *range = (FileRange*) entry->hash;
+      FileRange *range = (FileRange*) entry->constraint;
       HashTable *table = (HashTable*) entry->value.obj;
       // printf("indir entry %i of %i: %i %.*s (%i)\n", i, incl_table->entries_num, (int) range->text_len, (int) range->text_len, range->text_from, table->entries_num);
       record_entries[k++] = (ProfilerRecord) { .range = range, .table = table, .num_samples = 0 };
@@ -569,7 +568,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
           for (int l = 0; l < row_calls.entries_num; l++) {
             TableEntry *entry = &row_calls.entries_ptr[l];
             if (entry->hash) {
-              FileRange *fun_range = (FileRange*) entry->hash;
+              FileRange *fun_range = (FileRange*) entry->constraint;
               int samples = entry->value.i;
               const char *name2, *fn2; TextRange line2; int row2, col2;
               // find call target site
@@ -601,8 +600,10 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
             FastKey key = { .hash = entry->hash };
             TableEntry *freeptr;
             TableEntry *call_p = table_lookup_alloc_prepared(&row_calls, &key, &freeptr);
-            if (freeptr) freeptr->value.i = entry->value.i;
-            else call_p->value.i += entry->value.i;
+            if (freeptr) {
+              freeptr->value.i = entry->value.i;
+              freeptr->constraint = entry->constraint;
+            } else call_p->value.i += entry->value.i;
           }
         }
       }

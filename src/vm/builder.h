@@ -127,4 +127,6 @@ void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target);
 
 UserFunction *build_function(FunctionBuilder *builder);
 
+void finalize(UserFunction *uf);
+
 #endif

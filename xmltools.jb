@@ -208,32 +208,40 @@ xml.node["setAttrs"] = method(obj) {
   }
 };
 // TODO figure out a better performing way to do this
+xml.node["markForKey"] = method(key) {
+  if (!("_sub_handler_count" in this)) this["_sub_handler_count"] = {};
+  if (!(key in this._sub_handler_count)) this._sub_handler_count[key] = 1;
+  else this._sub_handler_count[key] ++;
+  
+  this.parent?.markForKey(key);
+};
 xml.node["on"] = method(key, obj) {
   if (obj instanceof function) obj = { fn = obj; obj = this; };
   obj.fn["key"] = key;
   if (!("_handlers" in this)) this["_handlers"] = {};
   if (!(key in this._handlers)) this._handlers[key] = EventHandlers.create();
   this._handlers[key].fns.push(obj);
+  
+  this.markForKey(key);
 };
 xml.node["off"] = method(key, obj) {
   if (obj instanceof function) obj = { fn = obj; obj = this; };
   this?._handlers?[key].remove(obj);
-  if (this.parent) this.parent.off(key, obj);
 };
 xml.node["trigger_"] = method(key, arguments) {
   if (this?._handlers?[key].call(this, arguments) is false) return false;
   return true;
 };
 xml.node["trigger_propagating_"] = method(key, arguments) {
+  if (!this?._sub_handler_count?[key]) return false;
   this.trigger_(key, arguments);
   if (this.nodeType == 1) {
     // handlers may be modifying this array in arbitrary ways
     // TODO use a hashtable instead?
     var children = this.children.dup();
-    var len:int = children.length;
-    for (var i:int = 0; i < len; i++) {
+    for (var child in children) {
       // TODO don't recurse into nodes that are "known" not to have a handler for this key
-      children[i].trigger_propagating_(key, arguments);
+      child.trigger_propagating_(key, arguments);
     }
   }
 };

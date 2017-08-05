@@ -2381,5 +2381,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
     fprintf(stderr, "runtime optimized %s to\n", uf->name);
     dump_fn(state, uf);
   }
+  
+  finalize(uf);
   return uf;
 }

@@ -2098,6 +2098,7 @@ static ParseResult parse_function_expr(char **textp, FunctionBuilder *pbuilder, 
   use_range_end(builder, fnframe_range);
   
   *uf_p = optimize(build_function(builder));
+  finalize(*uf_p);
   return PARSE_OK;
 }
 
@@ -2137,5 +2138,6 @@ ParseResult parse_module(char **textp, UserFunction **uf_p) {
   
   *uf_p = build_function(builder);
   *uf_p = optimize(*uf_p);
+  finalize(*uf_p);
   return PARSE_OK;
 }

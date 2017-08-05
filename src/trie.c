@@ -249,7 +249,3 @@ const char *trie_reverse_lookup(uint32_t hash) {
   assert(rev_entry != NULL);
   return (const char*) rev_entry->value.obj;
 }
-
-FastKey fixed_pointer_key(void *ptr) {
-  return (FastKey) { .hash = (size_t) ptr };
-}
