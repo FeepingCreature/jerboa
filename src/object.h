@@ -88,14 +88,10 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
   assert(arg.kind == ARG_SLOT || arg.kind == ARG_REFSLOT || arg.kind == ARG_VALUE);
   
   if (arg.kind == ARG_SLOT) {
-#ifndef NDEBUG
     assert(arg.slot.is_resolved);
-#endif
     return read_slot(frame, arg.slot);
   } else if (arg.kind == ARG_REFSLOT) {
-#ifndef NDEBUG
     assert(arg.refslot.is_resolved);
-#endif
     return read_refslot(frame, arg.refslot);
   } else return arg.value;
   // NOT faster
@@ -115,14 +111,10 @@ static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) {
   assert(arg.kind == kind);
   
   if (kind == ARG_SLOT) {
-#ifndef NDEBUG
     assert(arg.slot.is_resolved);
-#endif
     return read_slot(frame, arg.slot);
   } else if (kind == ARG_REFSLOT) {
-#ifndef NDEBUG
     assert(arg.refslot.is_resolved);
-#endif
     return read_refslot(frame, arg.refslot);
   } else return arg.value;
 }
@@ -131,9 +123,7 @@ void value_failed_type_constraint_error(VMState *state, Object *constraint, Valu
 
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
   if (warg.kind == ARG_REFSLOT) {
-#ifndef NDEBUG
     assert(warg.refslot.is_resolved);
-#endif
     
     TableEntry *entry = get_refslot(state->frame, warg.refslot);
     Object *constraint = entry->constraint;
@@ -154,9 +144,7 @@ static inline void set_arg_specialized(VMState *state, WriteArg warg, Value valu
 static inline void set_arg_specialized(VMState *state, WriteArg warg, Value value, int kind) {
   assert(warg.kind == kind);
   if (kind == ARG_REFSLOT) {
-#ifndef NDEBUG
     assert(warg.refslot.is_resolved);
-#endif
     
     TableEntry *entry = get_refslot(state->frame, warg.refslot);
     Object *constraint = entry->constraint;

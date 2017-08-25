@@ -439,9 +439,7 @@ static inline bool values_identical(Value arg1, Value arg2) {
 #endif
 
 static inline TableEntry **get_refslot_ref(Callframe *frame, Refslot rs) {
-#ifndef NDEBUG
   assert(rs.is_resolved);
-#endif
   return (TableEntry**) ((unsigned char*) frame + rs.offset);
 }
 
@@ -460,9 +458,7 @@ static inline int slot_offset(Slot s) {
 }
 
 static inline int slot_index_rt(UserFunction *uf, Slot s) {
-#ifndef NDEBUG
   assert(uf->resolved == s.is_resolved);
-#endif
   if (!uf->resolved) return s.index;
   int byte_offs = s.offset - sizeof(Callframe) - sizeof(TableEntry*) * uf->refslots;
   assert(byte_offs % sizeof(Value) == 0);
@@ -472,9 +468,7 @@ static inline int slot_index_rt(UserFunction *uf, Slot s) {
 }
 
 static inline int refslot_index_rt(UserFunction *uf, Refslot rs) {
-#ifndef NDEBUG
   assert(uf->resolved == rs.is_resolved);
-#endif
   if (!uf->resolved) return rs.index;
   int byte_offs = rs.offset - sizeof(Callframe);
   assert(byte_offs % sizeof(TableEntry*) == 0);
@@ -489,18 +483,18 @@ static inline int slot_to_offset(UserFunction *uf, Slot sl) {
 
 static inline void resolve_slot_ref(UserFunction *uf, Slot *sl) {
   sl->offset = slot_to_offset(uf, *sl);
-#ifndef NDEBUG
   assert(!sl->is_resolved);
   assert(sl->index >= 0 && sl->index < uf->slots);
+#ifndef NDEBUG
   sl->is_resolved = true;
 #endif
 }
 
 static inline void resolve_refslot_ref(UserFunction *uf, Refslot *rs) {
   rs->offset = sizeof(struct _Callframe) + sizeof(TableEntry*) * rs->index;
-#ifndef NDEBUG
   assert(!rs->is_resolved);
   assert(rs->index >= 0 && rs->index < uf->refslots);
+#ifndef NDEBUG
   rs->is_resolved = true;
 #endif
 }

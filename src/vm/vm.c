@@ -720,7 +720,7 @@ static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallInfo *info = &instr->info;
   
   // cache beforehand, in case the function (wrongly) wants to set up its own stub call like apply
-  Instr *prev_instr = state->instr;
+  Instr *prev_instr = state->instr; (void) prev_instr;
   
   Instr *next_instr = (Instr*) ((char*) instr + instr->size);
   instr->fn(state, info);
