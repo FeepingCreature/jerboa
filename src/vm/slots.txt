@@ -40,42 +40,42 @@ CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
   CHKSLOT_READ(instr->base.context_slot); CHKSLOT_READ(instr->slot);
 CASE(INSTR_ACCESS, AccessInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
-  if (instr->key.kind == ARG_SLOT) CHKSLOT_READ(instr->key.slot);
+  READ_SLOT(instr->obj);
+  READ_SLOT(instr->key);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ASSIGN, AssignInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
-  if (instr->key.kind == ARG_SLOT) CHKSLOT_READ(instr->key.slot);
-  if (instr->value.kind == ARG_SLOT) CHKSLOT_READ(instr->value.slot);
+  READ_SLOT(instr->obj);
+  READ_SLOT(instr->key);
+  READ_SLOT(instr->value);
   CHKSLOT_WRITE(instr->target_slot);
 CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->key.kind == ARG_SLOT) CHKSLOT_READ(instr->key.slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
+  READ_SLOT(instr->key);
+  READ_SLOT(instr->obj);
   WRITE_SLOT(instr->target);
 CASE(INSTR_IDENTICAL, IdenticalInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj1.kind == ARG_SLOT) CHKSLOT_READ(instr->obj1.slot);
-  if (instr->obj2.kind == ARG_SLOT) CHKSLOT_READ(instr->obj2.slot);
+  READ_SLOT(instr->obj1);
+  READ_SLOT(instr->obj2);
   WRITE_SLOT(instr->target);
 CASE(INSTR_INSTANCEOF, InstanceofInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
-  if (instr->proto.kind == ARG_SLOT) CHKSLOT_READ(instr->proto.slot);
+  READ_SLOT(instr->obj);
+  READ_SLOT(instr->proto);
   WRITE_SLOT(instr->target);
 CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
-  if (instr->key.kind == ARG_SLOT) CHKSLOT_READ(instr->key.slot);
-  if (instr->constraint.kind == ARG_SLOT) CHKSLOT_READ(instr->constraint.slot);
+  READ_SLOT(instr->obj);
+  READ_SLOT(instr->key);
+  READ_SLOT(instr->constraint);
 CASE(INSTR_TEST, TestInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->value.kind == ARG_SLOT) CHKSLOT_READ(instr->value.slot);
+  READ_SLOT(instr->value);
   WRITE_SLOT(instr->target);
 CASE(INSTR_CALL, CallInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->info.fn.kind == ARG_SLOT) CHKSLOT_READ(instr->info.fn.slot);
+  READ_SLOT(instr->info.fn);
   READ_SLOT(instr->info.this_arg);
   for (int k = 0; k < instr->info.args_len; ++k) {
     Arg *arg = &((Arg*)(&instr->info+1))[k];
@@ -84,25 +84,25 @@ CASE(INSTR_CALL, CallInstr)
   WRITE_SLOT(instr->info.target);
 CASE(INSTR_CALL_FUNCTION_DIRECT, CallFunctionDirectInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->info.fn.kind == ARG_SLOT) CHKSLOT_READ(instr->info.fn.slot);
-  if (instr->info.this_arg.kind == ARG_SLOT) CHKSLOT_READ(instr->info.this_arg.slot);
+  READ_SLOT(instr->info.fn);
+  READ_SLOT(instr->info.this_arg);
   for (int k = 0; k < instr->info.args_len; ++k) {
     Arg *arg = &((Arg*)(&instr->info+1))[k];
-    if (arg->kind == ARG_SLOT) CHKSLOT_READ(arg->slot);
+    READ_SLOT(*arg);
   }
   WRITE_SLOT(instr->info.target);
 CASE(INSTR_RETURN, ReturnInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->ret.kind == ARG_SLOT) CHKSLOT_READ(instr->ret.slot);
+  READ_SLOT(instr->ret);
 CASE(INSTR_BR, BranchInstr)
   CHKSLOT_READ(instr->base.context_slot);
 CASE(INSTR_TESTBR, TestBranchInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->test.kind == ARG_SLOT) CHKSLOT_READ(instr->test.slot);
+  READ_SLOT(instr->test);
 CASE(INSTR_PHI, PhiInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->arg1.kind == ARG_SLOT) CHKSLOT_READ(instr->arg1.slot);
-  if (instr->arg2.kind == ARG_SLOT) CHKSLOT_READ(instr->arg2.slot);
+  READ_SLOT(instr->arg1);
+  READ_SLOT(instr->arg2);
   WRITE_SLOT(instr->target);
 
 CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
@@ -113,16 +113,16 @@ CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
 CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
   CHKSLOT_READ(instr->base.context_slot);
   CHKSLOT_WRITE(instr->target_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
-  if (instr->value.kind == ARG_SLOT) CHKSLOT_READ(instr->value.slot);
+  READ_SLOT(instr->obj);
+  READ_SLOT(instr->value);
 CASE(INSTR_STRING_KEY_IN_OBJ, StringKeyInObjInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
+  READ_SLOT(instr->obj);
   WRITE_SLOT(instr->target);
 CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)
   CHKSLOT_READ(instr->base.context_slot);
-  if (instr->obj.kind == ARG_SLOT) CHKSLOT_READ(instr->obj.slot);
-  if (instr->constraint.kind == ARG_SLOT) CHKSLOT_READ(instr->constraint.slot);
+  READ_SLOT(instr->obj);
+  READ_SLOT(instr->constraint);
 CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr)
   CHKSLOT_READ(instr->base.context_slot);
   CHKSLOT_READ(instr->obj_slot);
