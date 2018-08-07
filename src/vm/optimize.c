@@ -2029,23 +2029,41 @@ UserFunction *free_stack_objects_early(UserFunction *uf) {
 
     Instr *instr_cur = BLOCK_START(uf, blk), *instr_end = BLOCK_END(uf, blk);
     while (instr_cur != instr_end) {
-      // Instr *instr2 = instr_cur; dump_instr(NULL, &instr2);
-      addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
+      if (instr_cur->type == INSTR_ALLOC_STATIC_OBJECT)
+      {
+        AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) instr_cur;
+        int instrSlot = slot_index_rt(uf, asoi->target_slot);
+        bool deadObject = false;
+        for (int k = 0; k < num_dying_slots; k++) {
+          int slot = slot_index_rt(uf, dying_object_slots[k]);
+          if (slot == instrSlot) {
+            deadObject = instr_cur == blk_last_access[slot];
+            break;
+          }
+        }
+        if (deadObject) { } // unused object; remove
+        else {
+          addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
+        }
+      } else {
+        // Instr *instr2 = instr_cur; dump_instr(NULL, &instr2);
+        addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
 
-      for (int k = 0; k < num_dying_slots; k++) {
-        int slot = slot_index_rt(uf, dying_object_slots[k]);
-        if (instr_cur == blk_last_access[slot]) {
-          // fprintf(stderr, "and generate free for %i\n", slot);
-          FreeObjectInstr instr = {
-            .base = { .type = INSTR_FREE_OBJECT },
-            .on_stack = true,
-            .obj_slot = (Slot) { .index = slot }
-          };
-          assert(uf->resolved);
-          resolve_slot_ref(uf, &instr.obj_slot);
-          // TODO assign to debug info of allocation
-          // instead of some rando instr that's the last to use it
-          addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
+        for (int k = 0; k < num_dying_slots; k++) {
+          int slot = slot_index_rt(uf, dying_object_slots[k]);
+          if (instr_cur == blk_last_access[slot]) {
+            // fprintf(stderr, "and generate free for %i\n", slot);
+            FreeObjectInstr instr = {
+              .base = { .type = INSTR_FREE_OBJECT },
+              .on_stack = true,
+              .obj_slot = (Slot) { .index = slot }
+            };
+            assert(uf->resolved);
+            resolve_slot_ref(uf, &instr.obj_slot);
+            // TODO assign to debug info of allocation
+            // instead of some rando instr that's the last to use it
+            addinstr_like(&builder, &uf->body, instr_cur, sizeof(instr), (Instr*) &instr);
+          }
         }
       }
 
@@ -2062,6 +2080,97 @@ UserFunction *free_stack_objects_early(UserFunction *uf) {
   }
   free(slot_inlist);
   free(slot_outlist);
+
+  UserFunction *fn = build_function(&builder);
+  copy_fn_stats(uf, fn);
+  free_function(uf);
+  return fn;
+}
+
+/**
+ * Given a stack object that:
+ * - is assigned to a slot that is not used, only ever freed,
+ *   - ie. no fields are read or written via string
+ * - and never has any of its refslots written to
+ * then we may safely replace its refslot reads
+ * with the slot reads it was constructed from!
+ */
+UserFunction *deconstruct_immutable_stack_objects(UserFunction *uf) {
+  FunctionBuilder builder = {0};
+  builder.block_terminated = true;
+
+  SortedUniqList *mutable_stack_objects = NULL;
+  SortedUniqList *nonfreed_read_slots = NULL;
+
+  for (int i = 0; i < uf->body.blocks_len; ++i) {
+    Instr *instr_cur = BLOCK_START(uf, i), *instr_end = BLOCK_END(uf, i);
+#define CHKSLOT_REF_WRITE(SLOT) \
+    sl_add_value_to(&mutable_stack_objects, slot_index_rt(uf, find_refslot_slot(uf, SLOT)));
+#define CHKSLOT_READ_RW(SLOT) \
+    if (instr_cur->type != INSTR_FREE_OBJECT) { sl_add_value_to(&nonfreed_read_slots, slot_index_rt(uf, SLOT)); }
+    while (instr_cur != instr_end) {
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
+      switch (instr_cur->type) {
+        case INSTR_INVALID: { abort();
+#include "vm/slots.txt"
+          CASE(INSTR_LAST, Instr) abort();
+        } break;
+        default: assert("Unhandled Instruction Type!" && false);
+      }
+#undef CASE
+#undef CHKSLOT_READ_RW
+#undef CHKSLOT_REF_WRITE
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+
+  bool *redirect_refslot = calloc(sizeof(bool), uf->refslots);
+  Slot *field_for_refslot = calloc(sizeof(Slot), uf->refslots);
+
+  for (int blk = 0; blk < uf->body.blocks_len; ++blk) {
+    new_block(&builder);
+
+    Instr *instr_cur = BLOCK_START(uf, blk), *instr_end = BLOCK_END(uf, blk);
+    while (instr_cur != instr_end) {
+      int instrsz = instr_size(instr_cur);
+      if (instr_cur->type == INSTR_ALLOC_STATIC_OBJECT) {
+        addinstr_like(&builder, &uf->body, instr_cur, instrsz, instr_cur);
+
+        AllocStaticObjectInstr *asoi = (AllocStaticObjectInstr*) instr_cur;
+        int target_slot = slot_index_rt(uf, asoi->target_slot);
+        if (!sl_contains(mutable_stack_objects, target_slot) && !sl_contains(nonfreed_read_slots, target_slot)) {
+          for (int k = 0; k < asoi->tbl.entries_stored; ++k) {
+            int refslot = refslot_index_rt(uf, ASOI_INFO(instr_cur)[k].refslot);
+            redirect_refslot[refslot] = true;
+            field_for_refslot[refslot] = ASOI_INFO(instr_cur)[k].slot;
+          }
+        }
+      } else {
+        Instr *instr_new = alloca(instrsz);
+        memcpy(instr_new, instr_cur, instrsz);
+#define READ_SLOT(SLOT) \
+        if ((SLOT).kind == ARG_REFSLOT && redirect_refslot[refslot_index_rt(uf, (SLOT).refslot)]) { \
+          SLOT = (Arg) { .kind = ARG_SLOT, .slot = field_for_refslot[refslot_index_rt(uf, (SLOT).refslot)] }; \
+        }
+#define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_new; (void) instr;
+        switch (instr_new->type) {
+          case INSTR_INVALID: { abort();
+#include "vm/slots.txt"
+            CASE(INSTR_LAST, Instr) abort();
+          } break;
+          default: assert("Unhandled Instruction Type!" && false);
+        }
+#undef CASE
+#undef READ_SLOT
+        addinstr_like(&builder, &uf->body, instr_cur, instrsz, instr_new);
+      }
+      instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));
+    }
+  }
+  free(field_for_refslot);
+  free(redirect_refslot);
+  sl_free(mutable_stack_objects);
+  sl_free(nonfreed_read_slots);
 
   UserFunction *fn = build_function(&builder);
   copy_fn_stats(uf, fn);
@@ -2333,6 +2442,7 @@ UserFunction *optimize_runtime(VMState *state, UserFunction *uf, Object *context
 
   uf = null_this_in_thisless_calls(state, uf);
   uf = stackify_nonescaping_heap_allocs(uf);
+  uf = deconstruct_immutable_stack_objects(uf);
   uf = free_stack_objects_early(uf);
 
   // should be last-ish, micro-opt that introduces a new op

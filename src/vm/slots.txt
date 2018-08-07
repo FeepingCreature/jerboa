@@ -1,7 +1,16 @@
-/* first read slots, then write slots */
 #ifndef CHKSLOT_REF
-#define CHKSLOT_REF(I)
+#define CHKSLOT_REF(S)
 #define DEFINED_CHKSLOT_REF
+#endif
+
+#ifndef CHKSLOT_REF_READ
+#define CHKSLOT_REF_READ(S)
+#define DEFINED_CHKSLOT_REF_READ
+#endif
+
+#ifndef CHKSLOT_REF_WRITE
+#define CHKSLOT_REF_WRITE(S)
+#define DEFINED_CHKSLOT_REF_WRITE
 #endif
 
 #ifndef CHKSLOT_READ
@@ -27,13 +36,29 @@
 #define CHKSLOT_READ_BOTH(S) do { CHKSLOT_READ_RW(S); CHKSLOT_READ(S); } while (false)
 #define CHKSLOT_WRITE_BOTH(S) do { CHKSLOT_WRITE_RW(S); CHKSLOT_WRITE(S); } while (false)
 
+#ifndef READ_SLOT
+#define DEFINED_READ_SLOT
 #define READ_SLOT(X) \
   if ((X).kind == ARG_SLOT) { CHKSLOT_READ_BOTH((X).slot); } \
-  else if ((X).kind == ARG_REFSLOT) { CHKSLOT_REF((X).refslot); CHKSLOT_READ(find_refslot_slot(uf, (X).refslot)); }
+  else if ((X).kind == ARG_REFSLOT) { \
+    CHKSLOT_REF_READ((X).refslot); \
+    CHKSLOT_REF((X).refslot); \
+    CHKSLOT_READ(find_refslot_slot(uf, (X).refslot)); \
+  }
+#endif
 
+#ifndef WRITE_SLOT
+#define DEFINED_WRITE_SLOT
 #define WRITE_SLOT(X) \
   if ((X).kind == ARG_SLOT) { CHKSLOT_WRITE_BOTH((X).slot); } \
-  else if ((X).kind == ARG_REFSLOT) { CHKSLOT_REF((X).refslot); CHKSLOT_READ(find_refslot_slot(uf, (X).refslot)); }
+  else if ((X).kind == ARG_REFSLOT) { \
+    CHKSLOT_REF_WRITE((X).refslot); \
+    CHKSLOT_REF((X).refslot); \
+    CHKSLOT_READ(find_refslot_slot(uf, (X).refslot)); \
+  }
+#endif
+
+/* first read slots, then write slots */
 
 CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
   CHKSLOT_READ_BOTH(instr->parent_slot); CHKSLOT_WRITE_BOTH(instr->target_slot);
@@ -140,6 +165,26 @@ CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
 
 #undef CHKSLOT_READ_BOTH
 #undef CHKSLOT_WRITE_BOTH
+
+#ifdef DEFINED_READ_SLOT
+#undef DEFINED_READ_SLOT
+#undef READ_SLOT
+#endif
+
+#ifdef DEFINED_WRITE_SLOT
+#undef DEFINED_WRITE_SLOT
+#undef WRITE_SLOT
+#endif
+
+#ifdef DEFINED_CHKSLOT_REF_READ
+#undef DEFINED_CHKSLOT_REF_READ
+#undef CHKSLOT_REF_READ
+#endif
+
+#ifdef DEFINED_CHKSLOT_REF_WRITE
+#undef DEFINED_CHKSLOT_REF_WRITE
+#undef CHKSLOT_REF_WRITE
+#endif
 
 #ifdef DEFINED_CHKSLOT_READ
 #undef DEFINED_CHKSLOT_READ
