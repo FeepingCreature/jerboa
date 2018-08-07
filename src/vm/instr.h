@@ -63,6 +63,7 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  Slot context_slot;
   WriteArg target;
   UserFunction *fn;
 } AllocClosureObjectInstr;
@@ -209,7 +210,7 @@ typedef struct {
   Instr base;
   Slot target_slot, parent_slot;
   bool alloc_stack;
-  
+
   // entries_stored is len of ASOI_INFO
   HashTable tbl;
 } AllocStaticObjectInstr;

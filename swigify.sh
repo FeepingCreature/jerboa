@@ -50,6 +50,9 @@ do
     -cpperraswarn)
       swigcmdargs+=("$1")
       ;;
+    -c++)
+      swigcmdargs+=("$1")
+      ;;
     *)
       newargs+=("$1")
       ;;

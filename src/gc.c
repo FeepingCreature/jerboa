@@ -1,6 +1,6 @@
 #include "gc.h"
 
-void gc_add_roots(VMState *state, Value *values, int num_values, GCRootSet *set) {
+void gc_add_roots(VMState * __restrict__ state, Value *values, int num_values, GCRootSet *set) {
   GCRootSet *prevTail = state->shared->gcstate.tail.prev;
   prevTail->next = set;
   state->shared->gcstate.tail.prev = set;
@@ -11,7 +11,7 @@ void gc_add_roots(VMState *state, Value *values, int num_values, GCRootSet *set)
   return;
 }
 
-void gc_remove_roots(VMState *state, GCRootSet *entry) {
+void gc_remove_roots(VMState * __restrict__ state, GCRootSet *entry) {
   assert(entry->prev && entry->next); // the use of head/tail anchors should guarantee this
   entry->prev->next = entry->next;
   entry->next->prev = entry->prev;

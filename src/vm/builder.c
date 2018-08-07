@@ -71,12 +71,11 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
   block->size += size;
   Instr *new_instr = (Instr*) ((char*) body->instrs_ptr + current_len);
   memcpy((void*) new_instr, instr, size);
-  
+
   int new_len_ranges = current_len + sizeof(FileRange*);
   body->ranges_ptr = realloc(body->ranges_ptr, new_len_ranges);
   *instr_belongs_to_p(body, new_instr) = builder->current_range;
-  
-  new_instr->context_slot = builder->scope;
+
   if (instr->type == INSTR_BR || instr->type == INSTR_TESTBR || instr->type == INSTR_RETURN) {
     builder->block_terminated = true;
   }
@@ -84,12 +83,9 @@ void addinstr(FunctionBuilder *builder, int size, Instr *instr) {
 
 #include <stdio.h>
 void addinstr_like(FunctionBuilder *builder, FunctionBody *body, Instr *basis, int size, Instr *instr) {
-  Slot backup = builder->scope;
   use_range_start(builder, *instr_belongs_to_p(body, basis));
-  builder->scope = basis->context_slot;
   addinstr(builder, size, instr);
   use_range_end(builder, *instr_belongs_to_p(body, basis));
-  builder->scope = backup;
 }
 
 static int offset_to_instr_about_to_be_added(FunctionBuilder *builder, char *instr, char *ptr) {
@@ -249,6 +245,7 @@ Slot addinstr_alloc_string_object(FunctionBuilder *builder, char *value) {
 Slot addinstr_alloc_closure_object(FunctionBuilder *builder, UserFunction *fn) {
   AllocClosureObjectInstr instr = {
     .base = { .type = INSTR_ALLOC_CLOSURE_OBJECT },
+    .context_slot = builder->scope,
     .target = (WriteArg) { .kind = ARG_SLOT, .slot = { .index = builder->slot_base++ } },
     .fn = fn
   };
@@ -306,12 +303,8 @@ void addinstr_test_branch(FunctionBuilder *builder, Slot test, int *truebranch, 
   };
   *truebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.true_blk);
   *falsebranch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.false_blk);
-  
-  // no need to have a live context here, since
-  // we're just branching on a slot, never a refslot
-  Slot backup = builder->scope; builder->scope = (Slot) {0};
+
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  builder->scope = backup;
 }
 
 Slot addinstr_phi(FunctionBuilder *builder, int block1, Slot slot1, int block2, Slot slot2) {
@@ -323,7 +316,7 @@ Slot addinstr_phi(FunctionBuilder *builder, int block1, Slot slot1, int block2, 
     .arg2 = (Arg) { .kind = ARG_SLOT, .slot = slot2 },
     .target = (WriteArg) { .kind = ARG_SLOT, .slot = { .index = builder->slot_base ++ } }
   };
-  
+
   addinstr(builder, sizeof(instr), (Instr*) &instr);
   return instr.target.slot;
 }
@@ -333,11 +326,8 @@ void addinstr_branch(FunctionBuilder *builder, int *branch) {
     .base = { .type = INSTR_BR }
   };
   *branch = offset_to_instr_about_to_be_added(builder, (char*) &instr, (char*) &instr.blk);
-  
-  // no need to have a live context here
-  Slot backup = builder->scope; builder->scope = (Slot) {0};
+
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  builder->scope = backup;
 }
 
 void addinstr_return(FunctionBuilder *builder, Slot slot) {
@@ -345,11 +335,8 @@ void addinstr_return(FunctionBuilder *builder, Slot slot) {
     .base = { .type = INSTR_RETURN },
     .ret = (Arg) { .kind = ARG_SLOT, .slot = slot }
   };
-  
-  // no need to have a live context here
-  Slot backup = builder->scope; builder->scope = (Slot) {0};
+
   addinstr(builder, sizeof(instr), (Instr*) &instr);
-  builder->scope = backup;
 }
 
 Refslot addinstr_def_refslot(FunctionBuilder *builder, Slot obj_slot, const char *key_ptr, size_t key_len) {
@@ -359,7 +346,7 @@ Refslot addinstr_def_refslot(FunctionBuilder *builder, Slot obj_slot, const char
     .key = prepare_key(key_ptr, key_len),
     .target_refslot = { .index = builder->refslot_base ++ }
   };
-  
+
   addinstr(builder, sizeof(instr), (Instr*) &instr);
   return instr.target_refslot;
 }
@@ -370,7 +357,7 @@ void addinstr_move(FunctionBuilder *builder, Arg source, WriteArg target) {
     .source = source,
     .target = target
   };
-  
+
   addinstr(builder, sizeof(instr), (Instr*) &instr);
 }
 
@@ -398,7 +385,7 @@ void close_loop(FunctionBuilder *builder, LoopRecord *record, int brk_blk, int c
 
 char *loop_contbrk(FunctionBuilder *builder, char *name, bool is_break) {
   if (!builder) return NULL;
-  
+
   int **branches_ptr_p, *branches_len_p;
   LoopRecord *my_record = builder->loops; // innermost loop
   if (!my_record) {
@@ -419,11 +406,11 @@ char *loop_contbrk(FunctionBuilder *builder, char *name, bool is_break) {
     branches_ptr_p = &my_record->branches_cont_ptr;
     branches_len_p = &my_record->branches_cont_len;
   }
-  
+
   *branches_ptr_p = realloc(*branches_ptr_p, ++*branches_len_p);
   addinstr_branch(builder, &(*branches_ptr_p)[*branches_len_p - 1]);
   new_block(builder);
-  
+
   return NULL;
 }
 
@@ -450,13 +437,13 @@ UserFunction *build_function(FunctionBuilder *builder) {
 static size_t ranges_offset = 0;
 void finalize(UserFunction *uf) {
   size_t ranges_offset_new = ranges_offset;
-  
+
   uf->body.function_range_id = ranges_offset_new;
   ranges_offset_new += 4;
   size_t size = (char*) uf->body.instrs_ptr_end - (char*) uf->body.instrs_ptr;
   uf->body.ranges_base = ranges_offset_new;
   ranges_offset_new += size;
-  
+
   if (ranges_offset_new < ranges_offset) abort(); // check for overflow
   ranges_offset = ranges_offset_new;
 }

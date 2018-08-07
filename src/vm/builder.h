@@ -21,21 +21,21 @@ typedef struct {
 
 typedef struct {
   char *name;
-  
+
   char **arglist_ptr;
   int arglist_len;
   bool variadic_tail;
-  
+
   Slot scope;
   int slot_base; // base-1; 0 is reserved for "null"
   int refslot_base;
-  
+
   bool block_terminated;
   LoopRecord *loops;
-  
+
   FileRange *current_range;
   ContextHints hints; // used for internal pattern-based hacks, like ["foo"]=function being tagged as foo
-  
+
   FunctionBody body;
 } FunctionBuilder;
 

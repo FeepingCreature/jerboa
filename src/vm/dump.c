@@ -8,7 +8,6 @@ void dump_instr(VMState *state, Instr **instr_p) {
   // fprintf(stderr, "%p", (void*) instr);
   // fprintf(stderr, "%p", *(void**) &instr->fn);
   fprintf(stderr, "    ");
-  fprintf(stderr, "%i ", instr->context_slot.index);
   switch (instr->type) {
     case INSTR_ALLOC_OBJECT:
       fprintf(stderr, "alloc object: %%%i = new object(%%%i, %s)\n",
@@ -50,8 +49,9 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) ((AllocStringObjectInstr*) instr + 1);
       break;
     case INSTR_ALLOC_CLOSURE_OBJECT:
-      fprintf(stderr, "alloc closure object: %s = new function(), dumped later\n",
-              get_write_arg_info(((AllocClosureObjectInstr*) instr)->target));
+      fprintf(stderr, "alloc closure object: %s = %%%i . new function(), dumped later\n",
+              get_write_arg_info(((AllocClosureObjectInstr*) instr)->target),
+              ((AllocClosureObjectInstr*) instr)->context_slot.index);
       *instr_p = (Instr*) ((AllocClosureObjectInstr*) instr + 1);
       break;
     case INSTR_FREE_OBJECT:
@@ -257,7 +257,7 @@ void dump_instr(VMState *state, Instr **instr_p) {
 
 void dump_fn(VMState *state, UserFunction *fn) {
   UserFunction **other_fns_ptr = NULL; int other_fns_len = 0;
-  
+
   FunctionBody *body = &fn->body;
   fprintf(stderr, "function %s (%i), %i slots, %i refslots [\n", fn->name, fn->arity, fn->slots, fn->refslots);
   for (int i = 0; i < body->blocks_len; ++i) {
@@ -273,7 +273,7 @@ void dump_fn(VMState *state, UserFunction *fn) {
     fprintf(stderr, "  ]\n");
   }
   fprintf(stderr, "]\n");
-  
+
   for (int i = 0; i < other_fns_len; ++i) {
     fprintf(stderr, " ---\n");
     dump_fn(state, other_fns_ptr[i]);

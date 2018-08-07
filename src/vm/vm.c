@@ -40,18 +40,15 @@ void vm_stack_free(VMState *state, void *ptr, int size) {
 }
 
 void vm_alloc_frame(VMState *state, int slots, int refslots) {
-  Callframe * __restrict__ cf = (Callframe*) vm_stack_alloc_uninitialized(state, sizeof(Callframe) + sizeof(TableEntry*) * refslots + sizeof(Value) * slots);
+  Callframe * __restrict__ cf = (Callframe*) vm_stack_alloc_uninitialized(state, sizeof(Callframe) + sizeof(Value) * slots + sizeof(TableEntry*) * refslots);
   if (!cf) return; // stack overflow
-  cf->uf = NULL;
-  cf->above = state->frame;
-  cf->last_stack_obj = NULL;
-  cf->block = 0;
-  
-  Value *slots_ptr = (Value*) ((unsigned char*) cf + sizeof(Callframe) + sizeof(TableEntry*) * refslots);
   // no need to zero refslots, as they're not gc'd
-  bzero(slots_ptr, sizeof(Value) * slots);
-  
+  bzero(cf, sizeof(Callframe) + sizeof(Value) * slots);
+
+  cf->above = state->frame;
   state->frame = cf;
+
+  Value *slots_ptr = (Value*) (cf + 1);
   gc_add_roots(state, slots_ptr, slots, &cf->frameroot_slots);
 }
 
@@ -78,7 +75,7 @@ void vm_remove_frame(VMState *state) {
   }
   state->frame = cf->above;
   if (LIKELY(cf->uf)) {
-    vm_stack_free(state, cf, sizeof(Callframe) + sizeof(TableEntry*) * cf->uf->refslots + sizeof(Value) * cf->uf->slots);
+    vm_stack_free(state, cf, sizeof(Callframe) + sizeof(Value) * cf->uf->slots + sizeof(TableEntry*) * cf->uf->refslots);
   } else {
     vm_stack_free(state, cf, -1);
   }
@@ -117,7 +114,7 @@ void vm_print_backtrace(VMState *state) {
       if (!curf->uf) continue; // stub frame
       FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
       assert(belongs_to);
-      
+
       const char *file, *fn;
       TextRange line1, line2;
       int row1, row2, col1, col2;
@@ -154,7 +151,7 @@ char *vm_record_backtrace(VMState *state, int *depth) {
   for (Callframe *curf = state->frame; curf; k++, curf = curf->above) {
     Instr *instr = curf->instr_ptr;
     FileRange *belongs_to = *instr_belongs_to_p(&curf->uf->body, instr);
-    
+
     const char *file, *fn;
     TextRange line;
     int row, col;
@@ -174,7 +171,7 @@ void vm_record_profile(VMState *state) {
   // TODO record actual cycles instead of samples
   HashTable *excl_table = &state->shared->profstate.excl_table;
   HashTable *incl_table = &state->shared->profstate.incl_table;
-  
+
   VMState *curstate = state;
   // fprintf(stderr, "generate backtrace\n");
   // fprintf(stderr, "------\n");
@@ -186,15 +183,15 @@ void vm_record_profile(VMState *state) {
     for (Callframe *curf = curstate->frame; curf; k++, curf = curf->above) {
       Instr *instr = curf->instr_ptr;
       if (!curf->uf) continue; // stub frame
-      
+
       FileRange **belongs_to_p = instr_belongs_to_p(&curf->uf->body, instr);
       assert(belongs_to_p && *belongs_to_p);
-      
+
       // ranges are unique (and instrs must live as long as the vm state lives anyways)
       // so we can just use the pointer stored in the instr as the key
       size_t range_id = (char*) belongs_to_p - (char*) curf->uf->body.ranges_ptr + curf->uf->body.ranges_base;
       FastKey key = { .hash = range_id };
-      
+
       if (!prev_frame) { // top frame
         TableEntry *freeptr;
         TableEntry *entry_p = table_lookup_alloc_prepared(excl_table, &key, &freeptr);
@@ -306,7 +303,7 @@ static FnWrap vm_instr_alloc_string_object(VMState *state) {
 static FnWrap vm_instr_alloc_closure_object(VMState *state) FAST_FN;
 static FnWrap vm_instr_alloc_closure_object(VMState *state) {
   AllocClosureObjectInstr * __restrict__ alloc_closure_obj_instr = (AllocClosureObjectInstr*) state->instr;
-  Slot context_slot = alloc_closure_obj_instr->base.context_slot;
+  Slot context_slot = alloc_closure_obj_instr->context_slot;
   Value context = read_slot(state->frame, context_slot);
   VM_ASSERT2(IS_OBJ(context), "bad slot type");
   Object *context_obj = AS_OBJ(context);
@@ -325,7 +322,7 @@ static FnWrap vm_instr_free_object(VMState *state) {
     // this instr should only be applied to static objects
     VM_ASSERT2_DEBUG(IS_OBJ(val), "tried to free object that wasn't stack allocated");
     AS_OBJ(val)->flags |= OBJ_STACK_FREED;
-    
+
     Callframe * __restrict__ cf = state->frame;
 #ifndef NDEBUG
     for (int i = 0; i < SLOTS_LEN(cf); i++) {
@@ -339,7 +336,7 @@ static FnWrap vm_instr_free_object(VMState *state) {
 #endif
     // important! don't gc scan anymore
     write_slot(cf, slot, VNULL);
-    
+
     Object *last_stack_obj = cf->last_stack_obj;
     while (last_stack_obj && last_stack_obj->flags & OBJ_STACK_FREED) {
       obj_free_aux(last_stack_obj); // hence not necessary
@@ -388,12 +385,12 @@ FnWrap call_internal(VMState *state, CallInfo *info, Instr *instr_after_call) {
 static FnWrap vm_instr_access(VMState *state) FAST_FN;
 static FnWrap vm_instr_access(VMState *state) {
   AccessInstr * __restrict__ access_instr = (AccessInstr*) state->instr;
-  
+
   Value val = load_arg(state->frame, access_instr->obj);
   Object *obj = closest_obj(state, val);
-  
+
   char *key;
-  
+
   Value key_val = load_arg(state->frame, access_instr->key);
   VM_ASSERT2(NOT_NULL(key_val), "key is null");
   Object *string_base = state->shared->vcache.string_base;
@@ -416,7 +413,7 @@ static FnWrap vm_instr_access(VMState *state) {
       info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
       info->target = access_instr->target;
       INFO_ARGS_PTR(info)[0] = access_instr->key;
-      
+
       return call_internal(state, info, (Instr*)(access_instr + 1));
     }
   }
@@ -439,14 +436,14 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
   if (NOT_NULL(index_op)) {
     Value key = make_string(state, aski->key.key, strlen(aski->key.key));
     write_slot(state->frame, aski->key_slot, key);
-    
+
     CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
     info->args_len = 1;
     info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val };
     info->fn = (Arg) { .kind = ARG_VALUE, .value = index_op };
     info->target = aski->target;
     INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_SLOT, .slot = aski->key_slot };
-    
+
     return call_internal(state, info, instr_after);
   } else {
     // Value val = VNULL;
@@ -460,12 +457,12 @@ static FnWrap vm_instr_access_string_key_index_fallback(VMState *state, AccessSt
 static FnWrap vm_instr_access_string_key(VMState *state) FAST_FN;
 static FnWrap vm_instr_access_string_key(VMState *state) {
   AccessStringKeyInstr * __restrict__ aski = (AccessStringKeyInstr*) state->instr;
-  
+
   Object *obj = closest_obj(state, load_arg(state->frame, aski->obj));
-  
+
   bool object_found = false;
   Value result = object_lookup_p(obj, &aski->key, &object_found);
-  
+
   if (UNLIKELY(!object_found)) {
     return vm_instr_access_string_key_index_fallback(state, aski, (Instr*)(aski + 1));
   } else {
@@ -497,7 +494,7 @@ static FnWrap vm_instr_assign(VMState *state) {
       info->target = (WriteArg) { .kind = ARG_SLOT, .slot = target_slot };
       INFO_ARGS_PTR(info)[0] = assign_instr->key;
       INFO_ARGS_PTR(info)[1] = assign_instr->value;
-      
+
       return call_internal(state, info, (Instr*)(assign_instr + 1));
     }
     VM_ASSERT2(false, "key is not string and no '[]=' is set");
@@ -553,7 +550,7 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
     object_lookup_p(obj, &fkey, &object_found);
     set_arg(state, key_in_obj_instr->target, BOOL2VAL(object_found));
   }
-  
+
   if (!object_found) {
     Value in_overload_op = OBJECT_LOOKUP(obj, in);
     if (NOT_NULL(in_overload_op)) {
@@ -563,11 +560,11 @@ static FnWrap vm_instr_key_in_obj(VMState *state) {
       info->fn = (Arg) { .kind = ARG_VALUE, .value = in_overload_op };
       info->target = key_in_obj_instr->target;
       INFO_ARGS_PTR(info)[0] = key_in_obj_instr->key;
-      
+
       return call_internal(state, info, (Instr*)(key_in_obj_instr + 1));
     }
   }
-  
+
   state->instr = (Instr*)(key_in_obj_instr + 1);
   STEP_VM;
 }
@@ -580,7 +577,7 @@ static FnWrap vm_instr_string_key_in_obj(VMState *state) {
   bool object_found = false;
   object_lookup_p(obj, &skioi->key, &object_found);
   set_arg(state, skioi->target, BOOL2VAL(object_found));
-  
+
   state->instr = (Instr*)(skioi + 1);
   STEP_VM;
 }
@@ -599,14 +596,14 @@ static FnWrap vm_instr_identical(VMState *state) {
 static FnWrap vm_instr_instanceof(VMState *state) FAST_FN;
 static FnWrap vm_instr_instanceof(VMState *state) {
   InstanceofInstr * __restrict__ instr = (InstanceofInstr*) state->instr;
-  
+
   Value proto_val = load_arg(state->frame, instr->proto);
   VM_ASSERT2(NOT_NULL(proto_val), "bad argument: instanceof null");
   bool res;
   if (!IS_OBJ(proto_val)) res = false; // nothing is instanceof 5
   else res = value_instance_of(state, load_arg(state->frame, instr->obj), AS_OBJ(proto_val));
   set_arg(state, instr->target, BOOL2VAL(res));
-  
+
   state->instr = (Instr*)(instr + 1);
   STEP_VM;
 }
@@ -626,11 +623,11 @@ static FnWrap vm_instr_set_constraint(VMState *state) {
   StringObject *skey = (StringObject*) obj_instance_of(OBJ_OR_NULL(key_val), string_base);
   VM_ASSERT2(skey, "constraint key must be string");
   char *key = skey->value;
-  
+
   FastKey fkey = prepare_key(key, strlen(key));
   char *error = object_set_constraint(state, obj, &fkey, constraint);
   VM_ASSERT2(!error, "error while setting constraint: %s", error);
-  
+
   state->instr = (Instr*)(set_constraint_instr + 1);
   STEP_VM;
 }
@@ -674,7 +671,7 @@ static FnWrap vm_instr_assign_string_key(VMState *state) {
           info->target = (WriteArg) { .kind = ARG_SLOT, .slot = aski->target_slot };
           INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = key };
           INFO_ARGS_PTR(info)[1] = (Arg) { .kind = ARG_VALUE, .value = value };
-          
+
           return call_internal(state, info, (Instr*)(aski + 1));
         }
       }
@@ -696,10 +693,10 @@ static FnWrap vm_instr_set_constraint_string_key(VMState *state) {
   Value constraint_val = load_arg(state->frame, scski->constraint);
   VM_ASSERT2(IS_OBJ(constraint_val), "constraint must not be primitive!");
   Object *constraint = AS_OBJ(constraint_val);
-  
+
   char *error = object_set_constraint(state, obj, &scski->key, constraint);
   VM_ASSERT2(!error, error);
-  
+
   state->instr = (Instr*)(scski + 1);
   STEP_VM;
 }
@@ -710,7 +707,7 @@ static FnWrap vm_instr_call(VMState *state) FAST_FN;
 static FnWrap vm_instr_call(VMState *state) {
   CallInstr * __restrict__ call_instr = (CallInstr*) state->instr;
   CallInfo *info = &call_instr->info;
-  
+
   return call_internal(state, info, (Instr*) ((char*) call_instr + call_instr->size));
 }
 
@@ -718,10 +715,10 @@ static FnWrap vm_instr_call_function_direct(VMState *state) FAST_FN;
 static FnWrap vm_instr_call_function_direct(VMState *state) {
   CallFunctionDirectInstr * __restrict__ instr = (CallFunctionDirectInstr*) state->instr;
   CallInfo *info = &instr->info;
-  
+
   // cache beforehand, in case the function (wrongly) wants to set up its own stub call like apply
   Instr *prev_instr = state->instr; (void) prev_instr;
-  
+
   Instr *next_instr = (Instr*) ((char*) instr + instr->size);
   instr->fn(state, info);
   if (UNLIKELY(state->runstate != VM_RUNNING)) return (FnWrap) { vm_halt };
@@ -791,7 +788,7 @@ static FnWrap vm_instr_br(VMState *state) {
     #include "vm/instrs/test.h"
   #undef TARGET_KIND
   #undef FN_NAME
-  
+
   #define TARGET_KIND ARG_REFSLOT
   #define FN_NAME vm_instr_test_vr_tr
     #include "vm/instrs/test.h"
@@ -906,7 +903,7 @@ static FnWrap vm_instr_phi(VMState *state) {
     set_arg(state, phi->target, load_arg(state->frame, phi->arg2));
   } else VM_ASSERT2(false, "phi block error: arrived here from block not in list: [%i, %i], but came from %i",
                     phi->block1, phi->block2, state->frame->prev_block);
-  
+
   state->instr = (Instr*)(phi + 1);
   STEP_VM;
 }
@@ -914,17 +911,17 @@ static FnWrap vm_instr_phi(VMState *state) {
 static FnWrap vm_instr_define_refslot(VMState *state) FAST_FN;
 static FnWrap vm_instr_define_refslot(VMState *state) {
   DefineRefslotInstr * __restrict__ dri = (DefineRefslotInstr*) state->instr;
-  
+
   Refslot target_refslot = dri->target_refslot;
   Slot obj_slot = dri->obj_slot;
-  
+
   Object *obj = OBJ_OR_NULL(read_slot(state->frame, obj_slot));
   VM_ASSERT2(obj, "cannot define refslot for null or primitive obj");
-  
+
   TableEntry *entry = table_lookup_prepared(&obj->tbl, &dri->key);
   VM_ASSERT2(entry, "key not in object");
   *get_refslot_ref(state->frame, target_refslot) = entry;
-  
+
   state->instr = (Instr*)(dri + 1);
   STEP_VM;
 }
@@ -932,9 +929,9 @@ static FnWrap vm_instr_define_refslot(VMState *state) {
 static FnWrap vm_instr_move(VMState *state) FAST_FN;
 static FnWrap vm_instr_move(VMState *state) {
   MoveInstr * __restrict__ mi = (MoveInstr*) state->instr;
-  
+
   set_arg(state, mi->target, load_arg(state->frame, mi->source));
-  
+
   state->instr = (Instr*)(mi + 1);
   STEP_VM;
 }
@@ -946,9 +943,9 @@ void vm_update_frame(VMState *state) {
 static void vm_step(VMState *state) {
   state->instr = state->frame->instr_ptr;
   assert(!state->frame->uf || state->frame->uf->resolved);
-  
+
   VMInstrFn fn = state->instr->fn;
-  
+
   // fuzz to prevent profiler aliasing
   int limit = 128 + (state->shared->cyclecount % 64);
   int i;
@@ -969,7 +966,7 @@ static void vm_step(VMState *state) {
     fn = fn(state).self;
   }
   state->shared->cyclecount += i * 9;
-  
+
   if (state->frame) vm_update_frame(state);
   if (state->shared->settings.profiling_enabled) {
     vm_maybe_record_profile(state);
@@ -1090,8 +1087,8 @@ void vm_resolve(UserFunction *uf) {
     while (instr_cur != instr_end) {
       switch (instr_cur->type) {
 #define CASE(KEY, TY) } break; case KEY: { TY *instr = (TY*) instr_cur; (void) instr;
-#define CHKSLOT_READ(S) resolve_slot_ref(uf, &S)
-#define CHKSLOT_WRITE(S) resolve_slot_ref(uf, &S)
+#define CHKSLOT_READ_RW(S) resolve_slot_ref(uf, &S)
+#define CHKSLOT_WRITE_RW(S) resolve_slot_ref(uf, &S)
 #define CHKSLOT_REF(S) resolve_refslot_ref(uf, &S)
         case INSTR_INVALID: { abort();
 #include "vm/slots.txt"

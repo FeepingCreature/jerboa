@@ -63,7 +63,7 @@ typedef enum {
   // object is allocated, some fields are defined, object is closed, and refslots are created for its fields
   // this is a very common pattern due to scopes
   INSTR_ALLOC_STATIC_OBJECT,
-  
+
   INSTR_LAST
 } InstrType;
 
@@ -104,7 +104,7 @@ struct _Object {
 #if COUNT_OBJECTS
   int alloc_id;
 #endif
-  
+
   HashTable tbl;
   void (*mark_fn)(VMState *state, Object *obj); // for gc
   void (*free_fn)(Object *obj); // for gc
@@ -267,7 +267,7 @@ typedef enum {
 
 typedef struct {
   struct timespec last_prof_time;
-  
+
   // table position -> count
   HashTable excl_table;
   // table position -> table position -> count
@@ -293,13 +293,13 @@ struct _GCRootSet {
 
 typedef struct {
   GCRootSet head, tail; // always empty; using values to anchor lets us avoid branches in gc functions
-  
+
   Object *last_obj_allocated;
   int bytes_allocated, next_gc_run;
 #if COUNT_OBJECTS
   int num_obj_allocated_total;
 #endif
-  
+
   int disabledness;
   bool missed_gc; // tried to run gc when it was disabled
 } GCState;
@@ -315,13 +315,13 @@ typedef struct {
   ValueCache vcache;
   Settings settings;
   int cyclecount;
-  
+
   // backing storage for stack allocations
   // cannot be moved after the fact!
   // stored in shared_state because sub-vms stick to callstack order
   void *stack_data_ptr; int stack_data_len;
   int stack_data_offset;
-  
+
   bool verbose;
 } VMSharedState;
 
@@ -355,8 +355,6 @@ typedef struct {
     struct {
       VMInstrFn fn; // cache
       InstrType type;
-      Slot context_slot; // this is actually important - it keeps the stackframe
-                        // alive in the optimizer (CAREFUL when removing)
     };
   };
 } Instr;
@@ -392,6 +390,7 @@ typedef struct {
 
 void free_function(UserFunction *uf);
 
+// refslots used to be "just past" the callframe, but that was stupid; now it's slots, then refslots
 struct _Callframe {
   UserFunction *uf;
   GCRootSet frameroot_slots; // gc entries
@@ -460,7 +459,7 @@ static inline int slot_offset(Slot s) {
 static inline int slot_index_rt(UserFunction *uf, Slot s) {
   assert(uf->resolved == s.is_resolved);
   if (!uf->resolved) return s.index;
-  int byte_offs = s.offset - sizeof(Callframe) - sizeof(TableEntry*) * uf->refslots;
+  int byte_offs = s.offset - sizeof(Callframe);
   assert(byte_offs % sizeof(Value) == 0);
   assert(byte_offs >= 0);
   assert(byte_offs < sizeof(Value) * uf->slots);
@@ -470,7 +469,7 @@ static inline int slot_index_rt(UserFunction *uf, Slot s) {
 static inline int refslot_index_rt(UserFunction *uf, Refslot rs) {
   assert(uf->resolved == rs.is_resolved);
   if (!uf->resolved) return rs.index;
-  int byte_offs = rs.offset - sizeof(Callframe);
+  int byte_offs = rs.offset - sizeof(Callframe) - sizeof(Value) * uf->slots;
   assert(byte_offs % sizeof(TableEntry*) == 0);
   assert(byte_offs >= 0);
   assert(byte_offs < sizeof(TableEntry*) * uf->refslots);
@@ -478,7 +477,7 @@ static inline int refslot_index_rt(UserFunction *uf, Refslot rs) {
 }
 
 static inline int slot_to_offset(UserFunction *uf, Slot sl) {
-  return sizeof(Callframe) + sizeof(TableEntry*) * uf->refslots + sizeof(Value) * slot_index(sl);
+  return sizeof(Callframe) + sizeof(Value) * slot_index(sl);
 }
 
 static inline void resolve_slot_ref(UserFunction *uf, Slot *sl) {
@@ -491,12 +490,17 @@ static inline void resolve_slot_ref(UserFunction *uf, Slot *sl) {
 }
 
 static inline void resolve_refslot_ref(UserFunction *uf, Refslot *rs) {
-  rs->offset = sizeof(struct _Callframe) + sizeof(TableEntry*) * rs->index;
+  rs->offset = sizeof(struct _Callframe) + sizeof(Value) * uf->slots + sizeof(TableEntry*) * rs->index;
   assert(!rs->is_resolved);
   assert(rs->index >= 0 && rs->index < uf->refslots);
 #ifndef NDEBUG
   rs->is_resolved = true;
 #endif
 }
+
+#define _STR(X) #X
+#define STR(X) _STR(X)
+
+Slot find_refslot_slot(UserFunction *uf, Refslot refslot);
 
 #endif

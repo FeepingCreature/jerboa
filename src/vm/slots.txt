@@ -4,77 +4,87 @@
 #define DEFINED_CHKSLOT_REF
 #endif
 
+#ifndef CHKSLOT_READ
+#define CHKSLOT_READ(S) do { } while (false)
+#define DEFINED_CHKSLOT_READ
+#endif
+
+#ifndef CHKSLOT_READ_RW
+#define CHKSLOT_READ_RW(S) do { } while (false)
+#define DEFINED_CHKSLOT_READ_RW
+#endif
+
+#ifndef CHKSLOT_WRITE
+#define CHKSLOT_WRITE(S) do { } while (false)
+#define DEFINED_CHKSLOT_WRITE
+#endif
+
+#ifndef CHKSLOT_WRITE_RW
+#define CHKSLOT_WRITE_RW(S) do { } while (false)
+#define DEFINED_CHKSLOT_WRITE_RW
+#endif
+
+#define CHKSLOT_READ_BOTH(S) do { CHKSLOT_READ_RW(S); CHKSLOT_READ(S); } while (false)
+#define CHKSLOT_WRITE_BOTH(S) do { CHKSLOT_WRITE_RW(S); CHKSLOT_WRITE(S); } while (false)
+
 #define READ_SLOT(X) \
-  if ((X).kind == ARG_SLOT) { CHKSLOT_READ((X).slot); } \
-  else if ((X).kind == ARG_REFSLOT) { CHKSLOT_REF((X).refslot); }
+  if ((X).kind == ARG_SLOT) { CHKSLOT_READ_BOTH((X).slot); } \
+  else if ((X).kind == ARG_REFSLOT) { CHKSLOT_REF((X).refslot); CHKSLOT_READ(find_refslot_slot(uf, (X).refslot)); }
 
 #define WRITE_SLOT(X) \
-  if ((X).kind == ARG_SLOT) { CHKSLOT_WRITE((X).slot); } \
-  else if ((X).kind == ARG_REFSLOT) { CHKSLOT_REF((X).refslot); }
+  if ((X).kind == ARG_SLOT) { CHKSLOT_WRITE_BOTH((X).slot); } \
+  else if ((X).kind == ARG_REFSLOT) { CHKSLOT_REF((X).refslot); CHKSLOT_READ(find_refslot_slot(uf, (X).refslot)); }
 
 CASE(INSTR_ALLOC_OBJECT, AllocObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot); CHKSLOT_READ(instr->parent_slot); CHKSLOT_WRITE(instr->target_slot);
+  CHKSLOT_READ_BOTH(instr->parent_slot); CHKSLOT_WRITE_BOTH(instr->target_slot);
 CASE(INSTR_ALLOC_INT_OBJECT, AllocIntObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ALLOC_BOOL_OBJECT, AllocBoolObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ALLOC_FLOAT_OBJECT, AllocFloatObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ALLOC_ARRAY_OBJECT, AllocArrayObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ALLOC_STRING_OBJECT, AllocStringObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ALLOC_CLOSURE_OBJECT, AllocClosureObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
+  CHKSLOT_READ_BOTH(instr->context_slot);
   WRITE_SLOT(instr->target);
 CASE(INSTR_FREE_OBJECT, FreeObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot); CHKSLOT_READ(instr->obj_slot);
+  CHKSLOT_READ_BOTH(instr->obj_slot);
 CASE(INSTR_CLOSE_OBJECT, CloseObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot); CHKSLOT_READ(instr->slot);
+  CHKSLOT_READ_BOTH(instr->slot);
 CASE(INSTR_FREEZE_OBJECT, FreezeObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot); CHKSLOT_READ(instr->slot);
+  CHKSLOT_READ_BOTH(instr->slot);
 CASE(INSTR_ACCESS, AccessInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj);
   READ_SLOT(instr->key);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ASSIGN, AssignInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj);
   READ_SLOT(instr->key);
   READ_SLOT(instr->value);
-  CHKSLOT_WRITE(instr->target_slot);
+  CHKSLOT_WRITE_BOTH(instr->target_slot);
 CASE(INSTR_KEY_IN_OBJ, KeyInObjInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->key);
   READ_SLOT(instr->obj);
   WRITE_SLOT(instr->target);
 CASE(INSTR_IDENTICAL, IdenticalInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj1);
   READ_SLOT(instr->obj2);
   WRITE_SLOT(instr->target);
 CASE(INSTR_INSTANCEOF, InstanceofInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj);
   READ_SLOT(instr->proto);
   WRITE_SLOT(instr->target);
 CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj);
   READ_SLOT(instr->key);
   READ_SLOT(instr->constraint);
 CASE(INSTR_TEST, TestInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->value);
   WRITE_SLOT(instr->target);
 CASE(INSTR_CALL, CallInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->info.fn);
   READ_SLOT(instr->info.this_arg);
   for (int k = 0; k < instr->info.args_len; ++k) {
@@ -83,7 +93,6 @@ CASE(INSTR_CALL, CallInstr)
   }
   WRITE_SLOT(instr->info.target);
 CASE(INSTR_CALL_FUNCTION_DIRECT, CallFunctionDirectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->info.fn);
   READ_SLOT(instr->info.this_arg);
   for (int k = 0; k < instr->info.args_len; ++k) {
@@ -92,53 +101,65 @@ CASE(INSTR_CALL_FUNCTION_DIRECT, CallFunctionDirectInstr)
   }
   WRITE_SLOT(instr->info.target);
 CASE(INSTR_RETURN, ReturnInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->ret);
 CASE(INSTR_BR, BranchInstr)
-  CHKSLOT_READ(instr->base.context_slot);
 CASE(INSTR_TESTBR, TestBranchInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->test);
 CASE(INSTR_PHI, PhiInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->arg1);
   READ_SLOT(instr->arg2);
   WRITE_SLOT(instr->target);
 
 CASE(INSTR_ACCESS_STRING_KEY, AccessStringKeyInstr)
-  CHKSLOT_READ(instr->base.context_slot);
-  CHKSLOT_WRITE(instr->key_slot); /* scratch space for calls */
+  CHKSLOT_WRITE_BOTH(instr->key_slot); /* scratch space for calls */
   READ_SLOT(instr->obj);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ASSIGN_STRING_KEY, AssignStringKeyInstr)
-  CHKSLOT_READ(instr->base.context_slot);
-  CHKSLOT_WRITE(instr->target_slot);
+  CHKSLOT_WRITE_BOTH(instr->target_slot);
   READ_SLOT(instr->obj);
   READ_SLOT(instr->value);
 CASE(INSTR_STRING_KEY_IN_OBJ, StringKeyInObjInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj);
   WRITE_SLOT(instr->target);
 CASE(INSTR_SET_CONSTRAINT_STRING_KEY, SetConstraintStringKeyInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->obj);
   READ_SLOT(instr->constraint);
 CASE(INSTR_DEFINE_REFSLOT, DefineRefslotInstr)
-  CHKSLOT_READ(instr->base.context_slot);
-  CHKSLOT_READ(instr->obj_slot);
+  CHKSLOT_READ_BOTH(instr->obj_slot);
   CHKSLOT_REF(instr->target_refslot);
 CASE(INSTR_MOVE, MoveInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   READ_SLOT(instr->source);
   WRITE_SLOT(instr->target);
 CASE(INSTR_ALLOC_STATIC_OBJECT, AllocStaticObjectInstr)
-  CHKSLOT_READ(instr->base.context_slot);
   for (int k = 0; k < instr->tbl.entries_stored; ++k) {
-    CHKSLOT_READ(ASOI_INFO(instr)[k].slot);
+    CHKSLOT_READ_BOTH(ASOI_INFO(instr)[k].slot);
     CHKSLOT_REF(ASOI_INFO(instr)[k].refslot);
   }
-  CHKSLOT_READ(instr->parent_slot);
-  CHKSLOT_WRITE(instr->target_slot);
+  CHKSLOT_READ_BOTH(instr->parent_slot);
+  CHKSLOT_WRITE_BOTH(instr->target_slot);
+
+#undef CHKSLOT_READ_BOTH
+#undef CHKSLOT_WRITE_BOTH
+
+#ifdef DEFINED_CHKSLOT_READ
+#undef DEFINED_CHKSLOT_READ
+#undef CHKSLOT_READ
+#endif
+
+#ifdef DEFINED_CHKSLOT_READ_RW
+#undef DEFINED_CHKSLOT_READ_RW
+#undef CHKSLOT_READ_RW
+#endif
+
+#ifdef DEFINED_CHKSLOT_WRITE
+#undef DEFINED_CHKSLOT_WRITE
+#undef CHKSLOT_WRITE
+#endif
+
+#ifdef DEFINED_CHKSLOT_WRITE_RW
+#undef DEFINED_CHKSLOT_WRITE_RW
+#undef CHKSLOT_WRITE_RW
+#endif
 
 #ifdef DEFINED_CHKSLOT_REF
 #undef DEFINED_CHKSLOT_REF
