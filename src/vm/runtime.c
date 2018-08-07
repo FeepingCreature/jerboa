@@ -38,7 +38,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(args_array, "argument to apply() must be array!");
   int len = args_array->length;
   Value fn_value = load_arg(state->frame, info->this_arg);
-  
+
   setup_stub_frame(state, len);
   state->frame->target = info->target;
   for (int i = 0; i < len; ++i) {
@@ -50,7 +50,7 @@ static void fn_apply_fn(VMState *state, CallInfo *info) {
 #endif
     write_slot(state->frame, writeslot, args_array->ptr[i]);
   }
-  
+
   CallInfo *info2 = alloca(sizeof(CallInfo) + sizeof(Arg) * len);
   info2->args_len = len;
   info2->this_arg = (Arg) { .kind = ARG_VALUE, .value = this_value };
@@ -90,9 +90,9 @@ static void fn_call_fn(VMState *state, CallInfo *info) {
 
 static void bool_eq_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  
+
   Value val1 = load_arg(state->frame, info->this_arg), val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  
+
   VM_ASSERT(IS_BOOL(val1), "internal error: bool compare function called on wrong type of object");
   VM_ASSERT(IS_BOOL(val2), "can't compare bool with this value");
   vm_return(state, info, BOOL2VAL(AS_BOOL(val1) == AS_BOOL(val2)));
@@ -111,12 +111,12 @@ typedef enum {
 static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) __attribute__ ((always_inline));
 static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  
+
   Value this_val = load_arg(state->frame, info->this_arg);
   VM_ASSERT(IS_INT(this_val), "internal error: int math function called on wrong type of object"); // otherwise how are we called on it??
   Value val1 = load_arg(state->frame, info->this_arg);
   Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
-  
+
   if (LIKELY(IS_INT(val2))) { // int math mostly with int
     int i1 = AS_INT(val1), i2 = AS_INT(val2);
     int res;
@@ -139,7 +139,7 @@ static inline void int_math_fn(VMState *state, CallInfo *info, MathOp mop) {
     vm_return(state, info, INT2VAL(res));
     return;
   }
-  
+
   if (LIKELY(IS_FLOAT(val2))) {
     int i1 = AS_INT(val1); float v2 = AS_FLOAT(val2);
     float res;
@@ -197,7 +197,7 @@ static void int_bit_and_fn(VMState *state, CallInfo *info) {
 static void int_parse_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj, "parameter to int.parse() must be string!");
   char *text = sobj->value;
@@ -380,9 +380,9 @@ FnWrap float_op_fn_dispatch(Instr *instr, MathOp mop) {
   assert(instr->type == INSTR_CALL_FUNCTION_DIRECT);
   CallFunctionDirectInstr *cfdi = (CallFunctionDirectInstr*) instr;
   CallInfo *info = &cfdi->info;
-  
+
   if (info->args_len != 1) { abort(); }
-  
+
   if (cfdi->info.this_arg.kind == ARG_REFSLOT
     && INFO_ARGS_PTR(info)[0].kind == ARG_VALUE
     && cfdi->info.target.kind == ARG_SLOT
@@ -468,14 +468,14 @@ static void float_mod_fn(VMState *state, CallInfo *info) {
 
 static void string_add_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  
+
   Value val1 = load_arg(state->frame, info->this_arg);
   Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   Object
     *sobj1 = obj_instance_of(OBJ_OR_NULL(val1), state->shared->vcache.string_base),
     *sobj2 = obj_instance_of(OBJ_OR_NULL(val2), state->shared->vcache.string_base);
   VM_ASSERT(sobj1, "internal error: string concat function called on wrong type of object");
-  
+
   char *str1 = ((StringObject*) sobj1)->value, *str2;
   if (sobj2) str2 = my_asprintf("%s", ((StringObject*) sobj2)->value);
   else if (IS_FLOAT(val2)) str2 = my_asprintf("%f", AS_FLOAT(val2));
@@ -491,13 +491,13 @@ static void string_add_fn(VMState *state, CallInfo *info) {
 static void string_eq_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   Object
     *sobj1 = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base),
     *sobj2 = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj1, "internal error: string compare function called on wrong type of object");
   VM_ASSERT(sobj2, "can only compare strings with strings!");
-  
+
   char
     *str1 = ((StringObject*) sobj1)->value,
     *str2 = ((StringObject*) sobj2)->value;
@@ -508,13 +508,13 @@ static void string_eq_fn(VMState *state, CallInfo *info) {
 static void string_startswith_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   Object
     *sobj1 = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base),
     *sobj2 = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj1, "internal error: string.startsWith() called on wrong type of object");
   VM_ASSERT(sobj2, "string.startsWith() expects string as parameter");
-  
+
   char
     *str1 = ((StringObject*) sobj1)->value,
     *str2 = ((StringObject*) sobj2)->value;
@@ -533,13 +533,13 @@ static void string_startswith_fn(VMState *state, CallInfo *info) {
 static void string_endswith_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   Object
     *sobj1 = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base),
     *sobj2 = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj1, "internal error: string.endsWith() called on wrong type of object");
   VM_ASSERT(sobj2, "string.endsWith() expects string as parameter");
-  
+
   char
     *str1 = ((StringObject*) sobj1)->value,
     *str2 = ((StringObject*) sobj2)->value;
@@ -558,10 +558,10 @@ static void string_endswith_fn(VMState *state, CallInfo *info) {
 static void string_slice_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
   VM_ASSERT(sobj, "internal error: string.slice() called on wrong type of object");
-  
+
   char *str = sobj->value;
   int len = utf8_strlen(str);
   int from = 0, to = len;
@@ -579,29 +579,29 @@ static void string_slice_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(from >= 0 && from <= len, "string.slice() start must lie inside string");
   VM_ASSERT(to >= 0 && to <= len, "string.slice() end must lie inside string");
   VM_ASSERT(from <= to, "string.slice() start must lie before end");
-  
+
   const char *start = str;
   const char *error = NULL;
   utf8_step(&start, from, &error);
   VM_ASSERT(!error, error); // lol
-  
+
   const char *end = start;
   error = NULL;
   utf8_step(&end, to - from, &error);
   VM_ASSERT(!error, error);
-  
+
   vm_return(state, info, make_string(state, start, end - start));
 }
 
 static void string_find_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
   VM_ASSERT(sobj, "internal error: string.find() called on wrong type of object");
   StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj2, "internal error: string.find() expects string");
-  
+
   char *str = sobj->value;
   int len = strlen(str);
   char *match = sobj2->value;
@@ -610,13 +610,13 @@ static void string_find_fn(VMState *state, CallInfo *info) {
     vm_return(state, info, INT2VAL(0));
     return;
   }
-  
+
   char *pos = memmem(str, len, match, matchlen);
   if (pos == NULL) {
     vm_return(state, info, INT2VAL(-1));
     return;
   }
-  
+
   int pos_utf8 = utf8_strnlen(str, pos - str);
   vm_return(state, info, INT2VAL(pos_utf8));
 }
@@ -624,12 +624,12 @@ static void string_find_fn(VMState *state, CallInfo *info) {
 static void string_split_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1 || info->args_len == 2, "wrong arity: expected 1 or 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
   VM_ASSERT(sobj, "internal error: string.split() called on wrong type of object");
   StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj2, "string.split() expects string as first parameter");
-  
+
   int max_splits = INT_MAX;
   if (info->args_len == 2) {
     Value par2 = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
@@ -637,15 +637,15 @@ static void string_split_fn(VMState *state, CallInfo *info) {
     max_splits = AS_INT(par2);
     VM_ASSERT(max_splits >= 1, "string.split() must be allowed to return at least one entry");
   }
-  
+
   char *str = sobj->value;
   int len = strlen(str);
   char *match = sobj2->value;
   int matchlen = strlen(match);
-  
+
   Value *entries_ptr = NULL;
   int entries_len = 0;
-  
+
   if (matchlen == 0) {
     const char *cur = str;
     while (cur != str + len && entries_len < max_splits - 1) {
@@ -654,7 +654,7 @@ static void string_split_fn(VMState *state, CallInfo *info) {
       // TODO this is not safe if the string is invalid utf8
       utf8_step(&cur, 1, &error);
       VM_ASSERT(!error, error); // lol
-      
+
       entries_ptr = realloc(entries_ptr, sizeof(Value) * ++entries_len);
       entries_ptr[entries_len - 1] = make_string(state, prev, cur - prev);
     }
@@ -665,7 +665,7 @@ static void string_split_fn(VMState *state, CallInfo *info) {
     vm_return(state, info, make_array(state, entries_ptr, entries_len, true));
     return;
   }
-  
+
   while (entries_len < max_splits - 1) {
     char *pos = memmem(str, len, match, matchlen);
     if (pos == NULL) {
@@ -690,14 +690,14 @@ static void string_split_fn(VMState *state, CallInfo *info) {
 static void string_replace_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *sobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
   VM_ASSERT(sobj, "internal error: string.replace() called on wrong type of object");
   StringObject *sobj2 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(sobj2, "internal error: string.replace() expects string as first arg");
   StringObject *sobj3 = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), string_base);
   VM_ASSERT(sobj3, "internal error: string.replace() expects string as second arg");
-  
+
   char *str = sobj->value;
   int len = strlen(str);
   char *match = sobj2->value;
@@ -708,7 +708,7 @@ static void string_replace_fn(VMState *state, CallInfo *info) {
     vm_return(state, info, OBJ2VAL((Object*)sobj));
     return;
   }
-  
+
   char *res = NULL;
   int reslen = 0;
   while (true) {
@@ -733,10 +733,10 @@ static void string_replace_fn(VMState *state, CallInfo *info) {
 static void string_byte_len_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   Object *sobj = obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), string_base);
   VM_ASSERT(sobj, "internal error: string.byte_len() called on wrong type of object");
-  
+
   char *str = ((StringObject*) sobj)->value;
   vm_return(state, info, INT2VAL(strlen(str)));
 }
@@ -813,16 +813,16 @@ FnWrap int_eq_fn_dispatch(Instr *instr) {
 static inline void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) __attribute__ ((always_inline));
 static inline void float_cmp_fn(VMState *state, CallInfo *info, CompareOp cmp) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  
+
   Value val1 = load_arg(state->frame, info->this_arg);
   Value val2 = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_FLOAT(val1), "internal error: float compare function called on wrong type of object");
-  
+
   float v1 = AS_FLOAT(val1), v2;
   if (IS_FLOAT(val2)) v2 = AS_FLOAT(val2);
   else if (LIKELY(IS_INT(val2))) v2 = AS_INT(val2);
   else { vm_error(state, "don't know how to compare float with %s", get_type_info(state, val2)); return; }
-  
+
   bool res;
   switch (cmp) {
     case CMP_EQ: res = v1 == v2; break;
@@ -931,16 +931,16 @@ static void array_iterator_next_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 0, "wrong arity: expected 0, got %i", info->args_len);
   Object *this_obj = OBJ_OR_NULL(load_arg(state->frame, info->this_arg));
   VM_ASSERT(this_obj, "internal error");
-  
+
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(OBJECT_LOOKUP(this_obj, array)), array_base);
   VM_ASSERT(arr_obj, "internal error");
-  
+
   Value index_val = OBJECT_LOOKUP(this_obj, index);
   VM_ASSERT(IS_INT(index_val), "internal error");
-  
+
   Object *iter_obj = AS_OBJ(make_object(state, NULL, false));
-  
+
   int index = AS_INT(index_val);
   if (index >= arr_obj->length) {
     OBJECT_SET(state, iter_obj, done, BOOL2VAL(true));
@@ -950,7 +950,7 @@ static void array_iterator_next_fn(VMState *state, CallInfo *info) {
     OBJECT_SET(state, iter_obj, value, arr_obj->ptr[AS_INT(index_val)]);
   }
   OBJECT_SET(state, this_obj, index, INT2VAL(index + 1));
-  
+
   vm_return(state, info, OBJ2VAL(iter_obj));
 }
 
@@ -963,7 +963,7 @@ static void array_iterator_fn(VMState *state, CallInfo *info) {
   OBJECT_SET(state, iterator, array, OBJ2VAL((Object*) arr_obj));
   OBJECT_SET(state, iterator, index, INT2VAL(0));
   OBJECT_SET(state, iterator, next, make_fn(state, array_iterator_next_fn));
-  
+
   vm_return(state, info, OBJ2VAL(iterator));
 }
 
@@ -1013,7 +1013,7 @@ static void array_compare_fn(VMState *state, CallInfo *info) {
       else if (val1.type == TYPE_OBJECT) {
         VMState substate;
         vm_setup_substate_of(&substate, state);
-        
+
         Object *cmp_fn = OBJ_OR_NULL(OBJECT_LOOKUP(AS_OBJ(val1), __equals));
         if (!cmp_fn) {
           res = val1.obj == val2.obj;
@@ -1023,11 +1023,13 @@ static void array_compare_fn(VMState *state, CallInfo *info) {
           info->fn = (Arg) { .kind = ARG_VALUE, .value = OBJ2VAL(cmp_fn) };
           info->target = (WriteArg) { .kind = ARG_POINTER, .pointer = &equal };
           info->this_arg = (Arg) { .kind = ARG_VALUE, .value = val1 };
+          info->args_len = 1;
           INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = val2 };
-          
-          if (!setup_call(&substate, info, NULL)) return; // errored
-          vm_update_frame(&substate);
-          vm_run(&substate);
+
+          if (setup_call(&substate, info, NULL)) {
+            vm_update_frame(&substate);
+            vm_run(&substate);
+          }
           VM_ASSERT(substate.runstate != VM_ERRORED, "'==' overload failed: %s\n", substate.error);
           res = value_is_truthy(equal);
         }
@@ -1049,12 +1051,12 @@ static void array_splice_fn(VMState *state, CallInfo *info) {
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
   VM_ASSERT(arr_obj, "internal error: array 'splice()' called on object that is not an array");
   int len = arr_obj->length;
-  
+
   Value start_val = load_arg(state->frame, INFO_ARGS_PTR(info)[0]);
   VM_ASSERT(IS_INT(start_val), "array 'splice()' called with non-int");
   int start = AS_INT(start_val);
   VM_ASSERT(start >= 0 && start <= len, "start out of bounds");
-  
+
   int deleteCount = len - start;
   if (info->args_len > 1) {
     Value deleteCount_val = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
@@ -1063,13 +1065,13 @@ static void array_splice_fn(VMState *state, CallInfo *info) {
   }
   VM_ASSERT(deleteCount >= 0, "deleteCount out of bounds");
   if (start + deleteCount > len) deleteCount = len - start;
-  
+
   int new_items = info->args_len - 2;
   new_items = (new_items >= 0) ? new_items : 0;
-  
+
   int newlen = len - deleteCount + new_items;
   int kept_right_items = len - start - deleteCount;
-  
+
   if (new_items > deleteCount) {
     array_resize(state, arr_obj, newlen, true);
     // shift up
@@ -1097,7 +1099,7 @@ static void array_dup_fn(VMState *state, CallInfo *info) {
   Object *array_base = state->shared->vcache.array_base;
   ArrayObject *arr_obj = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), array_base);
   VM_ASSERT(arr_obj, "internal error: array 'splice()' called on object that is not an array");
-  
+
   ArrayObject *new_arr = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   array_resize(state, new_arr, arr_obj->length, true);
   if (arr_obj->length) memcpy(new_arr->ptr, arr_obj->ptr, sizeof(Value) * arr_obj->length);
@@ -1112,7 +1114,7 @@ static void array_join_fn(VMState *state, CallInfo *info) {
   StringObject *str_arg = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(arr_obj, "internal error: 'join' called on object that is not an array");
   VM_ASSERT(str_arg, "argument to array.join() must be string");
-  
+
   int joiner_len = strlen(str_arg->value);
   int res_len = 0;
   int *lens = alloca(sizeof(int) * arr_obj->length);
@@ -1149,7 +1151,7 @@ static void file_print_fn(VMState *state, CallInfo *info) {
   Object *pointer_base = state->shared->vcache.pointer_base;
   Object *file_base = AS_OBJ(OBJECT_LOOKUP(state->root, file));
   assert(file_base);
-  
+
   VM_ASSERT(obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)), file_base), "print() called on object that is not a file");
   Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP(AS_OBJ(load_arg(state->frame, info->this_arg)), _handle));
   VM_ASSERT(hdl_obj, "missing _handle!");
@@ -1170,11 +1172,11 @@ static void file_exists_fn(VMState *state, CallInfo *info) {
   Object *file_base = AS_OBJ(OBJECT_LOOKUP(state->root, file));
   Object *string_base = state->shared->vcache.string_base;
   assert(file_base);
-  
+
   VM_ASSERT(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)) == file_base, "exists() called on object other than file!");
   StringObject *fnobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(fnobj, "first parameter to file.exists() must be string!");
-  
+
   bool validfile = access(fnobj->value, F_OK) != -1;
   vm_return(state, info, BOOL2VAL(validfile));
 }
@@ -1184,13 +1186,13 @@ static void file_open_fn(VMState *state, CallInfo *info) {
   Object *file_base = AS_OBJ(OBJECT_LOOKUP(state->root, file));
   Object *string_base = state->shared->vcache.string_base;
   assert(file_base);
-  
+
   VM_ASSERT(OBJ_OR_NULL(load_arg(state->frame, info->this_arg)) == file_base, "open() called on object other than file!");
   StringObject *fnobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(fnobj, "first parameter to file.open() must be string!");
   StringObject *fmobj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[1])), string_base);
   VM_ASSERT(fmobj, "second parameter to file.open() must be string!");
-  
+
   FILE *fh = fopen(fnobj->value, fmobj->value);
   if (fh == NULL) {
     VM_ASSERT(false, "file could not be opened: '%s' as '%s': %s", fnobj->value, fmobj->value, strerror(errno));
@@ -1206,7 +1208,7 @@ static void file_close_fn(VMState *state, CallInfo *info) {
   Object *file_base = AS_OBJ(OBJECT_LOOKUP(state->root, file));
   Object *pointer_base = state->shared->vcache.pointer_base;
   assert(file_base);
-  
+
   VM_ASSERT(obj_instance_of(OBJ_OR_NULL(this_val), file_base), "close() called on object that is not a file!");
   Object *hdl_obj = AS_OBJ(OBJECT_LOOKUP(AS_OBJ(this_val), _handle));
   VM_ASSERT(hdl_obj, "missing _handle!");
@@ -1215,7 +1217,7 @@ static void file_close_fn(VMState *state, CallInfo *info) {
   FILE *file = hdl_ptrobj->ptr;
   fclose(file);
   OBJECT_SET(state, AS_OBJ(this_val), _handle, VNULL);
-  
+
   vm_return(state, info, VNULL);
 }
 
@@ -1298,22 +1300,22 @@ static void xml_load_fn(VMState *state, CallInfo *info) {
   Object *xml_base = AS_OBJ(OBJECT_LOOKUP(root, xml));
   Object *text_node_base = AS_OBJ(OBJECT_LOOKUP(xml_base, text_node));
   Object *element_node_base = AS_OBJ(OBJECT_LOOKUP(xml_base, element_node));
-  
+
   StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(str_obj, "parameter to xml.load must be string");
   char *file = str_obj->value;
-  
+
   LIBXML_TEST_VERSION
-  
+
   xmlDoc *doc = xmlReadFile(file, NULL, 0);
   VM_ASSERT(doc != NULL, "cannot read xml file");
-  
+
   xmlNode *root_element = xmlDocGetRootElement(doc);
-  
+
   gc_disable(state);
   vm_return(state, info, OBJ2VAL(xml_to_object(state, NULL, root_element, text_node_base, element_node_base)));
   gc_enable(state);
-  
+
   xmlFreeDoc(doc);
   xmlCleanupParser();
 }
@@ -1325,22 +1327,22 @@ static void xml_parse_fn(VMState *state, CallInfo *info) {
   Object *xml_base = AS_OBJ(OBJECT_LOOKUP(root, xml));
   Object *text_node_base = AS_OBJ(OBJECT_LOOKUP(xml_base, text_node));
   Object *element_node_base = AS_OBJ(OBJECT_LOOKUP(xml_base, element_node));
-  
+
   StringObject *str_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(str_obj, "parameter to xml.parse must be string");
   char *text = str_obj->value;
-  
+
   LIBXML_TEST_VERSION
-  
+
   xmlDoc *doc = xmlReadMemory(text, strlen(text), NULL, NULL, 0);
   VM_ASSERT(doc != NULL, "failed to parse XML string");
-  
+
   xmlNode *root_element = xmlDocGetRootElement(doc);
-  
+
   gc_disable(state);
   vm_return(state, info, OBJ2VAL(xml_to_object(state, NULL, root_element, text_node_base, element_node_base)));
   gc_enable(state);
-  
+
   xmlFreeDoc(doc);
   xmlCleanupParser();
 }
@@ -1352,24 +1354,24 @@ static bool xml_node_check_pred(VMState *state, Value node, Value pred)
   substate.parent = state;
   substate.root = state->root;
   substate.shared = state->shared;
-  
+
   Value res;
-  
+
   CallInfo *info = alloca(sizeof(CallInfo) + sizeof(Arg));
   info->args_len = 1;
   info->fn = (Arg) { .kind = ARG_VALUE, .value = pred };
   info->this_arg = (Arg) { .kind = ARG_VALUE, .value = VNULL };
   info->target = (WriteArg) { .kind = ARG_POINTER, .pointer = &res };
   INFO_ARGS_PTR(info)[0] = (Arg) { .kind = ARG_VALUE, .value = node };
-  
+
   if (!setup_call(&substate, info, NULL)) {
     VM_ASSERT(false, "pred check failure: %s\n", substate.error) false;
   }
-  
+
   vm_update_frame(&substate);
   vm_run(&substate);
   VM_ASSERT(substate.runstate != VM_ERRORED, "pred check failure: %s\n", substate.error) false;
-  
+
   return value_is_truthy(res);
 }
 
@@ -1382,7 +1384,7 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayO
     array_resize(state, aobj, aobj->length + 1, false);
     aobj->ptr[aobj->length - 1] = node;
   }
-  
+
   if (obj_instance_of(closest_obj(state, node), element_node_obj)) {
     Object *children_obj = AS_OBJ(OBJECT_LOOKUP(closest_obj(state, node), children));
     VM_ASSERT(children_obj, "missing 'children' property in node");
@@ -1398,7 +1400,7 @@ static void xml_node_find_recurse(VMState *state, Value node, Value pred, ArrayO
 
 static void xml_node_find_array_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
-  
+
   ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   Object *xml_base = AS_OBJ(OBJECT_LOOKUP(state->root, xml));
   Object *elembase = AS_OBJ(OBJECT_LOOKUP(xml_base, element_node));
@@ -1418,9 +1420,9 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
   VM_ASSERT(IS_INT(node_type), "invalid xml node");
   if (AS_INT(node_type) == 3) return; // text
   VM_ASSERT(AS_INT(node_type), "node is not element");
-  
+
   Value node_name = OBJECT_LOOKUP(node_obj, nodeName);
-  
+
   VM_ASSERT(NOT_NULL(node_name), "missing 'nodeName' property in node");
   StringObject *nodeName_str = (StringObject*) obj_instance_of(OBJ_OR_NULL(node_name), string_base);
   VM_ASSERT(nodeName_str, "'nodeName' must be string");
@@ -1428,7 +1430,7 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
     array_resize(state, aobj, aobj->length + 1, false);
     aobj->ptr[aobj->length - 1] = node;
   }
-  
+
   Value children = OBJECT_LOOKUP(node_obj, children);
   VM_ASSERT(NOT_NULL(children), "missing 'children' property in node");
   ArrayObject *children_arr = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(children), array_base);
@@ -1443,10 +1445,10 @@ static void xml_node_find_by_name_recurse(VMState *state, Value node, char *name
 static void xml_node_find_by_name_array_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *name_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(name_obj, "parameter to find_array_by_name must be string!");
-  
+
   ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   gc_disable(state);
   xml_node_find_by_name_recurse(state, load_arg(state->frame, info->this_arg), name_obj->value, aobj);
@@ -1473,10 +1475,10 @@ static void xml_node_find_by_attr_recurse(VMState *state, Value node, char *attr
   VM_ASSERT(IS_INT(node_type), "invalid xml node");
   if (AS_INT(node_type) == 3) return; // text
   VM_ASSERT(AS_INT(node_type), "node is not element");
-  
+
   Object *attr_obj = closest_obj(state, OBJECT_LOOKUP(node_obj, attr));
   VM_ASSERT(attr_obj, "attr property must not be null");
-  
+
   bool entry_found = false;
   FastKey attr_key = prepare_key(attr, strlen(attr));
   Value attr_entry = object_lookup_p(attr_obj, &attr_key, &entry_found);
@@ -1485,7 +1487,7 @@ static void xml_node_find_by_attr_recurse(VMState *state, Value node, char *attr
     array_resize(state, aobj, aobj->length + 1, false);
     aobj->ptr[aobj->length - 1] = node;
   }
-  
+
   Value children = OBJECT_LOOKUP(node_obj, children);
   VM_ASSERT(NOT_NULL(children), "missing 'children' property in node");
   ArrayObject *children_arr = (ArrayObject*) obj_instance_of(OBJ_OR_NULL(children), array_base);
@@ -1500,11 +1502,11 @@ static void xml_node_find_by_attr_recurse(VMState *state, Value node, char *attr
 static void xml_node_find_by_attr_array_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 2, "wrong arity: expected 2, got %i", info->args_len);
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *key_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(key_obj, "first parameter to find_array_by_attr must be string!");
   Value cmp_value = load_arg(state->frame, INFO_ARGS_PTR(info)[1]);
-  
+
   ArrayObject *aobj = (ArrayObject*) AS_OBJ(make_array(state, NULL, 0, true));
   gc_disable(state);
   xml_node_find_by_attr_recurse(state, load_arg(state->frame, info->this_arg), key_obj->value, cmp_value, aobj);
@@ -1530,7 +1532,7 @@ static char *find_file_in_searchpath(VMState *state, char *filename, bool *found
   VM_ASSERT(searchpath, "search path must exist, internal error") NULL;
   Object *array_base = state->shared->vcache.array_base;
   Object *string_base = state->shared->vcache.string_base;
-  
+
   ArrayObject *searchpath_array = (ArrayObject*) obj_instance_of(searchpath, array_base);
   VM_ASSERT(searchpath_array, "search path must be array object, internal error") NULL;
   for (int i = 0; i < searchpath_array->length; i++) {
@@ -1551,16 +1553,16 @@ static void require_fn(VMState *state, CallInfo *info) {
   VM_ASSERT(info->args_len == 1, "wrong arity: expected 1, got %i", info->args_len);
   Object *root = state->root;
   Object *string_base = state->shared->vcache.string_base;
-  
+
   StringObject *file_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(file_obj, "parameter to require() must be string!");
-  
+
   char *filename = file_obj->value;
 	bool found_or_errored = true;
   filename = find_file_in_searchpath(state, filename, &found_or_errored);
 	VM_ASSERT(found_or_errored, "required file not found"); // only error here if we didn't error otherwise
   if (!filename) return; // one of the errors we already asserted
-  
+
   ModuleCache *cur_cache = mod_cache;
   while (cur_cache) {
     if (strcmp(cur_cache->filename, filename) == 0) {
@@ -1569,30 +1571,30 @@ static void require_fn(VMState *state, CallInfo *info) {
     }
     cur_cache = cur_cache->next;
   }
-  
+
   TextRange source = readfile(filename);
   register_file(source, my_asprintf("%s", filename) /* dup */, 0, 0);
-  
+
   UserFunction *module;
   char *text = source.start;
   ParseResult res = parse_module(&text, &module);
   VM_ASSERT(res == PARSE_OK, "require() parsing failed!");
   // dump_fn(module);
-  
+
   VMState substate = {0};
   substate.runstate = VM_TERMINATED;
   substate.parent = state;
   substate.root = state->root;
   substate.shared = state->shared;
-  
+
   Value resval;
-  
+
   CallInfo info2 = {{0}};
   info2.target = (WriteArg) { .kind = ARG_POINTER, .pointer = &resval };
   call_function(&substate, root, module, &info2);
   vm_update_frame(&substate);
   vm_run(&substate);
-  
+
   if (substate.runstate == VM_ERRORED) {
     state->runstate = VM_ERRORED;
     state->error = my_asprintf("Error during require('%s')\n%s", filename, substate.error);
@@ -1600,9 +1602,9 @@ static void require_fn(VMState *state, CallInfo *info) {
     free(substate.backtrace);
     return;
   }
-  
+
   free_function(module);
-  
+
   ModuleCache *new_mod_cache = malloc(sizeof(ModuleCache));
   *new_mod_cache = (ModuleCache) {
     .next = mod_cache,
@@ -1613,7 +1615,7 @@ static void require_fn(VMState *state, CallInfo *info) {
   // don't accidentally free the module in gc
   // TODO single root set for all cache?
   gc_add_roots(state, &mod_cache->importval, 1, &mod_cache->my_set);
-  
+
   vm_return(state, info, resval);
 }
 
@@ -1644,15 +1646,15 @@ static void mark_const_fn(VMState *state, CallInfo *info) {
   Object *string_base = state->shared->vcache.string_base;
   StringObject *key_obj = (StringObject*) obj_instance_of(OBJ_OR_NULL(load_arg(state->frame, INFO_ARGS_PTR(info)[0])), string_base);
   VM_ASSERT(key_obj, "argument to _mark_const must be string");
-  
+
   Value thisval = load_arg(state->frame, info->this_arg); // free functions are called on the local scope
-  
+
   FastKey key = prepare_key(key_obj->value, strlen(key_obj->value));
-  
+
   vm_return(state, info, VNULL);
-  
+
   Object *context = closest_obj(state, thisval);
-  
+
   Object *cur = context;
   while (cur) {
     TableEntry *entry = table_lookup_prepared(&cur->tbl, &key);
@@ -1851,7 +1853,7 @@ char *get_type_info(VMState *state, Value val) {
   if (obj == state->shared->vcache.array_base) return "array";
   if (obj == state->shared->vcache.string_base) return "string";
   if (obj == state->shared->vcache.pointer_base) return "pointer";
-  
+
   if (obj->parent) return get_type_info(state, OBJ2VAL(obj->parent));
   return "unknown";
 }
@@ -1879,11 +1881,11 @@ void setup_default_searchpath(VMState *state, Object *root) {
   // current path | $XDG_DATA_HOME/jerboa | $XDG_DATA_DIRS/jerboa
   int paths_len = 0;
   Value *paths_ptr = NULL;
-  
+
   char *cwd = get_current_dir_name();
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, cwd);
-  
+
 #ifdef _WIN32
   TCHAR ownPath[MAX_PATH];
   DWORD len = GetModuleFileName(NULL, ownPath, MAX_PATH);
@@ -1893,10 +1895,10 @@ void setup_default_searchpath(VMState *state, Object *root) {
   }
   ownPath[len] = 0;
   PathRemoveFileSpec(ownPath);
-  
+
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, my_asprintf("%s", ownPath));
-#else  
+#else
   char *readlink_buf = malloc(1024);
   int rl_res = readlink("/proc/self/exe", readlink_buf, 1023);
   if (rl_res == -1) {
@@ -1904,12 +1906,12 @@ void setup_default_searchpath(VMState *state, Object *root) {
     abort();
   }
   readlink_buf[rl_res] = 0;
-  
+
   char *share_dir = dir_sub(readlink_buf, "../share/jerboa");
   paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
   paths_ptr[paths_len - 1] = make_string_static(state, share_dir);
 #endif
-  
+
   char *xdg_home = getenv("XDG_DATA_HOME");
   if (xdg_home) xdg_home = dir_sub(xdg_home, "jerboa");
   else {
@@ -1922,39 +1924,39 @@ void setup_default_searchpath(VMState *state, Object *root) {
     paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
     paths_ptr[paths_len - 1] = make_string_static(state, xdg_home);
   }
-  
+
   char *xdg_dirs = getenv("XDG_DATA_DIRS");
   if (!xdg_dirs) xdg_dirs = "/usr/local/share/:/usr/share/";
-  
+
   while (xdg_dirs) {
     char *xdg_dir = slice(&xdg_dirs, ":");
     assert(xdg_dir);
     char *xdg_jerboa_dir = dir_sub(xdg_dir, "jerboa");
     free(xdg_dir);
-    
+
     paths_ptr = realloc(paths_ptr, sizeof(Value) * ++paths_len);
     paths_ptr[paths_len - 1] = make_string_static(state, xdg_jerboa_dir);
   }
-  
+
   OBJECT_SET(state, root, searchpath, make_array(state, paths_ptr, paths_len, true));
 }
 
 Object *create_root(VMState *state) {
   Object *root = AS_OBJ(make_object(state, NULL, false));
-  
+
   state->root = root;
-  
+
   GCRootSet pin_root;
   Value rootval = OBJ2VAL(root);
   gc_add_roots(state, &rootval, 1, &pin_root);
-  
+
   Object *function_obj = AS_OBJ(make_object(state, NULL, false));
   function_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, sysfun, OBJ2VAL(function_obj));
   state->shared->vcache.function_base = function_obj;
   OBJECT_SET(state, function_obj, apply, make_fn(state, fn_apply_fn));
   OBJECT_SET(state, function_obj, call, make_fn(state, fn_call_fn));
-  
+
   Object *int_obj = AS_OBJ(make_object(state, NULL, false));
   int_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, int, OBJ2VAL(int_obj));
@@ -1973,7 +1975,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, int_obj, parse, make_fn(state, int_parse_fn));
   state->shared->vcache.int_base = int_obj;
   int_obj->flags |= OBJ_FROZEN;
-  
+
   Object *float_obj = AS_OBJ(make_object(state, NULL, false));
   float_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, float, OBJ2VAL(float_obj));
@@ -1990,26 +1992,26 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, float_obj, toInt , make_fn(state, float_toint_fn));
   state->shared->vcache.float_base = float_obj;
   float_obj->flags |= OBJ_FROZEN;
-  
+
   Object *closure_obj = AS_OBJ(make_object(state, NULL, false));
   closure_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, function, OBJ2VAL(closure_obj));
   OBJECT_SET(state, closure_obj, apply, make_fn(state, fn_apply_fn));
   OBJECT_SET(state, closure_obj, call, make_fn(state, fn_call_fn));
   state->shared->vcache.closure_base = closure_obj;
-  
+
   Object *bool_obj = AS_OBJ(make_object(state, NULL, false));
   bool_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, bool, OBJ2VAL(bool_obj));
   OBJECT_SET(state, bool_obj, __equals, make_fn(state, bool_eq_fn));
   state->shared->vcache.bool_base = bool_obj;
   bool_obj->flags |= OBJ_FROZEN;
-  
+
   OBJECT_SET(state, root, true, BOOL2VAL(true));
   OBJECT_SET(state, root, false, BOOL2VAL(false));
-  
+
   OBJECT_SET(state, root, null, VNULL);
-  
+
   Object *string_obj = AS_OBJ(make_object(state, NULL, false));
   string_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, string, OBJ2VAL(string_obj));
@@ -2023,7 +2025,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, string_obj, replace, make_fn(state, string_replace_fn));
   OBJECT_SET(state, string_obj, byte_len, make_fn(state, string_byte_len_fn));
   state->shared->vcache.string_base = string_obj;
-  
+
   Object *array_obj = AS_OBJ(make_object(state, NULL, false));
   array_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, array, OBJ2VAL(array_obj));
@@ -2039,28 +2041,28 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, array_obj, join, make_fn(state, array_join_fn));
   OBJECT_SET(state, array_obj, dup, make_fn(state, array_dup_fn));
   state->shared->vcache.array_base = array_obj;
-  
+
   Object *ptr_obj = AS_OBJ(make_object(state, NULL, false));
   ptr_obj->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, root, pointer, OBJ2VAL(ptr_obj));
   OBJECT_SET(state, ptr_obj, null, make_fn(state, ptr_is_null_fn));
   state->shared->vcache.pointer_base = ptr_obj;
-  
+
   OBJECT_SET(state, root, keys, make_fn(state, keys_fn));
-  
+
   Object *xml_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET(state, xml_obj, load, make_fn(state, xml_load_fn));
   OBJECT_SET(state, xml_obj, parse, make_fn(state, xml_parse_fn));
   // no! allow methods to redefine parse()
   // (it's not inner-loop enough to require freezing)
   // xml_obj->flags |= OBJ_FROZEN;
-  
+
   Object *node_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET(state, node_obj, find_array, make_fn(state, xml_node_find_array_fn));
   OBJECT_SET(state, node_obj, find_array_by_name, make_fn(state, xml_node_find_by_name_array_fn));
   OBJECT_SET(state, node_obj, find_array_by_attr, make_fn(state, xml_node_find_by_attr_array_fn));
   OBJECT_SET(state, xml_obj, node, OBJ2VAL(node_obj));
-  
+
   Object *element_node_obj = AS_OBJ(make_object(state, node_obj, false));
   OBJECT_SET(state, element_node_obj, nodeName, make_string_static(state, ""));
   OBJECT_SET(state, element_node_obj, nodeType, INT2VAL(1));
@@ -2068,14 +2070,14 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, element_node_obj, children, make_array(state, NULL, 0, true));
   OBJECT_SET(state, element_node_obj, parent, VNULL);
   OBJECT_SET(state, xml_obj, element_node, OBJ2VAL(element_node_obj));
-  
+
   Object *text_node_obj = AS_OBJ(make_object(state, node_obj, false));
   OBJECT_SET(state, text_node_obj, nodeType, INT2VAL(3));
   OBJECT_SET(state, text_node_obj, value, VNULL);
   OBJECT_SET(state, xml_obj, text_node, OBJ2VAL(text_node_obj));
-  
+
   OBJECT_SET(state, root, xml, OBJ2VAL(xml_obj));
-  
+
   Object *file_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET(state, file_obj, _handle, VNULL);
   OBJECT_SET(state, file_obj, print, make_fn(state, file_print_fn));
@@ -2084,23 +2086,23 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, file_obj, close, make_fn(state, file_close_fn));
   file_obj->flags |= OBJ_FROZEN;
   OBJECT_SET(state, root, file, OBJ2VAL(file_obj));
-  
+
   Object *stdout_obj = AS_OBJ(make_object(state, file_obj, false));
   OBJECT_SET(state, stdout_obj, _handle, make_ptr(state, (void*) stdout));
   OBJECT_SET(state, root, stdout, OBJ2VAL(stdout_obj));
-  
+
   Object *stderr_obj = AS_OBJ(make_object(state, file_obj, false));
   OBJECT_SET(state, stderr_obj, _handle, make_ptr(state, (void*) stderr));
   OBJECT_SET(state, root, stderr, OBJ2VAL(stderr_obj));
-  
+
   OBJECT_SET(state, root, print, make_fn(state, print_fn));
-  
+
   setup_default_searchpath(state, root);
-  
+
   OBJECT_SET(state, root, require, make_fn(state, require_fn));
   OBJECT_SET(state, root, _mark_const, make_fn(state, mark_const_fn));
   OBJECT_SET(state, root, assert, make_fn(state, assert_fn));
-  
+
   Object *math_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET(state, math_obj, sin, make_fn(state, sin_fn));
   OBJECT_SET(state, math_obj, cos, make_fn(state, cos_fn));
@@ -2114,20 +2116,20 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, math_obj, randf, make_fn(state, randf_fn));
   math_obj->flags |= OBJ_FROZEN;
   OBJECT_SET(state, root, Math, OBJ2VAL(math_obj));
-  
+
   Object *obj_tools = AS_OBJ(make_object(state, NULL, false));
   obj_tools->flags |= OBJ_NOINHERIT;
   OBJECT_SET(state, obj_tools, keys, make_fn(state, obj_keys_fn));
   OBJECT_SET(state, obj_tools, length, make_fn(state, obj_length_fn));
   OBJECT_SET(state, obj_tools, freeze, make_fn(state, freeze_fn));
   OBJECT_SET(state, obj_tools, close, make_fn(state, close_fn));
-  
+
   OBJECT_SET(state, root, Object, OBJ2VAL(obj_tools));
-  
+
   ffi_setup_root(state, root);
-  
+
   root->flags |= OBJ_FROZEN;
   gc_remove_roots(state, &pin_root);
-  
+
   return root;
 }
