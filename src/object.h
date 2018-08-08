@@ -86,7 +86,7 @@ char *get_val_info(VMState *state, Value val);
 static inline Value load_arg(Callframe *frame, Arg arg) {
   // offset already checked in resolve
   assert(arg.kind == ARG_SLOT || arg.kind == ARG_REFSLOT || arg.kind == ARG_VALUE);
-  
+
   if (arg.kind == ARG_SLOT) {
     assert(arg.slot.is_resolved);
     return read_slot(frame, arg.slot);
@@ -109,7 +109,7 @@ static inline Value load_arg(Callframe *frame, Arg arg) {
 static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) __attribute__ ((always_inline));
 static inline Value load_arg_specialized(Callframe *frame, Arg arg, int kind) {
   assert(arg.kind == kind);
-  
+
   if (kind == ARG_SLOT) {
     assert(arg.slot.is_resolved);
     return read_slot(frame, arg.slot);
@@ -124,7 +124,7 @@ void value_failed_type_constraint_error(VMState *state, Object *constraint, Valu
 static inline void set_arg(VMState *state, WriteArg warg, Value value) {
   if (warg.kind == ARG_REFSLOT) {
     assert(warg.refslot.is_resolved);
-    
+
     TableEntry *entry = get_refslot(state->frame, warg.refslot);
     Object *constraint = entry->constraint;
     if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
@@ -145,7 +145,7 @@ static inline void set_arg_specialized(VMState *state, WriteArg warg, Value valu
   assert(warg.kind == kind);
   if (kind == ARG_REFSLOT) {
     assert(warg.refslot.is_resolved);
-    
+
     TableEntry *entry = get_refslot(state->frame, warg.refslot);
     Object *constraint = entry->constraint;
     if (UNLIKELY(constraint && !value_fits_constraint(state->shared, value, constraint))) {
@@ -174,6 +174,7 @@ typedef struct {
   Object base;
   VMFunctionPointer fn_ptr;
   InstrDispatchFn dispatch_fn_ptr;
+  bool method;
 } FunctionObject;
 
 // such as script functions
@@ -219,11 +220,13 @@ void array_resize(VMState *state, ArrayObject *aobj, int newsize, bool update_le
 
 Value make_ptr(VMState *state, void *ptr);
 
-Value make_fn_custom(VMState *state, VMFunctionPointer fn, InstrDispatchFn fast_fn, int size_custom);
+Value make_fn_custom(VMState *state, VMFunctionPointer fn, InstrDispatchFn fast_fn, int size_custom, bool method);
 
 Value make_fn(VMState *state, VMFunctionPointer fn);
 
 Value make_fn_fast(VMState *state, VMFunctionPointer fn, InstrDispatchFn fast_fn);
+
+Value make_fn_global(VMState *state, VMFunctionPointer fn);
 
 Value make_custom_gc(VMState *state);
 

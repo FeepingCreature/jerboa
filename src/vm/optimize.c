@@ -510,6 +510,7 @@ UserFunction *null_this_in_thisless_calls(VMState *state, UserFunction *uf) {
   builder.block_terminated = true;
 
   Object *closure_base = state->shared->vcache.closure_base;
+  Object *function_base = state->shared->vcache.function_base;
 
   for (int i = 0; i < uf->body.blocks_len; ++i) {
     new_block(&builder);
@@ -525,6 +526,11 @@ UserFunction *null_this_in_thisless_calls(VMState *state, UserFunction *uf) {
           Object *fn_obj = OBJ_OR_NULL(instr->info.fn.value);
           ClosureObject *cl = (ClosureObject*) obj_instance_of(fn_obj, closure_base);
           if (cl && !cl->vmfun->is_method) {
+            instr_new->info.this_arg = (Arg) {.kind = ARG_VALUE, .value = VNULL };
+          }
+          FunctionObject *fn = (FunctionObject*) obj_instance_of(fn_obj, function_base);
+          if (fn && !fn->method)
+          {
             instr_new->info.this_arg = (Arg) {.kind = ARG_VALUE, .value = VNULL };
           }
         }
@@ -1926,9 +1932,7 @@ void determine_slot_liveness(UserFunction *uf, SortedUniqList ***slot_inlist, So
   // perform flow analysis; see https://en.wikipedia.org/wiki/Live_variable_analysis
   SortedUniqList *workqueue = NULL;
   for (int i = 0; i < cfg.nodes_len; i++) {
-    if (cfg.nodes_ptr[i].succ_len == 0) {
-      sl_add_value_to(&workqueue, i);
-    }
+    sl_add_value_to(&workqueue, i);
   }
   *slot_inlist = calloc(uf->slots, sizeof(SortedUniqList*));
   *slot_outlist = calloc(uf->slots, sizeof(SortedUniqList*));
@@ -2280,8 +2284,8 @@ UserFunction *compactify_registers(UserFunction *uf) {
         } break;
         default: assert("Unhandled Instruction Type!" && false);
 
-#undef CHKSLOT_READ
-#undef CHKSLOT_WRITE
+#undef CHKSLOT_READ_RW
+#undef CHKSLOT_WRITE_RW
 #undef CASE
       }
       instr_cur = (Instr*) ((char*) instr_cur + instr_size(instr_cur));

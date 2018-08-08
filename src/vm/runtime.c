@@ -2048,7 +2048,7 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, ptr_obj, null, make_fn(state, ptr_is_null_fn));
   state->shared->vcache.pointer_base = ptr_obj;
 
-  OBJECT_SET(state, root, keys, make_fn(state, keys_fn));
+  OBJECT_SET(state, root, keys, make_fn_global(state, keys_fn));
 
   Object *xml_obj = AS_OBJ(make_object(state, NULL, false));
   OBJECT_SET(state, xml_obj, load, make_fn(state, xml_load_fn));
@@ -2095,34 +2095,34 @@ Object *create_root(VMState *state) {
   OBJECT_SET(state, stderr_obj, _handle, make_ptr(state, (void*) stderr));
   OBJECT_SET(state, root, stderr, OBJ2VAL(stderr_obj));
 
-  OBJECT_SET(state, root, print, make_fn(state, print_fn));
+  OBJECT_SET(state, root, print, make_fn_global(state, print_fn));
 
   setup_default_searchpath(state, root);
 
-  OBJECT_SET(state, root, require, make_fn(state, require_fn));
-  OBJECT_SET(state, root, _mark_const, make_fn(state, mark_const_fn));
-  OBJECT_SET(state, root, assert, make_fn(state, assert_fn));
+  OBJECT_SET(state, root, require, make_fn_global(state, require_fn));
+  OBJECT_SET(state, root, _mark_const, make_fn_global(state, mark_const_fn));
+  OBJECT_SET(state, root, assert, make_fn_global(state, assert_fn));
 
   Object *math_obj = AS_OBJ(make_object(state, NULL, false));
-  OBJECT_SET(state, math_obj, sin, make_fn(state, sin_fn));
-  OBJECT_SET(state, math_obj, cos, make_fn(state, cos_fn));
-  OBJECT_SET(state, math_obj, tan, make_fn(state, tan_fn));
-  OBJECT_SET(state, math_obj, log, make_fn(state, log_fn));
-  OBJECT_SET(state, math_obj, sqrt, make_fn(state, sqrt_fn));
-  OBJECT_SET(state, math_obj, pow, make_fn(state, pow_fn));
-  OBJECT_SET(state, math_obj, max, make_fn(state, max_fn));
-  OBJECT_SET(state, math_obj, min, make_fn(state, min_fn));
-  OBJECT_SET(state, math_obj, rand, make_fn(state, rand_fn));
-  OBJECT_SET(state, math_obj, randf, make_fn(state, randf_fn));
+  OBJECT_SET(state, math_obj, sin, make_fn_global(state, sin_fn));
+  OBJECT_SET(state, math_obj, cos, make_fn_global(state, cos_fn));
+  OBJECT_SET(state, math_obj, tan, make_fn_global(state, tan_fn));
+  OBJECT_SET(state, math_obj, log, make_fn_global(state, log_fn));
+  OBJECT_SET(state, math_obj, sqrt, make_fn_global(state, sqrt_fn));
+  OBJECT_SET(state, math_obj, pow, make_fn_global(state, pow_fn));
+  OBJECT_SET(state, math_obj, max, make_fn_global(state, max_fn));
+  OBJECT_SET(state, math_obj, min, make_fn_global(state, min_fn));
+  OBJECT_SET(state, math_obj, rand, make_fn_global(state, rand_fn));
+  OBJECT_SET(state, math_obj, randf, make_fn_global(state, randf_fn));
   math_obj->flags |= OBJ_FROZEN;
   OBJECT_SET(state, root, Math, OBJ2VAL(math_obj));
 
   Object *obj_tools = AS_OBJ(make_object(state, NULL, false));
   obj_tools->flags |= OBJ_NOINHERIT;
-  OBJECT_SET(state, obj_tools, keys, make_fn(state, obj_keys_fn));
-  OBJECT_SET(state, obj_tools, length, make_fn(state, obj_length_fn));
-  OBJECT_SET(state, obj_tools, freeze, make_fn(state, freeze_fn));
-  OBJECT_SET(state, obj_tools, close, make_fn(state, close_fn));
+  OBJECT_SET(state, obj_tools, keys, make_fn_global(state, obj_keys_fn));
+  OBJECT_SET(state, obj_tools, length, make_fn_global(state, obj_length_fn));
+  OBJECT_SET(state, obj_tools, freeze, make_fn_global(state, freeze_fn));
+  OBJECT_SET(state, obj_tools, close, make_fn_global(state, close_fn));
 
   OBJECT_SET(state, root, Object, OBJ2VAL(obj_tools));
 

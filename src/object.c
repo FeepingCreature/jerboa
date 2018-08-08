@@ -108,13 +108,13 @@ Object *proto_obj(VMState *state, Value val) {
 
 void obj_mark(VMState *state, Object *obj) {
   if (!obj) return;
-  
+
   if (obj->flags & OBJ_GC_MARK) return; // break cycles
-  
+
   obj->flags |= OBJ_GC_MARK;
-  
+
   obj_mark(state, obj->parent);
-  
+
   HashTable *tbl = &obj->tbl;
   for (int i = 0; i < tbl->entries_num; ++i) {
     TableEntry *entry = &tbl->entries_ptr[i];
@@ -122,7 +122,7 @@ void obj_mark(VMState *state, Object *obj) {
       obj_mark(state, AS_OBJ(entry->value));
     }
   }
-  
+
   if (obj->mark_fn) {
     obj->mark_fn(state, obj);
   }
@@ -272,7 +272,7 @@ char *object_set_shadowing(VMState *state, Object *obj, FastKey *key, Value valu
 // returns error or null
 char *object_set(VMState *state, Object *obj, FastKey *key, Value value) {
   assert(obj != NULL);
-  
+
   // check constraints in parents
   Object *current = obj->parent;
   while (current) {
@@ -284,7 +284,7 @@ char *object_set(VMState *state, Object *obj, FastKey *key, Value value) {
     }
     current = current->parent;
   }
-  
+
   // TODO check flags beforehand to avoid clobbering tables that are frozen
   TableEntry *freeptr;
   TableEntry *entry = table_lookup_alloc_prepared(&obj->tbl, key, &freeptr);
@@ -331,13 +331,13 @@ void *alloc_object_internal(VMState *state, int size, bool stack) {
     state->shared->gcstate.last_obj_allocated = res;
     state->shared->gcstate.bytes_allocated += size;
   }
-  
+
 #if DEBUG_MEM
   fprintf(stderr, "alloc object %p\n", (void*) res);
 #endif
-  
+
   // if(state->runstate == VM_RUNNING) vm_record_profile(state);
-  
+
   return res;
 }
 
@@ -431,22 +431,28 @@ Value make_ptr(VMState *state, void *ptr) {
 }
 
 // used to allocate "special functions" like ffi functions, that need to store more data
-Value make_fn_custom(VMState *state, VMFunctionPointer fn, InstrDispatchFn dispatch_fn, int size_custom) {
+Value make_fn_custom(VMState *state, VMFunctionPointer fn, InstrDispatchFn dispatch_fn, int size_custom, bool method) {
   assert(size_custom >= sizeof(FunctionObject));
   FunctionObject *obj = alloc_object_internal(state, size_custom, false);
   obj->base.parent = state->shared->vcache.function_base;
   obj->base.flags |= OBJ_NOINHERIT;
   obj->fn_ptr = fn;
   obj->dispatch_fn_ptr = dispatch_fn;
+  obj->method = method;
   return OBJ2VAL((Object*) obj);
 }
 
 Value make_fn(VMState *state, VMFunctionPointer fn) {
-  return make_fn_custom(state, fn, NULL, sizeof(FunctionObject));
+  return make_fn_custom(state, fn, NULL, sizeof(FunctionObject), true);
 }
 
 Value make_fn_fast(VMState *state, VMFunctionPointer fn, InstrDispatchFn dispatch_fn) {
-  return make_fn_custom(state, fn, dispatch_fn, sizeof(FunctionObject));
+  return make_fn_custom(state, fn, dispatch_fn, sizeof(FunctionObject), true);
+}
+
+Value make_fn_global(VMState *state, VMFunctionPointer fn) {
+  // can leave out "this" pointer
+  return make_fn_custom(state, fn, NULL, sizeof(FunctionObject), false);
 }
 
 char *get_val_info(VMState *state, Value val) {
@@ -499,15 +505,15 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
     fprintf(stderr, "error creating profiler output file: %s\n", strerror(errno));
     abort();
   }
-  
+
   HashTable *excl_table = &profile_state->excl_table;
   HashTable *incl_table = &profile_state->incl_table;
   int num_excl_records = excl_table->entries_stored;
   int num_incl_records = incl_table->entries_stored;
   int num_records = num_excl_records + num_incl_records;
-  
+
   ProfilerRecord *record_entries = calloc(sizeof(ProfilerRecord), num_records);
-  
+
   int k = 0;
   for (int i = 0; i < excl_table->entries_num; ++i) {
     TableEntry *entry = &excl_table->entries_ptr[i];
@@ -528,32 +534,32 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
     }
   }
   assert(k == num_records);
-  
+
   qsort(record_entries, num_records, sizeof(ProfilerRecord), prec_sort_outside_in_fn);
-  
+
 #define CUR_ENTRY (&record_entries[cur_entry_id])
-  
+
   fprintf(file, "events: Samples\n\n");
-  
+
   int num_files = 0;
   FileEntry *files = get_files(&num_files);
   for (int i = 0; i < num_files; i++) {
     fprintf(file, "fl=%s\n", files[i].file);
     TextRange source = files[i].range;
-    
+
     int cur_entry_id = 0;
     // skip any preceding
     while (cur_entry_id < num_records && CUR_ENTRY->range->text_from < source.start) {
       cur_entry_id ++;
     }
-    
+
     int last_row = -1;
     int row_samples = 0;
-    
+
     const char *last_fn = "placeholder";
-    
+
     HashTable row_calls = {0};
-    
+
     for (; cur_entry_id < num_records && CUR_ENTRY->range->text_from < source.end; cur_entry_id ++) {
       int num_samples = CUR_ENTRY->num_samples;
       const char *name, *fn; TextRange line; int row, col;
@@ -569,6 +575,7 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
             TableEntry *entry = &row_calls.entries_ptr[l];
             if (entry->hash) {
               FileRange *fun_range = (FileRange*) entry->constraint;
+              if (fun_range == NULL) continue; // bad!!
               int samples = entry->value.i;
               const char *name2, *fn2; TextRange line2; int row2, col2;
               // find call target site
@@ -610,6 +617,6 @@ void save_profile_output(char *filename, VMProfileState *profile_state) {
     }
   }
 #undef CUR_ENTRY
-  
+
   fclose(file);
 }
