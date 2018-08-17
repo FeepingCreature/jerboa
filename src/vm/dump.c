@@ -119,6 +119,15 @@ void dump_instr(VMState *state, Instr **instr_p) {
       *instr_p = (Instr*) (sci + 1);
       break;
     }
+    case INSTR_CHECK_CONSTRAINT:
+    {
+      CheckConstraintInstr *cci = (CheckConstraintInstr*) instr;
+      fprintf(stderr, "check constraint: %s : %s\n",
+              get_arg_info(state, cci->value),
+              get_arg_info(state, cci->constraint));
+      *instr_p = (Instr*) (cci + 1);
+      break;
+    }
     case INSTR_TEST:
       fprintf(stderr, "test: %s = %s ? true : false\n",
               get_write_arg_info(((TestInstr*) instr)->target),

@@ -2045,8 +2045,22 @@ UserFunction *free_stack_objects_early(UserFunction *uf) {
             break;
           }
         }
-        if (deadObject) { } // unused object; remove
-        else {
+        if (deadObject) { // unused object; remove
+          // NOTE we still need to check the slot constraints!
+          for (int k = 0; k < asoi->tbl.entries_stored; ++k) {
+            Slot value = ASOI_INFO(instr_cur)[k].slot;
+            Object *constraint = ASOI_INFO(instr_cur)[k].constraint;
+            if (constraint != NULL)
+            {
+              CheckConstraintInstr cci = {
+                .base = { .type = INSTR_CHECK_CONSTRAINT },
+                .value = { .kind = ARG_SLOT, .slot = value },
+                .constraint = { .kind = ARG_VALUE, .value = OBJ2VAL(constraint) },
+              };
+              addinstr_like(&builder, &uf->body, instr_cur, sizeof(cci), (Instr*) &cci);
+            }
+          }
+        } else {
           addinstr_like(&builder, &uf->body, instr_cur, instr_size(instr_cur), instr_cur);
         }
       } else {

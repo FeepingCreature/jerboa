@@ -120,6 +120,11 @@ typedef struct {
 
 typedef struct {
   Instr base;
+  Arg value, constraint;
+} CheckConstraintInstr;
+
+typedef struct {
+  Instr base;
   Arg value;
   WriteArg target;
 } TestInstr;

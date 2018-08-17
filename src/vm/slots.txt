@@ -106,6 +106,9 @@ CASE(INSTR_SET_CONSTRAINT, SetConstraintInstr)
   READ_SLOT(instr->obj);
   READ_SLOT(instr->key);
   READ_SLOT(instr->constraint);
+CASE(INSTR_CHECK_CONSTRAINT, CheckConstraintInstr)
+  READ_SLOT(instr->value);
+  READ_SLOT(instr->constraint);
 CASE(INSTR_TEST, TestInstr)
   READ_SLOT(instr->value);
   WRITE_SLOT(instr->target);

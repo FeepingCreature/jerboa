@@ -632,6 +632,24 @@ static FnWrap vm_instr_set_constraint(VMState *state) {
   STEP_VM;
 }
 
+static FnWrap vm_instr_check_constraint(VMState *state) FAST_FN;
+static FnWrap vm_instr_check_constraint(VMState *state) {
+  CheckConstraintInstr * __restrict__ check_constraint_instr = (CheckConstraintInstr*) state->instr;
+  Value val = load_arg(state->frame, check_constraint_instr->value);
+  Value constraint_val = load_arg(state->frame, check_constraint_instr->constraint);
+  VM_ASSERT2(IS_OBJ(constraint_val), "constraint must not be primitive!");
+  Object *constraint = AS_OBJ(constraint_val);
+
+  if (!value_fits_constraint(state->shared, val, constraint)) {
+    char *error = my_asprintf("value failed type constraint: constraint was %s, but value was %s",
+                       get_type_info(state, OBJ2VAL(constraint)), get_type_info(state, val));
+    VM_ASSERT2(false, "error while checking constraint: %s", error);
+  }
+
+  state->instr = (Instr*)(check_constraint_instr + 1);
+  STEP_VM;
+}
+
 static FnWrap vm_instr_assign_string_key(VMState *state) FAST_FN;
 static FnWrap vm_instr_assign_string_key(VMState *state) {
   AssignStringKeyInstr * __restrict__ aski = (AssignStringKeyInstr*) state->instr;
@@ -990,6 +1008,7 @@ void init_instr_fn_table() {
   instr_fns[INSTR_IDENTICAL] = vm_instr_identical;
   instr_fns[INSTR_INSTANCEOF] = vm_instr_instanceof;
   instr_fns[INSTR_SET_CONSTRAINT] = vm_instr_set_constraint;
+  instr_fns[INSTR_CHECK_CONSTRAINT] = vm_instr_check_constraint;
   instr_fns[INSTR_TEST] = vm_instr_test;
   instr_fns[INSTR_CALL] = vm_instr_call;
   instr_fns[INSTR_RETURN] = vm_instr_return;
